@@ -10,11 +10,14 @@ InkMark is a local Markdown editor for macOS and Windows with live preview, nati
 
 - Open, edit, save, and save-as for `.md` and `.markdown` files
 - Debounced 120 ms live rendering with editor-only, split, and preview-only layouts
-- Stable two-way scroll synchronization between the editor and preview
+- Source-aware two-way scroll synchronization that reconciles after math and diagram reflow without idle drift
+- Save, Don't Save, and Cancel choices before replacing or closing a modified document
+- One-click swapping of editor and preview sides, persisted across launches
 - GitHub, Clean, WeChat, and Dark preview themes
 - Native macOS and Windows menus for files, editing, views, formatting, help, and updates
 - Automatic language detection plus explicit Simplified Chinese and English settings; automatic detection is the default
 - A localized welcome page on normal launch; Finder or Explorer file launches open the requested document directly
+- A built-in bilingual rendering test, available from Welcome and Help, covering tables, math, code, alerts, safe HTML, and ten Mermaid diagram types
 - One consistent icon for the app, file associations, desktop shortcuts, and in-app branding
 - An About page with version, author, source repository, and update status
 - GitHub Releases update checks with platform-specific installer selection
@@ -97,22 +100,27 @@ pnpm --dir frontend typecheck
 pnpm --dir frontend test:i18n
 pnpm --dir frontend test:export
 pnpm --dir frontend test:scroll
+pnpm --dir frontend test:ui
 pnpm --dir frontend test:installer
 node scripts/verify-offline.mjs
 ```
 
-The suite covers file I/O, language settings, native menus, version comparison and Release responses, export structure, external-resource policy, scroll synchronization, and offline asset integrity.
+The suite covers file I/O, unsaved-document transitions and the native close guard, language settings, native menus, version comparison and Release responses, export structure, external-resource policy, scroll synchronization, bounded large-document anchors, and offline asset integrity.
 
 ## Project Layout
 
 - `app.go`: native dialogs, file I/O, and export saving
+- `close_guard.go`: save guard for native close requests on macOS and Windows
 - `app_state.go`: language preferences, single-instance handling, and OS file-open events
 - `update.go`: app metadata, GitHub Releases checks, and platform installer selection
 - `menu.go`: native macOS and Windows menus
 - `frontend/src/App.vue`: editor, live preview, Settings, and About
 - `frontend/src/i18n.ts`: Chinese and English UI and welcome-page content
+- `frontend/src/ui-state.ts`: document status and pane-order preferences
+- `frontend/src/document-guard.ts`: safe transitions for documents with unsaved changes
 - `frontend/src/export-document.ts`: HTML, PDF, PNG, TXT, and Word-compatible exports
 - `frontend/src/scroll-sync.ts`: stable bidirectional scroll synchronization
+- `samples/markdown-rendering-test.md`: built-in bilingual comprehensive rendering sample
 - `scripts/`: build, packaging, and regression-test scripts
 
 ## Versions and Updates

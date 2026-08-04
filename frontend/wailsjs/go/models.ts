@@ -21,6 +21,7 @@ export namespace main {
 	    name: string;
 	    content: string;
 	    welcome: boolean;
+	    builtIn?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new Document(source);
@@ -32,6 +33,7 @@ export namespace main {
 	        this.name = source["name"];
 	        this.content = source["content"];
 	        this.welcome = source["welcome"];
+	        this.builtIn = source["builtIn"];
 	    }
 	}
 	export class LanguageState {

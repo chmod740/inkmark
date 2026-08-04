@@ -114,8 +114,10 @@ test('welcome documents are complete, localised README files', () => {
   assert.equal(welcomeDocument.en.name, 'README.md')
   assert.match(welcomeDocument['zh-CN'].content, /^# 墨笺 Markdown/m)
   assert.match(welcomeDocument['zh-CN'].content, /## 开始使用/)
+  assert.match(welcomeDocument['zh-CN'].content, /#inkmark-render-test/)
   assert.match(welcomeDocument.en.content, /^# InkMark Markdown/m)
   assert.match(welcomeDocument.en.content, /## Get started/)
+  assert.match(welcomeDocument.en.content, /#inkmark-render-test/)
   assert.ok(!welcomeDocument['zh-CN'].content.includes('文件操作已收纳'))
   assert.ok(!welcomeDocument.en.content.includes('powered by'))
 

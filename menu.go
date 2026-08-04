@@ -48,6 +48,7 @@ var nativeMenuText = map[string]localizedMenuText{
 	"view-split":         {zh: "分栏编辑", en: "Split View"},
 	"view-preview":       {zh: "仅预览", en: "Preview Only"},
 	"sync-scroll":        {zh: "同步滚动", en: "Synchronized Scrolling"},
+	"preview-first":      {zh: "预览区在左侧", en: "Preview Pane on Left"},
 	"preview-style":      {zh: "预览样式", en: "Preview Style"},
 	"theme-github":       {zh: "GitHub", en: "GitHub"},
 	"theme-clean":        {zh: "清爽", en: "Clean"},
@@ -69,6 +70,7 @@ var nativeMenuText = map[string]localizedMenuText{
 	"minimise":           {zh: "最小化", en: "Minimize"},
 	"zoom-window":        {zh: "缩放窗口", en: "Zoom"},
 	"welcome":            {zh: "欢迎页", en: "Welcome"},
+	"render-test":        {zh: "综合渲染测试页", en: "Rendering Test Page"},
 	"keyboard-shortcuts": {zh: "键盘快捷键", en: "Keyboard Shortcuts"},
 	"check-update":       {zh: "检查更新…", en: "Check for Updates…"},
 	"upgrade":            {zh: "升级墨笺…", en: "Upgrade InkMark…"},
@@ -152,6 +154,7 @@ func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu 
 	viewMenu.AddRadio(label("view-preview"), state.ViewMode == "preview", keys.CmdOrCtrl("3"), a.menuAction("view-preview"))
 	viewMenu.AddSeparator()
 	viewMenu.AddCheckbox(label("sync-scroll"), state.SyncScroll, nil, a.menuAction("toggle-sync-scroll"))
+	viewMenu.AddCheckbox(label("preview-first"), state.PreviewFirst, nil, a.menuAction("toggle-pane-order"))
 	styleMenu := viewMenu.AddSubmenu(label("preview-style"))
 	styleMenu.AddRadio(label("theme-github"), state.Theme == "github", nil, a.menuAction("theme-github"))
 	styleMenu.AddRadio(label("theme-clean"), state.Theme == "clean", nil, a.menuAction("theme-clean"))
@@ -188,6 +191,7 @@ func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu 
 
 	helpMenu := applicationMenu.AddSubmenu(label("help"))
 	helpMenu.AddText(label("welcome"), nil, a.menuAction("show-welcome"))
+	helpMenu.AddText(label("render-test"), nil, a.menuAction("show-render-test"))
 	helpMenu.AddText(label("keyboard-shortcuts"), nil, a.menuAction("show-shortcuts"))
 	helpMenu.AddSeparator()
 	helpMenu.AddText(label("check-update"), nil, a.menuAction("check-update"))

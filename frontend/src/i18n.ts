@@ -12,6 +12,10 @@ const zhCNTranslations = {
   'document.untitled': '未命名',
   'document.untitledFilename': '未命名.md',
   'document.unsavedLocation': '尚未保存到磁盘',
+  'document.unsaved': '未保存',
+  'document.builtIn': '内置页面',
+  'document.welcomeLocation': '内置欢迎页',
+  'document.renderTestLocation': '内置中英双语综合渲染测试页',
   'document.modified': '已修改',
   'document.saved': '已保存',
   'document.opened': '文档已打开',
@@ -20,9 +24,13 @@ const zhCNTranslations = {
   'document.savedAsLocally': '已另存到本地',
   'document.dirtyTitle': '有未保存的修改',
 
-  'confirm.newUnsaved': '当前文档尚未保存，仍要新建文档吗？',
-  'confirm.openUnsaved': '当前文档尚未保存，仍要打开其他文件吗？',
-  'confirm.quitUnsaved': '当前文档尚未保存，仍要退出墨笺吗？',
+  'unsaved.title': '保存更改？',
+  'unsaved.messageNew': '“{name}”包含未保存的更改。新建文档前要保存吗？',
+  'unsaved.messageOpen': '“{name}”包含未保存的更改。打开其他文档前要保存吗？',
+  'unsaved.messageQuit': '“{name}”包含未保存的更改。退出墨笺前要保存吗？',
+  'unsaved.save': '保存',
+  'unsaved.discard': '不保存',
+  'unsaved.cancel': '取消',
 
   'status.ready': '准备就绪',
   'status.waiting': '等待输入…',
@@ -86,6 +94,7 @@ const zhCNTranslations = {
   'toolbar.edit': '编辑',
   'toolbar.split': '分栏',
   'toolbar.preview': '预览',
+  'toolbar.swapPanes': '调换左右',
   'toolbar.previewStyle': '预览排版风格',
   'toolbar.layout': '排版',
   'toolbar.copyHTML': '复制 HTML',
@@ -198,6 +207,10 @@ const enTranslations: TranslationDictionary = {
   'document.untitled': 'Untitled',
   'document.untitledFilename': 'Untitled.md',
   'document.unsavedLocation': 'Not saved to disk',
+  'document.unsaved': 'Unsaved',
+  'document.builtIn': 'Built-in page',
+  'document.welcomeLocation': 'Built-in welcome page',
+  'document.renderTestLocation': 'Built-in bilingual comprehensive rendering test',
   'document.modified': 'Modified',
   'document.saved': 'Saved',
   'document.opened': 'Document opened',
@@ -206,9 +219,13 @@ const enTranslations: TranslationDictionary = {
   'document.savedAsLocally': 'Saved as a local file',
   'document.dirtyTitle': 'Unsaved changes',
 
-  'confirm.newUnsaved': 'This document has unsaved changes. Create a new document anyway?',
-  'confirm.openUnsaved': 'This document has unsaved changes. Open another file anyway?',
-  'confirm.quitUnsaved': 'This document has unsaved changes. Quit InkMark anyway?',
+  'unsaved.title': 'Save changes?',
+  'unsaved.messageNew': '“{name}” has unsaved changes. Save them before creating a new document?',
+  'unsaved.messageOpen': '“{name}” has unsaved changes. Save them before opening another document?',
+  'unsaved.messageQuit': '“{name}” has unsaved changes. Save them before quitting InkMark?',
+  'unsaved.save': 'Save',
+  'unsaved.discard': 'Don’t Save',
+  'unsaved.cancel': 'Cancel',
 
   'status.ready': 'Ready',
   'status.waiting': 'Waiting for input…',
@@ -272,6 +289,7 @@ const enTranslations: TranslationDictionary = {
   'toolbar.edit': 'Edit',
   'toolbar.split': 'Split',
   'toolbar.preview': 'Preview',
+  'toolbar.swapPanes': 'Swap sides',
   'toolbar.previewStyle': 'Preview style',
   'toolbar.layout': 'Style',
   'toolbar.copyHTML': 'Copy HTML',
@@ -394,6 +412,7 @@ export const welcomeDocument: Readonly<Record<Locale, Readonly<WelcomeDocument>>
 - 在左侧编写 Markdown，右侧查看实时预览。
 - 使用“文件”菜单打开、保存或导出文档。
 - 使用“视图”和“格式”菜单调整编辑方式与排版风格。
+- [打开中英双语综合渲染测试页](#inkmark-render-test)，检查 GFM、KaTeX、Mermaid、代码高亮和安全 HTML。
 
 ## 支持
 
@@ -413,6 +432,7 @@ A local Markdown editor focused on writing.
 - Write Markdown on the left and see the live preview on the right.
 - Use the File menu to open, save, or export documents.
 - Use the View and Format menus to adjust the workspace and preview style.
+- [Open the bilingual comprehensive rendering test](#inkmark-render-test) to inspect GFM, KaTeX, Mermaid, code highlighting, and safe HTML.
 
 ## Features
 

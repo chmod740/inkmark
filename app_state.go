@@ -141,7 +141,7 @@ func (a *App) currentContext() context.Context {
 	return a.ctx
 }
 
-func (a *App) UpdateMenuState(locale string, viewMode string, theme string, syncScroll bool) {
+func (a *App) UpdateMenuState(locale string, viewMode string, theme string, syncScroll bool, previewFirst bool) {
 	locale = normalizeLocale(locale)
 	switch viewMode {
 	case "edit", "split", "preview":
@@ -156,7 +156,7 @@ func (a *App) UpdateMenuState(locale string, viewMode string, theme string, sync
 
 	a.mu.Lock()
 	a.language.Locale = locale
-	a.menuState = MenuState{ViewMode: viewMode, Theme: theme, SyncScroll: syncScroll}
+	a.menuState = MenuState{ViewMode: viewMode, Theme: theme, SyncScroll: syncScroll, PreviewFirst: previewFirst}
 	ctx := a.ctx
 	a.mu.Unlock()
 	if ctx != nil {

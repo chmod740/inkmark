@@ -15,7 +15,22 @@ import {
   type ExportFormat,
   utf8ToBase64,
 } from './export-document'
-import { ScrollSyncController, type ScrollPane } from './scroll-sync'
+import { runGuardedDocumentTransition, type DocumentTransition, type UnsavedDecision } from './document-guard'
+import {
+  ScrollSyncController,
+  sampleAnchorIndices,
+  shouldMeasureEditorAnchors,
+  type ScrollAnchor,
+  type ScrollMapping,
+  type ScrollPane,
+} from './scroll-sync'
+import {
+  normalizePreviewFirst,
+  previewFirstStorageKey,
+  resolveDocumentHeaderState,
+  togglePreviewFirst,
+  type BuiltInDocumentKind,
+} from './ui-state'
 import {
   getSystemLanguages,
   languageModeStorageKey,
@@ -27,7 +42,9 @@ import {
   type TranslationKey,
 } from './i18n'
 import {
+  CancelQuitRequest,
   CheckForUpdates,
+  ConfirmQuit,
   GetAppInfo,
   GetLanguageSettings,
   LoadInitialDocument,
@@ -35,6 +52,7 @@ import {
   OpenFile,
   OpenSourceRepository,
   OpenUpdatePage,
+  RenderingTestDocument as LoadRenderingTestDocument,
   SaveExportFile,
   SaveFile,
   SaveFileAs,
@@ -62,6 +80,7 @@ interface DocumentData {
   name: string
   content: string
   welcome?: boolean
+  builtIn?: string
 }
 
 interface ApplicationInfoData {
@@ -100,6 +119,7 @@ const currentPath = ref('')
 const fileName = ref('README.md')
 const theme = ref<Theme>(readPreference<Theme>('inkmark-theme', 'github'))
 const viewMode = ref<ViewMode>(readPreference<ViewMode>('inkmark-view', 'split'))
+const previewFirst = ref(normalizePreviewFirst(localStorage.getItem(previewFirstStorageKey)))
 const languageMode = ref<LanguageMode>('auto')
 const locale = ref<Locale>('en')
 const renderState = ref('')
@@ -108,8 +128,10 @@ const editor = ref<HTMLTextAreaElement | null>(null)
 const preview = ref<HTMLElement | null>(null)
 const previewPane = ref<HTMLElement | null>(null)
 const syncScroll = ref(true)
-const isWelcomeDocument = ref(false)
+const builtInDocument = ref<BuiltInDocumentKind | null>(null)
 const activeDialog = ref<'settings' | 'shortcuts' | 'about' | null>(null)
+const unsavedTransition = ref<DocumentTransition | null>(null)
+const resolvingUnsavedPrompt = ref(false)
 const applicationInfo = ref<ApplicationInfoData>({ version: '', author: '', repositoryURL: '' })
 const updateInfo = ref<UpdateInfoData | null>(null)
 const updateState = ref<UpdateState>('idle')
@@ -117,6 +139,14 @@ const updateState = ref<UpdateState>('idle')
 let renderTimer: number | undefined
 let renderSequence = 0
 let quitting = false
+let documentTransitionInProgress = false
+let drainingSystemDocuments = false
+const pendingSystemDocuments: DocumentData[] = []
+let resolveUnsavedDecision: ((decision: UnsavedDecision) => void) | null = null
+let layoutResizeObserver: ResizeObserver | null = null
+let layoutReconcileFrame: number | null = null
+let editorScrollAnchors: ScrollAnchor[] = []
+let previewScrollAnchors: ScrollAnchor[] = []
 const removeMenuListeners: Array<() => void> = []
 const scrollSync = new ScrollSyncController()
 
@@ -128,15 +158,28 @@ const markdown = new MarkdownIt({
 })
 markdown.use(taskLists, { enabled: false, label: true, labelAfter: true })
 markdown.use(markdownKatex, { delimiters: 'all', throwOnError: false })
+markdown.core.ruler.push('inkmark-source-lines', (state) => {
+  state.tokens.forEach((token) => {
+    if (!token.map) return
+    if (token.nesting === 1 || ['fence', 'code_block', 'hr', 'html_block', 'math_block'].includes(token.type)) {
+      token.attrSet('data-source-line', String(token.map[0]))
+    }
+  })
+})
 markdown.renderer.rules.math_inline = (tokens, index) =>
   `<span class="math-source" data-display-mode="inline">${markdown.utils.escapeHtml(tokens[index].content)}</span>`
-markdown.renderer.rules.math_block = (tokens, index) =>
-  `<div class="math-source" data-display-mode="block">${markdown.utils.escapeHtml(tokens[index].content.trim())}</div>`
+markdown.renderer.rules.math_block = (tokens, index) => {
+  const sourceLine = tokens[index].map?.[0]
+  const sourceAttribute = sourceLine === undefined ? '' : ` data-source-line="${sourceLine}"`
+  return `<div class="math-source" data-display-mode="block"${sourceAttribute}>${markdown.utils.escapeHtml(tokens[index].content.trim())}</div>`
+}
 const defaultFence = markdown.renderer.rules.fence || ((tokens, index, options, _env, self) => self.renderToken(tokens, index, options))
 markdown.renderer.rules.fence = (tokens, index, options, env, self) => {
   const language = tokens[index].info.trim().split(/\s+/)[0].toLowerCase()
   if (language === 'mermaid' || language === 'mmd') {
-    return `<pre class="mermaid">${markdown.utils.escapeHtml(tokens[index].content)}</pre>`
+    const sourceLine = tokens[index].map?.[0]
+    const sourceAttribute = sourceLine === undefined ? '' : ` data-source-line="${sourceLine}"`
+    return `<pre class="mermaid"${sourceAttribute}>${markdown.utils.escapeHtml(tokens[index].content)}</pre>`
   }
   return defaultFence(tokens, index, options, env, self)
 }
@@ -144,7 +187,32 @@ markdown.renderer.rules.fence = (tokens, index, options, env, self) => {
 const dirty = computed(() => source.value !== savedSource.value)
 const lineCount = computed(() => source.value ? source.value.split(/\r?\n/).length : 1)
 const characterCount = computed(() => Array.from(source.value).length)
-const locationLabel = computed(() => currentPath.value || t('document.unsavedLocation'))
+const documentHeaderState = computed(() => resolveDocumentHeaderState(
+  dirty.value,
+  currentPath.value,
+  builtInDocument.value,
+))
+const documentStateLabel = computed(() => {
+  if (documentHeaderState.value.status === 'modified') return t('document.modified')
+  if (documentHeaderState.value.status === 'saved') return t('document.saved')
+  if (documentHeaderState.value.status === 'built-in') return t('document.builtIn')
+  return t('document.unsaved')
+})
+const locationLabel = computed(() => {
+  if (documentHeaderState.value.location === 'path') return currentPath.value
+  if (documentHeaderState.value.location === 'welcome') return t('document.welcomeLocation')
+  if (documentHeaderState.value.location === 'render-test') return t('document.renderTestLocation')
+  return t('document.unsavedLocation')
+})
+const unsavedPromptMessage = computed(() => {
+  if (unsavedTransition.value === 'new') {
+    return t('unsaved.messageNew', { name: fileName.value })
+  }
+  if (unsavedTransition.value === 'quit') {
+    return t('unsaved.messageQuit', { name: fileName.value })
+  }
+  return t('unsaved.messageOpen', { name: fileName.value })
+})
 const aboutVersion = computed(() => applicationInfo.value.version || '—')
 const aboutAuthor = computed(() => applicationInfo.value.author || '—')
 const updateStatusText = computed(() => {
@@ -221,32 +289,84 @@ function readPreference<T extends string>(key: string, fallback: T): T {
 }
 
 function setDocument(document: DocumentData, status: TranslationKey = 'document.opened') {
+  scrollSync.reset()
+  editorScrollAnchors = []
+  previewScrollAnchors = []
   currentPath.value = document.path || ''
   fileName.value = document.name || t('document.untitledFilename')
   source.value = document.content || ''
   savedSource.value = source.value
-  isWelcomeDocument.value = Boolean(document.welcome)
+  builtInDocument.value = document.builtIn === 'render-test'
+    ? 'render-test'
+    : document.builtIn === 'welcome' || document.welcome
+      ? 'welcome'
+      : null
   renderState.value = t(status)
-  void nextTick(renderNow)
+  void nextTick(async () => {
+    if (editor.value) editor.value.scrollTop = 0
+    if (previewPane.value) previewPane.value.scrollTop = 0
+    await renderNow()
+  })
 }
 
-function newDocument() {
-  if (dirty.value && !window.confirm(t('confirm.newUnsaved'))) return
-  setDocument({ path: '', name: t('document.untitledFilename'), content: '', welcome: false }, 'document.created')
-  nextTick(() => editor.value?.focus())
+function requestUnsavedDecision(transition: DocumentTransition): Promise<UnsavedDecision> {
+  if (resolveUnsavedDecision) return Promise.resolve('cancel')
+  activeDialog.value = null
+  unsavedTransition.value = transition
+  resolvingUnsavedPrompt.value = false
+  return new Promise((resolve) => {
+    resolveUnsavedDecision = resolve
+  })
 }
 
-async function openDocument() {
-  if (dirty.value && !window.confirm(t('confirm.openUnsaved'))) return
+function answerUnsavedPrompt(decision: UnsavedDecision) {
+  if (resolvingUnsavedPrompt.value || !resolveUnsavedDecision) return
+  resolvingUnsavedPrompt.value = true
+  const resolve = resolveUnsavedDecision
+  resolveUnsavedDecision = null
+  unsavedTransition.value = null
+  resolve(decision)
+  void nextTick(() => { resolvingUnsavedPrompt.value = false })
+}
+
+async function performDocumentTransition(
+  transition: DocumentTransition,
+  action: () => Promise<void> | void,
+) {
+  if (documentTransitionInProgress) return false
+  documentTransitionInProgress = true
   try {
-    const document = await OpenFile() as DocumentData
-    if (document?.name) setDocument(document)
-  } catch (error) {
-    showError(error)
+    return await runGuardedDocumentTransition({
+      dirty: dirty.value,
+      requestDecision: () => requestUnsavedDecision(transition),
+      save: saveDocument,
+      transition: action,
+    })
+  } finally {
+    documentTransitionInProgress = false
+    void drainSystemDocuments()
   }
 }
 
-async function saveDocument() {
+async function newDocument() {
+  await performDocumentTransition('new', () => {
+    setDocument({ path: '', name: t('document.untitledFilename'), content: '', welcome: false }, 'document.created')
+    void nextTick(() => editor.value?.focus())
+  })
+}
+
+async function openDocument() {
+  await performDocumentTransition('open', async () => {
+    try {
+      const document = await OpenFile() as DocumentData
+      if (document?.name) setDocument(document)
+    } catch (error) {
+      showError(error)
+    }
+  })
+}
+
+async function saveDocument(): Promise<boolean> {
   try {
     busy.value = true
     const result = await SaveFile(currentPath.value, source.value)
@@ -254,11 +374,14 @@ async function saveDocument() {
       currentPath.value = result.path
       fileName.value = result.name
       savedSource.value = source.value
-      isWelcomeDocument.value = false
+      builtInDocument.value = null
       renderState.value = t('document.savedLocally')
+      return true
     }
+    return false
   } catch (error) {
     showError(error)
+    return false
   } finally {
     busy.value = false
   }
@@ -272,7 +395,7 @@ async function saveDocumentAs() {
       currentPath.value = result.path
       fileName.value = result.name
       savedSource.value = source.value
-      isWelcomeDocument.value = false
+      builtInDocument.value = null
       renderState.value = t('document.savedAsLocally')
     }
   } catch (error) {
@@ -608,20 +731,44 @@ function planPDFSlices(canvasHeight: number, maximumHeight: number, breakpoints:
   return slices
 }
 
-function quitApplication() {
-  if (dirty.value && !window.confirm(t('confirm.quitUnsaved'))) return
-  quitting = true
-  Quit()
+function requestApplicationQuit() {
+  if (!quitting) Quit()
+}
+
+async function handleCloseRequest() {
+  try {
+    const completed = await performDocumentTransition('quit', async () => {
+      quitting = true
+      await ConfirmQuit()
+    })
+    if (!completed) await CancelQuitRequest()
+  } catch (error) {
+    quitting = false
+    await CancelQuitRequest().catch(() => undefined)
+    showError(error)
+  }
 }
 
 async function showWelcome() {
-  if (dirty.value && !window.confirm(t('confirm.openUnsaved'))) return
-  try {
-    const document = await LoadWelcomeDocument(locale.value) as DocumentData
-    setDocument(document, 'status.ready')
-  } catch (error) {
-    showError(error)
-  }
+  await performDocumentTransition('open', async () => {
+    try {
+      const document = await LoadWelcomeDocument(locale.value) as DocumentData
+      setDocument(document, 'status.ready')
+    } catch (error) {
+      showError(error)
+    }
+  })
+}
+
+async function showRenderingTest() {
+  await performDocumentTransition('open', async () => {
+    try {
+      const document = await LoadRenderingTestDocument() as DocumentData
+      setDocument(document, 'status.ready')
+    } catch (error) {
+      showError(error)
+    }
+  })
 }
 
 async function loadApplicationInfo() {
@@ -705,6 +852,7 @@ async function toggleFullscreen() {
 async function runEditAction(action: string) {
   const target = editor.value
   if (!target) return
+  beginScroll('editor')
   target.focus()
   try {
     if (action === 'select-all') {
@@ -731,7 +879,7 @@ async function runEditAction(action: string) {
 }
 
 function updateNativeMenu() {
-  void UpdateMenuState(locale.value, viewMode.value, theme.value, syncScroll.value)
+  void UpdateMenuState(locale.value, viewMode.value, theme.value, syncScroll.value, previewFirst.value)
 }
 
 async function applyLanguageMode(mode: LanguageMode, replaceWelcome = true) {
@@ -744,7 +892,7 @@ async function applyLanguageMode(mode: LanguageMode, replaceWelcome = true) {
 	  document.title = t('app.fullName')
   await SetLanguage(normalized, nextLocale)
   updateNativeMenu()
-  if (replaceWelcome && isWelcomeDocument.value && !dirty.value) {
+  if (replaceWelcome && builtInDocument.value === 'welcome' && !dirty.value) {
     const welcome = await LoadWelcomeDocument(nextLocale) as DocumentData
     setDocument(welcome, 'status.ready')
   } else {
@@ -762,15 +910,29 @@ function handleSystemLanguageChange() {
   if (languageMode.value === 'auto') void applyLanguageMode('auto').catch(showError)
 }
 
-function handleSystemDocument(document: DocumentData) {
+async function handleSystemDocument(document: DocumentData) {
   if (!document?.name) return
-  if (dirty.value && !window.confirm(t('confirm.openUnsaved'))) return
-  setDocument(document)
+  pendingSystemDocuments.push(document)
+  await drainSystemDocuments()
+}
+
+async function drainSystemDocuments() {
+  if (drainingSystemDocuments || documentTransitionInProgress || !pendingSystemDocuments.length) return
+  drainingSystemDocuments = true
+  try {
+    while (pendingSystemDocuments.length) {
+      const document = pendingSystemDocuments.shift()
+      if (!document) continue
+      await performDocumentTransition('open', () => setDocument(document))
+    }
+  } finally {
+    drainingSystemDocuments = false
+  }
 }
 
 function handleMenuAction(action: string) {
   if (busy.value) return
-  if (action === 'new') newDocument()
+  if (action === 'new') void newDocument()
   else if (action === 'open') void openDocument()
   else if (action === 'save') void saveDocument()
   else if (action === 'save-as') void saveDocumentAs()
@@ -786,17 +948,19 @@ function handleMenuAction(action: string) {
   else if (action === 'upgrade') void upgradeApplication()
   else if (action === 'source-code') void openSourceRepository()
   else if (action === 'show-welcome') void showWelcome()
+  else if (action === 'show-render-test') void showRenderingTest()
   else if (action === 'hide') Hide()
   else if (action === 'window-minimise') WindowMinimise()
   else if (action === 'window-toggle-maximise') WindowToggleMaximise()
   else if (action === 'toggle-fullscreen') void toggleFullscreen()
   else if (action === 'toggle-sync-scroll') syncScroll.value = !syncScroll.value
+  else if (action === 'toggle-pane-order') swapPaneOrder()
   else if (action.startsWith('view-')) chooseView(action.slice(5) as ViewMode)
   else if (action.startsWith('theme-')) chooseTheme(action.slice(6) as Theme)
   else if (action.startsWith('format-')) runFormat(action.slice(7))
   else if (['undo', 'redo', 'cut', 'copy', 'paste', 'select-all'].includes(action)) void runEditAction(action)
   else if (action === 'copy-html') void copyHTML()
-  else if (action === 'quit') quitApplication()
+  else if (action === 'quit') requestApplicationQuit()
 }
 
 function scheduleRender() {
@@ -818,7 +982,7 @@ async function renderNow(sourceText = source.value, renderTheme = theme.value): 
     const cleanHTML = DOMPurify.sanitize(renderedHTML, {
       USE_PROFILES: { html: true },
       ADD_TAGS: ['details', 'summary', 'mark'],
-      ADD_ATTR: ['target', 'rel', 'checked', 'disabled', 'data-alert', 'data-display-mode'],
+      ADD_ATTR: ['target', 'rel', 'checked', 'disabled', 'data-alert', 'data-display-mode', 'data-source-line'],
       FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'svg'],
     })
     target.innerHTML = cleanHTML
@@ -827,6 +991,9 @@ async function renderNow(sourceText = source.value, renderTheme = theme.value): 
     highlightCode(target)
     await renderDiagrams(target, sequence, renderTheme)
     if (sequence !== renderSequence) return false
+    await nextTick()
+    refreshScrollAnchors()
+    reconcileActiveScroll()
     renderState.value = t('status.rendered')
     return true
   } catch (error) {
@@ -878,6 +1045,16 @@ function decoratePreview(root: HTMLElement) {
     anchor.rel = 'noopener noreferrer'
     anchor.addEventListener('click', (event) => {
       const href = anchor.getAttribute('href') || ''
+      if (href === '#inkmark-render-test') {
+        event.preventDefault()
+        void showRenderingTest()
+        return
+      }
+      if (href === '#inkmark-welcome') {
+        event.preventDefault()
+        void showWelcome()
+        return
+      }
       if (/^(https?:|mailto:)/i.test(href)) {
         event.preventDefault()
         void OpenExternal(href)
@@ -999,10 +1176,19 @@ function chooseView(value: ViewMode) {
   updateNativeMenu()
 }
 
+function swapPaneOrder() {
+  if (busy.value) return
+  scrollSync.reset()
+  previewFirst.value = togglePreviewFirst(previewFirst.value)
+  localStorage.setItem(previewFirstStorageKey, String(previewFirst.value))
+  updateNativeMenu()
+}
+
 function runFormat(action: string) {
   if (busy.value) return
   const target = editor.value
   if (!target) return
+  beginScroll('editor')
   const start = target.selectionStart
   const end = target.selectionEnd
   const selected = target.value.slice(start, end)
@@ -1051,18 +1237,137 @@ function runFormat(action: string) {
   })
 }
 
+function measureEditorScrollAnchors(lines: readonly number[]): ScrollAnchor[] {
+  const target = editor.value
+  const uniqueLines = [...new Set(lines)]
+    .filter((line) => Number.isFinite(line) && line >= 0)
+    .sort((left, right) => left - right)
+  if (!target || !uniqueLines.length || !shouldMeasureEditorAnchors(source.value.length, uniqueLines.length)) return []
+
+  const computed = window.getComputedStyle(target)
+  const mirror = document.createElement('div')
+  Object.assign(mirror.style, {
+    position: 'fixed',
+    left: '-100000px',
+    top: '0',
+    visibility: 'hidden',
+    pointerEvents: 'none',
+    boxSizing: computed.boxSizing,
+    width: `${target.clientWidth}px`,
+    paddingTop: computed.paddingTop,
+    paddingRight: computed.paddingRight,
+    paddingBottom: computed.paddingBottom,
+    paddingLeft: computed.paddingLeft,
+    border: '0',
+    font: computed.font,
+    fontFamily: computed.fontFamily,
+    fontSize: computed.fontSize,
+    fontWeight: computed.fontWeight,
+    lineHeight: computed.lineHeight,
+    letterSpacing: computed.letterSpacing,
+    tabSize: computed.tabSize,
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'break-word',
+    wordBreak: computed.wordBreak,
+    contain: 'layout style paint',
+  })
+
+  const offsets = new Map<number, number>()
+  let currentLine = 0
+  let currentOffset = 0
+  let lineIndex = 0
+  while (lineIndex < uniqueLines.length) {
+    const requestedLine = uniqueLines[lineIndex]
+    while (currentLine < requestedLine) {
+      const nextBreak = source.value.indexOf('\n', currentOffset)
+      if (nextBreak === -1) break
+      currentOffset = nextBreak + 1
+      currentLine += 1
+    }
+    if (currentLine !== requestedLine) break
+    offsets.set(requestedLine, currentOffset)
+    lineIndex += 1
+  }
+
+  const markers: Array<{ line: number; element: HTMLSpanElement }> = []
+  let textOffset = 0
+  offsets.forEach((offset, line) => {
+    mirror.append(document.createTextNode(source.value.slice(textOffset, offset)))
+    const marker = document.createElement('span')
+    Object.assign(marker.style, {
+      display: 'inline-block',
+      width: '0',
+      height: '1px',
+      margin: '0',
+      padding: '0',
+      overflow: 'hidden',
+      verticalAlign: 'top',
+    })
+    mirror.append(marker)
+    markers.push({ line, element: marker })
+    textOffset = offset
+  })
+  mirror.append(document.createTextNode(source.value.slice(textOffset) || '\u200b'))
+  document.body.append(mirror)
+  const anchors = markers.map(({ line, element }) => ({ line, top: element.offsetTop }))
+  mirror.remove()
+  return anchors
+}
+
+function measurePreviewScrollAnchors(): ScrollAnchor[] {
+  const pane = previewPane.value
+  const root = preview.value
+  if (!pane || !root) return []
+  const paneTop = pane.getBoundingClientRect().top
+  const elements = root.querySelectorAll<HTMLElement>('[data-source-line]')
+  return sampleAnchorIndices(elements.length)
+    .map((index) => elements[index])
+    .map((element) => ({
+      line: Number(element.dataset.sourceLine),
+      top: element.getBoundingClientRect().top - paneTop + pane.scrollTop,
+    }))
+    .filter((anchor) => Number.isFinite(anchor.line) && Number.isFinite(anchor.top))
+}
+
+function refreshScrollAnchors() {
+  previewScrollAnchors = measurePreviewScrollAnchors()
+  editorScrollAnchors = measureEditorScrollAnchors(previewScrollAnchors.map((anchor) => anchor.line))
+}
+
+function scheduleLayoutReconciliation() {
+  if (layoutReconcileFrame !== null) return
+  layoutReconcileFrame = window.requestAnimationFrame(() => {
+    layoutReconcileFrame = null
+    refreshScrollAnchors()
+    reconcileActiveScroll()
+  })
+}
+
+function scrollMapping(pane: ScrollPane): ScrollMapping {
+  const maxLine = Math.max(0, lineCount.value - 1)
+  return pane === 'editor'
+    ? { sourceAnchors: editorScrollAnchors, targetAnchors: previewScrollAnchors, maxLine }
+    : { sourceAnchors: previewScrollAnchors, targetAnchors: editorScrollAnchors, maxLine }
+}
+
+function reconcileActiveScroll() {
+  const activePane = scrollSync.active()
+  if (activePane === 'editor') syncFromEditor()
+  else if (activePane === 'preview') syncFromPreview()
+}
+
 function beginScroll(pane: ScrollPane) {
   if (syncScroll.value) scrollSync.begin(pane)
 }
 
 function syncFromEditor() {
   if (!syncScroll.value || !editor.value || !previewPane.value) return
-  scrollSync.sync('editor', editor.value, previewPane.value)
+  scrollSync.sync('editor', editor.value, previewPane.value, scrollMapping('editor'))
 }
 
 function syncFromPreview() {
   if (!syncScroll.value || !editor.value || !previewPane.value) return
-  scrollSync.sync('preview', previewPane.value, editor.value)
+  scrollSync.sync('preview', previewPane.value, editor.value, scrollMapping('preview'))
 }
 
 async function copyHTML() {
@@ -1077,6 +1382,11 @@ async function copyHTML() {
 
 function onKeydown(event: KeyboardEvent) {
   if (busy.value) return
+  if (event.key === 'Escape' && unsavedTransition.value) {
+    event.preventDefault()
+    answerUnsavedPrompt('cancel')
+    return
+  }
   if (event.key === 'Escape' && activeDialog.value) {
     activeDialog.value = null
     return
@@ -1125,7 +1435,11 @@ onMounted(async () => {
     EventsOn('inkmark:menu-action', handleMenuAction),
     EventsOn('inkmark:open-document', handleSystemDocument),
     EventsOn('inkmark:open-error', showError),
+    EventsOn('inkmark:close-request', () => { void handleCloseRequest() }),
   )
+  layoutResizeObserver = new ResizeObserver(scheduleLayoutReconciliation)
+  if (editor.value) layoutResizeObserver.observe(editor.value)
+  if (preview.value) layoutResizeObserver.observe(preview.value)
   void loadApplicationInfo()
   try {
     const persisted = await GetLanguageSettings()
@@ -1141,6 +1455,14 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.clearTimeout(renderTimer)
+  if (layoutReconcileFrame !== null) window.cancelAnimationFrame(layoutReconcileFrame)
+  layoutReconcileFrame = null
+  layoutResizeObserver?.disconnect()
+  layoutResizeObserver = null
+  if (resolveUnsavedDecision) {
+    resolveUnsavedDecision('cancel')
+    resolveUnsavedDecision = null
+  }
   removeMenuListeners.splice(0).forEach((removeListener) => removeListener())
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('beforeunload', onBeforeUnload)
@@ -1149,7 +1471,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell" :class="[`theme-${theme}`, `view-${viewMode}`]">
+  <div class="app-shell" :class="[`theme-${theme}`, `view-${viewMode}`, { 'preview-first': previewFirst }]">
     <header class="document-header">
       <div class="brand" :aria-label="t('app.fullName')">
         <img class="brand-mark" :src="inkmarkIcon" alt="" />
@@ -1163,7 +1485,7 @@ onBeforeUnmount(() => {
         <div class="document-title-row">
           <span v-if="dirty" class="dirty-dot" :title="t('document.dirtyTitle')"></span>
           <h1>{{ fileName }}</h1>
-          <span class="document-state">{{ dirty ? t('document.modified') : t('document.saved') }}</span>
+          <span class="document-state">{{ documentStateLabel }}</span>
         </div>
         <p :title="locationLabel">{{ locationLabel }}</p>
       </div>
@@ -1200,6 +1522,16 @@ onBeforeUnmount(() => {
         <button type="button" :class="{ active: viewMode === 'preview' }" :disabled="busy" @click="chooseView('preview')">{{ t('toolbar.preview') }}</button>
       </div>
 
+      <button
+        type="button"
+        class="swap-panes-button"
+        :class="{ active: previewFirst }"
+        :aria-pressed="previewFirst"
+        :title="t('toolbar.swapPanes')"
+        :disabled="busy"
+        @click="swapPaneOrder"
+      ><span aria-hidden="true">⇄</span> <span class="swap-panes-label">{{ t('toolbar.swapPanes') }}</span></button>
+
       <div class="theme-picker" :aria-label="t('toolbar.previewStyle')">
         <span>{{ t('toolbar.layout') }}</span>
         <button
@@ -1228,6 +1560,7 @@ onBeforeUnmount(() => {
           :aria-label="t('panel.editorAriaLabel')"
           :disabled="busy"
           spellcheck="false"
+          @input="beginScroll('editor')"
           @keydown="beginScroll('editor')"
           @pointerdown="beginScroll('editor')"
           @scroll="syncFromEditor"
@@ -1263,6 +1596,41 @@ onBeforeUnmount(() => {
       <span>{{ t('status.characters', { count: characterCount.toLocaleString(locale) }) }}</span>
       <span>{{ t('status.lines', { count: lineCount.toLocaleString(locale) }) }}</span>
     </footer>
+
+    <div v-if="unsavedTransition" class="modal-backdrop" @click.self="answerUnsavedPrompt('cancel')">
+      <section
+        class="app-dialog unsaved-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="dialog-unsaved-title"
+        aria-describedby="dialog-unsaved-message"
+      >
+        <h2 id="dialog-unsaved-title">{{ t('unsaved.title') }}</h2>
+        <p id="dialog-unsaved-message">{{ unsavedPromptMessage }}</p>
+        <footer class="dialog-actions unsaved-actions">
+          <button
+            type="button"
+            class="button secondary"
+            :disabled="resolvingUnsavedPrompt"
+            @click="answerUnsavedPrompt('discard')"
+          >{{ t('unsaved.discard') }}</button>
+          <span class="status-spacer"></span>
+          <button
+            type="button"
+            class="button secondary"
+            :disabled="resolvingUnsavedPrompt"
+            @click="answerUnsavedPrompt('cancel')"
+          >{{ t('unsaved.cancel') }}</button>
+          <button
+            type="button"
+            class="button primary"
+            :disabled="resolvingUnsavedPrompt"
+            autofocus
+            @click="answerUnsavedPrompt('save')"
+          >{{ t('unsaved.save') }}</button>
+        </footer>
+      </section>
+    </div>
 
     <div v-if="activeDialog" class="modal-backdrop" @click.self="activeDialog = null">
       <section class="app-dialog" role="dialog" aria-modal="true" :aria-labelledby="`dialog-${activeDialog}`">

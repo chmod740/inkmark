@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { ScrollSyncController } from '../frontend/src/scroll-sync.ts'
+import {
+  mapAnchoredScrollTop,
+  maximumMeasuredEditorCharacters,
+  maximumScrollAnchors,
+  sampleAnchorIndices,
+  ScrollSyncController,
+  shouldMeasureEditorAnchors,
+} from '../frontend/src/scroll-sync.ts'
 
 function viewport(scrollTop, scrollHeight, clientHeight = 200) {
   return { scrollTop, scrollHeight, clientHeight }
@@ -62,4 +69,69 @@ test('scroll ratio is clamped at both ends', () => {
   editor.scrollTop = -20
   controller.sync('editor', editor, preview)
   assert.equal(preview.scrollTop, 0)
+})
+
+test('source-line anchors align semantic sections across tall diagrams', () => {
+  const mapping = {
+    maxLine: 362,
+    sourceAnchors: [
+      { line: 0, top: 0 },
+      { line: 280, top: 520 },
+      { line: 330, top: 700 },
+    ],
+    targetAnchors: [
+      { line: 0, top: 0 },
+      { line: 280, top: 1800 },
+      { line: 330, top: 2800 },
+    ],
+  }
+
+  assert.equal(mapAnchoredScrollTop(700, 800, 4000, mapping), 2800)
+  assert.equal(mapAnchoredScrollTop(2800, 4000, 800, {
+    ...mapping,
+    sourceAnchors: mapping.targetAnchors,
+    targetAnchors: mapping.sourceAnchors,
+  }), 700)
+})
+
+test('render reconciliation restores the active editor after asynchronous preview reflow', () => {
+  const controller = new ScrollSyncController()
+  const editor = viewport(800, 1000)
+  const preview = viewport(600, 2400)
+
+  controller.begin('editor')
+  assert.equal(controller.sync('editor', editor, preview, {
+    maxLine: 100,
+    sourceAnchors: [],
+    targetAnchors: [],
+  }), true)
+  assert.equal(preview.scrollTop, 2200)
+
+  // Mermaid, an image, or a font finishes after the first paint. The preview
+  // range and semantic anchors move, but the editor remains the source of truth.
+  preview.scrollHeight = 3400
+  assert.equal(controller.sync('editor', editor, preview, {
+    maxLine: 100,
+    sourceAnchors: [{ line: 80, top: 800 }],
+    targetAnchors: [{ line: 80, top: 2700 }],
+  }), true)
+  assert.equal(preview.scrollTop, 2700)
+
+  preview.scrollTop = 900
+  controller.begin('preview')
+  editor.scrollTop = 640
+  assert.equal(controller.sync('editor', editor, preview), false)
+  assert.equal(preview.scrollTop, 900)
+})
+
+test('semantic anchor measurement is bounded and large documents use proportional fallback', () => {
+  const indices = sampleAnchorIndices(1_000_000)
+  assert.equal(indices.length, maximumScrollAnchors)
+  assert.equal(indices[0], 0)
+  assert.equal(indices.at(-1), 999_999)
+  assert.equal(new Set(indices).size, maximumScrollAnchors)
+
+  assert.equal(shouldMeasureEditorAnchors(maximumMeasuredEditorCharacters, maximumScrollAnchors), true)
+  assert.equal(shouldMeasureEditorAnchors(maximumMeasuredEditorCharacters + 1, 1), false)
+  assert.equal(shouldMeasureEditorAnchors(1, maximumScrollAnchors + 1), false)
 })

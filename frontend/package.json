@@ -1,7 +1,7 @@
 {
   "name": "inkmark-frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
@@ -10,6 +10,7 @@
     "test:export": "node --experimental-strip-types --test ../scripts/test-exports.mjs",
     "test:i18n": "node --experimental-strip-types --test ../scripts/test-i18n.mjs",
     "test:installer": "node --test ../scripts/test-windows-installer.mjs",
+    "test:ui": "node --experimental-strip-types --test ../scripts/test-ui-state.mjs",
     "test:scroll": "node --experimental-strip-types --test ../scripts/test-scroll-sync.mjs",
     "typecheck": "vue-tsc --noEmit"
   },

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ const (
 	menuActionEvent   = "inkmark:menu-action"
 	openDocumentEvent = "inkmark:open-document"
 	openErrorEvent    = "inkmark:open-error"
+	closeRequestEvent = "inkmark:close-request"
 )
 
 type exportFormatConfig struct {
@@ -53,7 +55,11 @@ type Document struct {
 	Name    string `json:"name"`
 	Content string `json:"content"`
 	Welcome bool   `json:"welcome"`
+	BuiltIn string `json:"builtIn,omitempty"`
 }
+
+//go:embed samples/markdown-rendering-test.md
+var renderingTestMarkdown string
 
 type SaveResult struct {
 	Path string `json:"path"`
@@ -66,9 +72,10 @@ type LanguageState struct {
 }
 
 type MenuState struct {
-	ViewMode   string
-	Theme      string
-	SyncScroll bool
+	ViewMode     string
+	Theme        string
+	SyncScroll   bool
+	PreviewFirst bool
 }
 
 type App struct {
@@ -82,6 +89,7 @@ type App struct {
 	updateEndpoint string
 	updateClient   httpDoer
 	latestUpdate   UpdateInfo
+	closeGuard     closeGuardState
 }
 
 func NewApp() *App {
@@ -122,18 +130,32 @@ func (a *App) WelcomeDocument(locale string) Document {
 	return welcomeDocument(normalizeLocale(locale))
 }
 
+func (a *App) RenderingTestDocument() Document {
+	return renderingTestDocument()
+}
+
 func welcomeDocument(locale string) Document {
 	if normalizeLocale(locale) == "en" {
 		return Document{
 			Name:    "README.md",
 			Welcome: true,
-			Content: "# InkMark Markdown\n\nA local Markdown editor focused on writing.\n\n## Get started\n\n- Write Markdown on the left and see the live preview on the right.\n- Use the File menu to open, save, or export documents.\n- Use the View and Format menus to adjust the workspace and preview style.\n\n## Features\n\n- GFM, KaTeX, and Mermaid\n- GitHub, Clean, WeChat, and Dark themes\n- PDF, HTML, PNG, TXT, and Word-compatible exports\n",
+			BuiltIn: "welcome",
+			Content: "# InkMark Markdown\n\nA local Markdown editor focused on writing.\n\n## Get started\n\n- Write Markdown on the left and see the live preview on the right.\n- Use the File menu to open, save, or export documents.\n- Use the View and Format menus to adjust the workspace and preview style.\n- [Open the bilingual comprehensive rendering test](#inkmark-render-test) to inspect GFM, KaTeX, Mermaid, code highlighting, and safe HTML.\n\n## Features\n\n- GFM, KaTeX, and Mermaid\n- GitHub, Clean, WeChat, and Dark themes\n- PDF, HTML, PNG, TXT, and Word-compatible exports\n",
 		}
 	}
 	return Document{
 		Name:    "README.md",
 		Welcome: true,
-		Content: "# 墨笺 Markdown\n\n一款专注于本地写作的 Markdown 编辑器。\n\n## 开始使用\n\n- 在左侧编写 Markdown，右侧查看实时预览。\n- 使用“文件”菜单打开、保存或导出文档。\n- 使用“视图”和“格式”菜单调整编辑方式与排版风格。\n\n## 支持\n\n- GFM、KaTeX 和 Mermaid\n- GitHub、清爽、公众号和深色主题\n- PDF、HTML、PNG、TXT 和 Word 兼容文档\n",
+		BuiltIn: "welcome",
+		Content: "# 墨笺 Markdown\n\n一款专注于本地写作的 Markdown 编辑器。\n\n## 开始使用\n\n- 在左侧编写 Markdown，右侧查看实时预览。\n- 使用“文件”菜单打开、保存或导出文档。\n- 使用“视图”和“格式”菜单调整编辑方式与排版风格。\n- [打开中英双语综合渲染测试页](#inkmark-render-test)，检查 GFM、KaTeX、Mermaid、代码高亮和安全 HTML。\n\n## 支持\n\n- GFM、KaTeX 和 Mermaid\n- GitHub、清爽、公众号和深色主题\n- PDF、HTML、PNG、TXT 和 Word 兼容文档\n",
+	}
+}
+
+func renderingTestDocument() Document {
+	return Document{
+		Name:    "markdown-rendering-test.md",
+		Content: strings.TrimSpace(renderingTestMarkdown) + "\n",
+		BuiltIn: "render-test",
 	}
 }
 

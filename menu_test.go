@@ -88,18 +88,31 @@ func TestMenuSelectionDefaults(t *testing.T) {
 			t.Errorf("view mode item %d: expected radio checked=%t, got type=%v checked=%t", index, checked, item.Type, item.Checked)
 		}
 	}
-	if syncItem := viewMenu.Items[4]; syncItem.Type != menu.CheckboxType || !syncItem.Checked {
+	if syncItem := findMenuItem(t, viewMenu, "Synchronized Scrolling"); syncItem.Type != menu.CheckboxType || !syncItem.Checked {
 		t.Errorf("synchronized scrolling should be checked by default: %#v", syncItem)
 	}
-	styleMenu := viewMenu.Items[5].SubMenu
+	if previewItem := findMenuItem(t, viewMenu, "Preview Pane on Left"); previewItem.Type != menu.CheckboxType || previewItem.Checked {
+		t.Errorf("preview-first should be unchecked by default: %#v", previewItem)
+	}
+	styleMenu := findMenuItem(t, viewMenu, "Preview Style").SubMenu
 	if styleMenu == nil || len(styleMenu.Items) != 4 {
-		t.Fatalf("preview style submenu is incomplete: %#v", viewMenu.Items[5])
+		t.Fatalf("preview style submenu is incomplete")
 	}
 	for index, checked := range []bool{true, false, false, false} {
 		item := styleMenu.Items[index]
 		if item.Type != menu.RadioType || item.Checked != checked {
 			t.Errorf("preview style item %d: expected radio checked=%t, got type=%v checked=%t", index, checked, item.Type, item.Checked)
 		}
+	}
+}
+
+func TestPreviewFirstMenuSelection(t *testing.T) {
+	app := NewApp()
+	app.menuState.PreviewFirst = true
+	viewMenu := findTopLevelMenu(t, app.applicationMenuFor("windows", "en"), "View")
+	item := findMenuItem(t, viewMenu, "Preview Pane on Left")
+	if item.Type != menu.CheckboxType || !item.Checked {
+		t.Fatalf("preview-first menu state was not reflected: %#v", item)
 	}
 }
 
@@ -137,10 +150,11 @@ func TestHelpMenuContainsUpdateAndRepositoryActions(t *testing.T) {
 	applicationMenu := NewApp().applicationMenuFor("windows", "en")
 	helpMenu := findTopLevelMenu(t, applicationMenu, "Help")
 	want := map[string]bool{
-		"Check for Updates…": false,
-		"Upgrade InkMark…":   false,
-		"Source Repository":  false,
-		"About InkMark":      false,
+		"Rendering Test Page": false,
+		"Check for Updates…":  false,
+		"Upgrade InkMark…":    false,
+		"Source Repository":   false,
+		"About InkMark":       false,
 	}
 	for _, item := range helpMenu.Items {
 		if _, ok := want[item.Label]; ok {
@@ -152,6 +166,17 @@ func TestHelpMenuContainsUpdateAndRepositoryActions(t *testing.T) {
 			t.Errorf("Help menu is missing %q", label)
 		}
 	}
+}
+
+func findMenuItem(t *testing.T, current *menu.Menu, label string) *menu.MenuItem {
+	t.Helper()
+	for _, item := range current.Items {
+		if item.Label == label {
+			return item
+		}
+	}
+	t.Fatalf("menu item %q not found", label)
+	return nil
 }
 
 func findTopLevelMenu(t *testing.T, applicationMenu *menu.Menu, label string) *menu.Menu {

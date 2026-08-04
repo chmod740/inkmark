@@ -38,6 +38,7 @@ func main() {
 		BackgroundColour: &options.RGBA{R: 236, G: 238, B: 233, A: 1},
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
+		OnBeforeClose:    app.beforeClose,
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "com.inkmark.editor.single-instance",
 			OnSecondInstanceLaunch: func(data options.SecondInstanceData) {

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestReadAndWriteDocument(t *testing.T) {
@@ -141,12 +142,45 @@ func TestEmptyPlainTextExportIsValid(t *testing.T) {
 
 func TestWelcomeDocumentUsesRequestedLanguage(t *testing.T) {
 	chinese := welcomeDocument("zh-CN")
-	if chinese.Name != "README.md" || !chinese.Welcome || !strings.Contains(chinese.Content, "# 墨笺 Markdown") {
+	if chinese.Name != "README.md" || !chinese.Welcome || chinese.BuiltIn != "welcome" || !strings.Contains(chinese.Content, "# 墨笺 Markdown") {
 		t.Fatalf("unexpected Chinese welcome document: %#v", chinese)
 	}
 	english := welcomeDocument("en")
-	if english.Name != "README.md" || !english.Welcome || !strings.Contains(english.Content, "# InkMark Markdown") {
+	if english.Name != "README.md" || !english.Welcome || english.BuiltIn != "welcome" || !strings.Contains(english.Content, "# InkMark Markdown") {
 		t.Fatalf("unexpected English welcome document: %#v", english)
+	}
+	if !strings.Contains(chinese.Content, "#inkmark-render-test") || !strings.Contains(english.Content, "#inkmark-render-test") {
+		t.Fatal("both welcome documents must link to the rendering test")
+	}
+}
+
+func TestRenderingTestDocumentIsEmbeddedAndBilingual(t *testing.T) {
+	document := renderingTestDocument()
+	if document.Path != "" || document.Welcome || document.BuiltIn != "render-test" {
+		t.Fatalf("unexpected rendering test metadata: %#v", document)
+	}
+	if document.Name != "markdown-rendering-test.md" || !utf8.ValidString(document.Content) {
+		t.Fatalf("invalid rendering test document: %#v", document)
+	}
+	for _, marker := range []string{
+		"Markdown 综合渲染测试",
+		"Comprehensive Rendering Test",
+		"| 左对齐功能 / Left |",
+		"$E=mc^2$",
+		"> [!CAUTION]",
+		"<details>",
+		"<script>window.markdownUnsafeScriptExecuted",
+		"#inkmark-welcome",
+	} {
+		if !strings.Contains(document.Content, marker) {
+			t.Errorf("rendering test is missing %q", marker)
+		}
+	}
+	if got := strings.Count(document.Content, "~~~mermaid"); got != 10 {
+		t.Fatalf("expected 10 Mermaid diagrams, got %d", got)
+	}
+	if strings.Contains(document.Content, "/Users/") {
+		t.Fatal("embedded sample must not contain a local absolute path")
 	}
 }
 

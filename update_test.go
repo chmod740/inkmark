@@ -112,6 +112,20 @@ func TestAppVersionMatchesWailsMetadata(t *testing.T) {
 	if config.Info.ProductVersion != appVersion {
 		t.Fatalf("app version %q does not match wails.json %q", appVersion, config.Info.ProductVersion)
 	}
+
+	frontendPayload, err := os.ReadFile("frontend/package.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var frontendConfig struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(frontendPayload, &frontendConfig); err != nil {
+		t.Fatal(err)
+	}
+	if frontendConfig.Version != appVersion {
+		t.Fatalf("app version %q does not match frontend/package.json %q", appVersion, frontendConfig.Version)
+	}
 }
 
 func sign(value int) int {

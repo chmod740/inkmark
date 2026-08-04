@@ -10,11 +10,14 @@
 
 - 打开、编辑、保存、另存为 `.md` 与 `.markdown` 文件
 - 120ms 防抖实时渲染，支持仅编辑、分栏编辑和仅预览三种视图
-- 编辑区与预览区双向同步滚动，并避免静止时自动漂移
+- 编辑区与预览区按源码段落双向同步滚动，公式和图表重排后自动校准，并避免静止时漂移
+- 新建、打开或退出前如有未保存更改，可选择保存、不保存或取消
+- 编辑区与预览区可一键调换左右位置，选择会在重启后保留
 - GitHub、清爽阅读、微信公众号和深色四种预览主题
 - macOS 与 Windows 原生菜单，集中提供文件、编辑、视图、格式、帮助和更新功能
 - 自动检测、简体中文、English 三种语言模式；默认自动跟随系统语言
 - 普通启动显示对应语言的本地欢迎页；从 Finder 或资源管理器打开 Markdown 文件时直接显示目标内容
+- 欢迎页和“帮助”菜单提供中英双语综合渲染测试页，覆盖表格、公式、代码、提示块、安全 HTML 与十类 Mermaid 图
 - 应用、文件关联、桌面快捷方式和应用内使用统一图标
 - “关于墨笺”显示版本、作者、源码仓库和更新状态
 - “帮助”菜单可以检查 GitHub Releases，并为当前平台打开对应安装包
@@ -97,22 +100,27 @@ pnpm --dir frontend typecheck
 pnpm --dir frontend test:i18n
 pnpm --dir frontend test:export
 pnpm --dir frontend test:scroll
+pnpm --dir frontend test:ui
 pnpm --dir frontend test:installer
 node scripts/verify-offline.mjs
 ```
 
-测试覆盖文件读写、语言设置、原生菜单、版本比较与 Release 响应、导出结构、外部资源策略、同步滚动和离线资源完整性。
+测试覆盖文件读写、未保存文档切换与原生关闭守卫、语言设置、原生菜单、版本比较与 Release 响应、导出结构、外部资源策略、同步滚动、大文档锚点上限和离线资源完整性。
 
 ## 项目结构
 
 - `app.go`：原生文件对话框、读写与导出保存
+- `close_guard.go`：macOS 与 Windows 原生关闭前的保存守卫
 - `app_state.go`：语言设置、单实例和系统文件打开
 - `update.go`：版本信息、GitHub Releases 检测和平台安装包选择
 - `menu.go`：macOS 与 Windows 原生菜单
 - `frontend/src/App.vue`：编辑器、实时预览、设置和关于页面
 - `frontend/src/i18n.ts`：中英文界面与欢迎页文案
+- `frontend/src/ui-state.ts`：文档状态与分栏顺序偏好
+- `frontend/src/document-guard.ts`：未保存文档的安全切换守卫
 - `frontend/src/export-document.ts`：HTML、PDF、PNG、TXT 和 Word 兼容导出
 - `frontend/src/scroll-sync.ts`：稳定的双向滚动同步
+- `samples/markdown-rendering-test.md`：应用内置的中英双语综合渲染样例
 - `scripts/`：构建、打包和回归测试脚本
 
 ## 版本与更新
