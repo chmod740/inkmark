@@ -54,5 +54,6 @@ test('Windows executable embeds complete bilingual version metadata', async () =
     ]) {
       assert.ok(fields[key]?.trim(), `${language}.${key} must be present`)
     }
+    assert.equal(fields.OriginalFilename, '{{.OutputFilename}}')
   }
 })

@@ -11,7 +11,7 @@
       "FileVersion": "{{.Info.ProductVersion}}",
       "InternalName": "{{.OutputFilename}}",
       "LegalCopyright": "{{.Info.Copyright}}",
-      "OriginalFilename": "{{.OutputFilename}}.exe",
+      "OriginalFilename": "{{.OutputFilename}}",
       "ProductName": "{{.Info.ProductName}}",
       "ProductVersion": "{{.Info.ProductVersion}}",
       "Comments": "{{.Info.Comments}}"
@@ -22,7 +22,7 @@
       "FileVersion": "{{.Info.ProductVersion}}",
       "InternalName": "{{.OutputFilename}}",
       "LegalCopyright": "{{.Info.Copyright}}",
-      "OriginalFilename": "{{.OutputFilename}}.exe",
+      "OriginalFilename": "{{.OutputFilename}}",
       "ProductName": "{{.Info.ProductName}}",
       "ProductVersion": "{{.Info.ProductVersion}}",
       "Comments": "本地 Markdown 编辑器"
