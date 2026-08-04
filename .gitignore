@@ -1,6 +1,7 @@
 # Wails and frontend outputs
 build/bin/
-frontend/dist/
+frontend/dist/*
+!frontend/dist/.gitkeep
 frontend/node_modules/
 frontend/package.json.md5
 
@@ -17,7 +18,7 @@ build/windows/installer/*
 build/screenshots/
 output/
 tmp/
-dist/
+/dist/
 frontend/playwright-report/
 frontend/test-results/
 coverage/
