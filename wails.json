@@ -7,7 +7,7 @@
   "frontend:dev:watcher": "pnpm dev",
   "frontend:dev:serverUrl": "auto",
   "info": {
-	"companyName": "InkMark",
+	"companyName": "PengHu",
 	"productName": "InkMark Markdown",
 	"productVersion": "1.0.0",
 	"copyright": "Copyright © 2026 PengHu",

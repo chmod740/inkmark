@@ -1,0 +1,31 @@
+{
+  "fixed": {
+    "file_version": "{{.Info.ProductVersion}}.0",
+    "product_version": "{{.Info.ProductVersion}}.0",
+    "type": "app"
+  },
+  "info": {
+    "0409": {
+      "CompanyName": "{{.Info.CompanyName}}",
+      "FileDescription": "{{.Info.ProductName}} Local Markdown Editor",
+      "FileVersion": "{{.Info.ProductVersion}}",
+      "InternalName": "{{.OutputFilename}}",
+      "LegalCopyright": "{{.Info.Copyright}}",
+      "OriginalFilename": "{{.OutputFilename}}.exe",
+      "ProductName": "{{.Info.ProductName}}",
+      "ProductVersion": "{{.Info.ProductVersion}}",
+      "Comments": "{{.Info.Comments}}"
+    },
+    "0804": {
+      "CompanyName": "{{.Info.CompanyName}}",
+      "FileDescription": "墨笺 Markdown 本地编辑器",
+      "FileVersion": "{{.Info.ProductVersion}}",
+      "InternalName": "{{.OutputFilename}}",
+      "LegalCopyright": "{{.Info.Copyright}}",
+      "OriginalFilename": "{{.OutputFilename}}.exe",
+      "ProductName": "{{.Info.ProductName}}",
+      "ProductVersion": "{{.Info.ProductVersion}}",
+      "Comments": "本地 Markdown 编辑器"
+    }
+  }
+}

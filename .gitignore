@@ -8,6 +8,7 @@ frontend/package.json.md5
 build/darwin/*
 !build/darwin/Info.plist
 build/windows/*
+!build/windows/info.json
 !build/windows/installer/
 build/windows/installer/*
 !build/windows/installer/project.nsi

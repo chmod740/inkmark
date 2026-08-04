@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const projectUrl = new URL('../build/windows/installer/project.nsi', import.meta.url)
 const configUrl = new URL('../wails.json', import.meta.url)
+const versionInfoUrl = new URL('../build/windows/info.json', import.meta.url)
 
 test('Windows installer quotes the executable used by file associations', async () => {
   const source = await readFile(projectUrl, 'utf8')
@@ -30,4 +31,28 @@ test('Markdown extensions use the ProgID corrected by the installer', async () =
       { ext: 'markdown', name: 'InkMark Markdown Document' },
     ],
   )
+})
+
+test('Windows executable embeds complete bilingual version metadata', async () => {
+  const versionInfo = JSON.parse(await readFile(versionInfoUrl, 'utf8'))
+
+  assert.equal(versionInfo.fixed.file_version, '{{.Info.ProductVersion}}.0')
+  assert.equal(versionInfo.fixed.product_version, '{{.Info.ProductVersion}}.0')
+  assert.equal(versionInfo.fixed.type, 'app')
+  assert.deepEqual(Object.keys(versionInfo.info).sort(), ['0409', '0804'])
+  for (const language of ['0409', '0804']) {
+    const fields = versionInfo.info[language]
+    for (const key of [
+      'CompanyName',
+      'FileDescription',
+      'FileVersion',
+      'InternalName',
+      'LegalCopyright',
+      'OriginalFilename',
+      'ProductName',
+      'ProductVersion',
+    ]) {
+      assert.ok(fields[key]?.trim(), `${language}.${key} must be present`)
+    }
+  }
 })
