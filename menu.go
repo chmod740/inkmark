@@ -1,0 +1,231 @@
+package main
+
+import (
+	"runtime"
+	"strings"
+
+	"github.com/wailsapp/wails/v2/pkg/menu"
+	"github.com/wailsapp/wails/v2/pkg/menu/keys"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+)
+
+type localizedMenuText struct {
+	zh string
+	en string
+}
+
+var nativeMenuText = map[string]localizedMenuText{
+	"app":                {zh: "墨笺", en: "InkMark"},
+	"file":               {zh: "文件", en: "File"},
+	"edit":               {zh: "编辑", en: "Edit"},
+	"view":               {zh: "视图", en: "View"},
+	"format":             {zh: "格式", en: "Format"},
+	"window":             {zh: "窗口", en: "Window"},
+	"help":               {zh: "帮助", en: "Help"},
+	"about":              {zh: "关于墨笺", en: "About InkMark"},
+	"settings":           {zh: "设置…", en: "Settings…"},
+	"hide":               {zh: "隐藏墨笺", en: "Hide InkMark"},
+	"quit-app":           {zh: "退出墨笺", en: "Quit InkMark"},
+	"new":                {zh: "新建", en: "New"},
+	"open":               {zh: "打开…", en: "Open…"},
+	"save":               {zh: "保存", en: "Save"},
+	"save-as":            {zh: "另存为…", en: "Save As…"},
+	"export":             {zh: "导出", en: "Export"},
+	"export-pdf":         {zh: "PDF 文档…", en: "PDF Document…"},
+	"export-html":        {zh: "HTML 网页…", en: "HTML Web Page…"},
+	"export-png":         {zh: "PNG 长图…", en: "PNG Long Image…"},
+	"export-txt":         {zh: "纯文本…", en: "Plain Text…"},
+	"export-doc":         {zh: "Word 兼容文档…", en: "Word-compatible Document…"},
+	"exit":               {zh: "退出", en: "Exit"},
+	"undo":               {zh: "撤销", en: "Undo"},
+	"redo":               {zh: "重做", en: "Redo"},
+	"cut":                {zh: "剪切", en: "Cut"},
+	"copy":               {zh: "复制", en: "Copy"},
+	"paste":              {zh: "粘贴", en: "Paste"},
+	"copy-html":          {zh: "复制渲染后的 HTML", en: "Copy Rendered HTML"},
+	"select-all":         {zh: "全选", en: "Select All"},
+	"view-edit":          {zh: "仅编辑", en: "Editor Only"},
+	"view-split":         {zh: "分栏编辑", en: "Split View"},
+	"view-preview":       {zh: "仅预览", en: "Preview Only"},
+	"sync-scroll":        {zh: "同步滚动", en: "Synchronized Scrolling"},
+	"preview-style":      {zh: "预览样式", en: "Preview Style"},
+	"theme-github":       {zh: "GitHub", en: "GitHub"},
+	"theme-clean":        {zh: "清爽", en: "Clean"},
+	"theme-wechat":       {zh: "公众号", en: "WeChat"},
+	"theme-dark":         {zh: "深色", en: "Dark"},
+	"fullscreen":         {zh: "全屏", en: "Full Screen"},
+	"bold":               {zh: "粗体", en: "Bold"},
+	"italic":             {zh: "斜体", en: "Italic"},
+	"strike":             {zh: "删除线", en: "Strikethrough"},
+	"heading":            {zh: "二级标题", en: "Heading 2"},
+	"quote":              {zh: "引用", en: "Block Quote"},
+	"unordered-list":     {zh: "无序列表", en: "Bulleted List"},
+	"ordered-list":       {zh: "有序列表", en: "Numbered List"},
+	"task-list":          {zh: "任务列表", en: "Task List"},
+	"link":               {zh: "链接", en: "Link"},
+	"inline-code":        {zh: "行内代码", en: "Inline Code"},
+	"code-block":         {zh: "代码块", en: "Code Block"},
+	"table":              {zh: "表格", en: "Table"},
+	"minimise":           {zh: "最小化", en: "Minimize"},
+	"zoom-window":        {zh: "缩放窗口", en: "Zoom"},
+	"welcome":            {zh: "欢迎页", en: "Welcome"},
+	"keyboard-shortcuts": {zh: "键盘快捷键", en: "Keyboard Shortcuts"},
+	"check-update":       {zh: "检查更新…", en: "Check for Updates…"},
+	"upgrade":            {zh: "升级墨笺…", en: "Upgrade InkMark…"},
+	"source-code":        {zh: "源码仓库", en: "Source Repository"},
+}
+
+type currentLocaleProvider interface {
+	currentLocale() string
+}
+
+func (a *App) applicationMenu() *menu.Menu {
+	locale := "zh-CN"
+	if provider, ok := any(a).(currentLocaleProvider); ok {
+		locale = provider.currentLocale()
+	}
+	return a.applicationMenuFor(runtime.GOOS, locale)
+}
+
+// applicationMenuFor accepts a variadic locale only to keep older internal
+// callers source-compatible. New callers should always pass platform and
+// locale explicitly.
+func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu {
+	locale := "zh-CN"
+	if len(locales) > 0 {
+		locale = locales[0]
+	}
+	locale = normalizeMenuLocale(locale)
+	label := func(key string) string { return nativeMenuLabel(locale, key) }
+	state := a.currentMenuState()
+
+	applicationMenu := menu.NewMenu()
+	if platform == "darwin" {
+		appMenu := applicationMenu.AddSubmenu(label("app"))
+		appMenu.AddText(label("about"), nil, a.menuAction("about"))
+		appMenu.AddText(label("settings"), keys.CmdOrCtrl(","), a.menuAction("settings"))
+		appMenu.AddSeparator()
+		appMenu.AddText(label("hide"), keys.CmdOrCtrl("h"), a.menuAction("hide"))
+		appMenu.AddSeparator()
+		appMenu.AddText(label("quit-app"), keys.CmdOrCtrl("q"), a.menuAction("quit"))
+	}
+
+	fileMenu := applicationMenu.AddSubmenu(label("file"))
+	fileMenu.AddText(label("new"), keys.CmdOrCtrl("n"), a.menuAction("new"))
+	fileMenu.AddText(label("open"), keys.CmdOrCtrl("o"), a.menuAction("open"))
+	fileMenu.AddSeparator()
+	fileMenu.AddText(label("save"), keys.CmdOrCtrl("s"), a.menuAction("save"))
+	fileMenu.AddText(label("save-as"), keys.Combo("s", keys.CmdOrCtrlKey, keys.ShiftKey), a.menuAction("save-as"))
+	fileMenu.AddSeparator()
+	exportMenu := fileMenu.AddSubmenu(label("export"))
+	exportMenu.AddText(label("export-pdf"), nil, a.menuAction("export-pdf"))
+	exportMenu.AddText(label("export-html"), nil, a.menuAction("export-html"))
+	exportMenu.AddSeparator()
+	exportMenu.AddText(label("export-png"), nil, a.menuAction("export-png"))
+	exportMenu.AddText(label("export-txt"), nil, a.menuAction("export-txt"))
+	exportMenu.AddText(label("export-doc"), nil, a.menuAction("export-doc"))
+	if platform != "darwin" {
+		fileMenu.AddSeparator()
+		fileMenu.AddText(label("settings"), keys.CmdOrCtrl(","), a.menuAction("settings"))
+		fileMenu.AddSeparator()
+		fileMenu.AddText(label("exit"), keys.OptionOrAlt("f4"), a.menuAction("quit"))
+	}
+
+	editMenu := applicationMenu.AddSubmenu(label("edit"))
+	editMenu.AddText(label("undo"), keys.CmdOrCtrl("z"), a.menuAction("undo"))
+	if platform == "darwin" {
+		editMenu.AddText(label("redo"), keys.Combo("z", keys.CmdOrCtrlKey, keys.ShiftKey), a.menuAction("redo"))
+	} else {
+		editMenu.AddText(label("redo"), keys.CmdOrCtrl("y"), a.menuAction("redo"))
+	}
+	editMenu.AddSeparator()
+	editMenu.AddText(label("cut"), keys.CmdOrCtrl("x"), a.menuAction("cut"))
+	editMenu.AddText(label("copy"), keys.CmdOrCtrl("c"), a.menuAction("copy"))
+	editMenu.AddText(label("paste"), keys.CmdOrCtrl("v"), a.menuAction("paste"))
+	editMenu.AddText(label("copy-html"), nil, a.menuAction("copy-html"))
+	editMenu.AddSeparator()
+	editMenu.AddText(label("select-all"), keys.CmdOrCtrl("a"), a.menuAction("select-all"))
+
+	viewMenu := applicationMenu.AddSubmenu(label("view"))
+	viewMenu.AddRadio(label("view-edit"), state.ViewMode == "edit", keys.CmdOrCtrl("1"), a.menuAction("view-edit"))
+	viewMenu.AddRadio(label("view-split"), state.ViewMode == "split", keys.CmdOrCtrl("2"), a.menuAction("view-split"))
+	viewMenu.AddRadio(label("view-preview"), state.ViewMode == "preview", keys.CmdOrCtrl("3"), a.menuAction("view-preview"))
+	viewMenu.AddSeparator()
+	viewMenu.AddCheckbox(label("sync-scroll"), state.SyncScroll, nil, a.menuAction("toggle-sync-scroll"))
+	styleMenu := viewMenu.AddSubmenu(label("preview-style"))
+	styleMenu.AddRadio(label("theme-github"), state.Theme == "github", nil, a.menuAction("theme-github"))
+	styleMenu.AddRadio(label("theme-clean"), state.Theme == "clean", nil, a.menuAction("theme-clean"))
+	styleMenu.AddRadio(label("theme-wechat"), state.Theme == "wechat", nil, a.menuAction("theme-wechat"))
+	styleMenu.AddRadio(label("theme-dark"), state.Theme == "dark", nil, a.menuAction("theme-dark"))
+	viewMenu.AddSeparator()
+	fullscreenAccelerator := keys.Key("f11")
+	if platform == "darwin" {
+		fullscreenAccelerator = keys.Combo("f", keys.CmdOrCtrlKey, keys.ControlKey)
+	}
+	viewMenu.AddText(label("fullscreen"), fullscreenAccelerator, a.menuAction("toggle-fullscreen"))
+
+	formatMenu := applicationMenu.AddSubmenu(label("format"))
+	formatMenu.AddText(label("bold"), keys.CmdOrCtrl("b"), a.menuAction("format-bold"))
+	formatMenu.AddText(label("italic"), keys.CmdOrCtrl("i"), a.menuAction("format-italic"))
+	formatMenu.AddText(label("strike"), nil, a.menuAction("format-strike"))
+	formatMenu.AddSeparator()
+	formatMenu.AddText(label("heading"), nil, a.menuAction("format-heading"))
+	formatMenu.AddText(label("quote"), nil, a.menuAction("format-quote"))
+	formatMenu.AddText(label("unordered-list"), nil, a.menuAction("format-ul"))
+	formatMenu.AddText(label("ordered-list"), nil, a.menuAction("format-ol"))
+	formatMenu.AddText(label("task-list"), nil, a.menuAction("format-task"))
+	formatMenu.AddSeparator()
+	formatMenu.AddText(label("link"), keys.CmdOrCtrl("k"), a.menuAction("format-link"))
+	formatMenu.AddText(label("inline-code"), nil, a.menuAction("format-code"))
+	formatMenu.AddText(label("code-block"), nil, a.menuAction("format-codeblock"))
+	formatMenu.AddText(label("table"), nil, a.menuAction("format-table"))
+
+	if platform == "darwin" {
+		windowMenu := applicationMenu.AddSubmenu(label("window"))
+		windowMenu.AddText(label("minimise"), keys.CmdOrCtrl("m"), a.menuAction("window-minimise"))
+		windowMenu.AddText(label("zoom-window"), nil, a.menuAction("window-toggle-maximise"))
+	}
+
+	helpMenu := applicationMenu.AddSubmenu(label("help"))
+	helpMenu.AddText(label("welcome"), nil, a.menuAction("show-welcome"))
+	helpMenu.AddText(label("keyboard-shortcuts"), nil, a.menuAction("show-shortcuts"))
+	helpMenu.AddSeparator()
+	helpMenu.AddText(label("check-update"), nil, a.menuAction("check-update"))
+	helpMenu.AddText(label("upgrade"), nil, a.menuAction("upgrade"))
+	helpMenu.AddText(label("source-code"), nil, a.menuAction("source-code"))
+	if platform != "darwin" {
+		helpMenu.AddSeparator()
+		helpMenu.AddText(label("about"), nil, a.menuAction("about"))
+	}
+
+	return applicationMenu
+}
+
+func normalizeMenuLocale(locale string) string {
+	normalized := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(locale), "_", "-"))
+	if strings.HasPrefix(normalized, "zh") {
+		return "zh-CN"
+	}
+	return "en"
+}
+
+func nativeMenuLabel(locale string, key string) string {
+	text, ok := nativeMenuText[key]
+	if !ok {
+		return key
+	}
+	if normalizeMenuLocale(locale) == "zh-CN" {
+		return text.zh
+	}
+	return text.en
+}
+
+func (a *App) menuAction(action string) menu.Callback {
+	return func(_ *menu.CallbackData) {
+		ctx := a.currentContext()
+		if ctx == nil {
+			return
+		}
+		wailsruntime.EventsEmit(ctx, menuActionEvent, action)
+	}
+}

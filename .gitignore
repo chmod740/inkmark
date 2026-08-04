@@ -1,0 +1,48 @@
+# Wails and frontend outputs
+build/bin/
+frontend/dist/
+frontend/node_modules/
+frontend/package.json.md5
+
+# Generated platform packaging files; keep the project-owned templates
+build/darwin/*
+!build/darwin/Info.plist
+build/windows/*
+!build/windows/installer/
+build/windows/installer/*
+!build/windows/installer/project.nsi
+
+# QA, exports, temporary files, and coverage
+build/screenshots/
+output/
+tmp/
+dist/
+frontend/playwright-report/
+frontend/test-results/
+coverage/
+*.out
+*.prof
+*.tsbuildinfo
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+.netrc
+
+# IDE, operating-system, and log files
+.idea/
+.vscode/
+.DS_Store
+*.log
+
+# Release packages are published through GitHub Releases
+*.dmg
+*.msi
+*.exe
+*.zip

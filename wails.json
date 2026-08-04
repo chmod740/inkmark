@@ -1,0 +1,36 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "inkmark",
+  "outputfilename": "inkmark",
+  "frontend:install": "pnpm install --frozen-lockfile",
+  "frontend:build": "pnpm build",
+  "frontend:dev:watcher": "pnpm dev",
+  "frontend:dev:serverUrl": "auto",
+  "info": {
+	"companyName": "InkMark",
+	"productName": "InkMark Markdown",
+	"productVersion": "1.0.0",
+	"copyright": "Copyright © 2026 PengHu",
+	"comments": "Local Markdown editor",
+    "fileAssociations": [
+      {
+        "ext": "md",
+        "name": "InkMark Markdown Document",
+        "description": "InkMark Markdown Document",
+        "iconName": "appicon",
+        "role": "Editor"
+      },
+      {
+        "ext": "markdown",
+		"name": "InkMark Markdown Document",
+        "description": "InkMark Markdown Document",
+        "iconName": "appicon",
+        "role": "Editor"
+      }
+    ]
+  },
+  "author": {
+    "name": "PengHu",
+    "email": ""
+  }
+}

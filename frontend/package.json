@@ -1,0 +1,41 @@
+{
+  "name": "inkmark-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "test:export": "node --experimental-strip-types --test ../scripts/test-exports.mjs",
+    "test:i18n": "node --experimental-strip-types --test ../scripts/test-i18n.mjs",
+    "test:installer": "node --test ../scripts/test-windows-installer.mjs",
+    "test:scroll": "node --experimental-strip-types --test ../scripts/test-scroll-sync.mjs",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@mdit/plugin-katex": "^1.0.2",
+    "dompurify": "^3.4.12",
+    "highlight.js": "^11.11.1",
+    "html2canvas": "1.4.1",
+    "jspdf": "4.2.1",
+    "katex": "^0.18.1",
+    "markdown-it": "^15.0.0",
+    "markdown-it-task-lists": "^2.1.1",
+    "mermaid": "^11.16.0",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@types/katex": "^0.16.7",
+    "@types/markdown-it": "^14.1.2",
+    "@vitejs/plugin-vue": "^5.2.3",
+    "typescript": "~5.7.2",
+    "vite": "^6.2.0",
+    "vue-tsc": "^2.2.8"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "core-js"
+    ]
+  }
+}

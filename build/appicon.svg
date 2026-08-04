@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">InkMark</title>
+  <desc id="description">A cream writing page with a geometric M and downward Markdown arrow on an ink-green tile.</desc>
+  <rect x="56" y="56" width="912" height="912" rx="224" fill="#123f43"/>
+  <rect x="76" y="76" width="872" height="872" rx="204" fill="none" stroke="#3d7475" stroke-width="16"/>
+  <rect x="176" y="164" width="688" height="720" rx="148" fill="#082d30" opacity="0.34"/>
+  <rect x="160" y="144" width="688" height="720" rx="148" fill="#fffdf1"/>
+  <rect x="169" y="153" width="670" height="702" rx="139" fill="none" stroke="#d5ddce" stroke-width="18"/>
+  <path
+    d="M278 666V334h104l130 166 130-166h104v332H642V492L512 654 382 492v174H278Z"
+    fill="#164e52"
+  />
+  <path
+    d="M478 514h68v150h68L512 776 410 664h68V514Z"
+    fill="#c58f3d"
+    stroke="#fffdf1"
+    stroke-width="14"
+    stroke-linejoin="round"
+  />
+</svg>
