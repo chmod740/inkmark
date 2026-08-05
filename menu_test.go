@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/wailsapp/wails/v2/pkg/menu"
@@ -165,6 +168,59 @@ func TestHelpMenuContainsUpdateAndRepositoryActions(t *testing.T) {
 		if !found {
 			t.Errorf("Help menu is missing %q", label)
 		}
+	}
+}
+
+func TestFileMenuContainsFolderAndEmptyRecentMenu(t *testing.T) {
+	applicationMenu := (&App{menuState: MenuState{ViewMode: "split", Theme: "github", SyncScroll: true}}).applicationMenuFor("windows", "en")
+	fileMenu := findTopLevelMenu(t, applicationMenu, "File")
+	openFile := findMenuItem(t, fileMenu, "Open File…")
+	if got := keys.Stringify(openFile.Accelerator, "windows"); got != "Ctrl+O" {
+		t.Fatalf("unexpected Open File shortcut: %s", got)
+	}
+	openFolder := findMenuItem(t, fileMenu, "Open Folder…")
+	if got := keys.Stringify(openFolder.Accelerator, "windows"); got != "Ctrl+Shift+O" {
+		t.Fatalf("unexpected Open Folder shortcut: %s", got)
+	}
+	recent := findMenuItem(t, fileMenu, "Recent")
+	if recent.SubMenu == nil {
+		t.Fatal("Recent must be a submenu")
+	}
+	empty := findMenuItem(t, recent.SubMenu, "No Recent Items")
+	clear := findMenuItem(t, recent.SubMenu, "Clear Recent Items")
+	if !empty.Disabled || !clear.Disabled {
+		t.Fatalf("empty recent menu entries must be disabled: %#v / %#v", empty, clear)
+	}
+}
+
+func TestRecentMenuIsBoundedAndUsesStructuredCallbacks(t *testing.T) {
+	app := &App{menuState: MenuState{ViewMode: "split", Theme: "github", SyncScroll: true}}
+	for index := 0; index < maxRecentItems+2; index++ {
+		item, ok := makeRecentItem("file", filepath.Join("/tmp", fmt.Sprintf("project-%02d", index), "README.md"))
+		if !ok {
+			t.Fatal("failed to create recent menu fixture")
+		}
+		app.recentItems = prependRecentItem(app.recentItems, item)
+	}
+	recent := findMenuItem(t, findTopLevelMenu(t, app.applicationMenuFor("darwin", "zh-CN"), "文件"), "最近")
+	if recent.SubMenu == nil || len(recent.SubMenu.Items) != maxRecentItems+2 {
+		t.Fatalf("expected ten items, separator, and clear action: %#v", recent.SubMenu)
+	}
+	for _, item := range recent.SubMenu.Items[:maxRecentItems] {
+		if item.Click == nil || !strings.Contains(item.Label, "README.md") || strings.ContainsAny(item.Label, "\r\n\t") {
+			t.Errorf("invalid recent menu item: %#v", item)
+		}
+	}
+	clear := recent.SubMenu.Items[len(recent.SubMenu.Items)-1]
+	if clear.Label != "清除最近项目" || clear.Disabled {
+		t.Fatalf("unexpected clear recent item: %#v", clear)
+	}
+}
+
+func TestRecentMenuLabelSanitizesControlCharacters(t *testing.T) {
+	item := RecentItem{Kind: "file", Path: filepath.Join("/tmp", "project", "bad.md"), Name: "bad\r\n\tname.md"}
+	if got := recentMenuLabel(item); got != "bad name.md — project" {
+		t.Fatalf("unexpected sanitized label: %q", got)
 	}
 }
 

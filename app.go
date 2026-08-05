@@ -3,10 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	_ "embed"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -24,6 +27,7 @@ const (
 	maxExportSize     = 96 << 20
 	menuActionEvent   = "inkmark:menu-action"
 	openDocumentEvent = "inkmark:open-document"
+	openRecentEvent   = "inkmark:open-recent"
 	openErrorEvent    = "inkmark:open-error"
 	closeRequestEvent = "inkmark:close-request"
 )
@@ -51,11 +55,12 @@ var exportFormatsEnglish = map[string]exportFormatConfig{
 }
 
 type Document struct {
-	Path    string `json:"path"`
-	Name    string `json:"name"`
-	Content string `json:"content"`
-	Welcome bool   `json:"welcome"`
-	BuiltIn string `json:"builtIn,omitempty"`
+	Path         string `json:"path"`
+	Name         string `json:"name"`
+	Content      string `json:"content"`
+	Welcome      bool   `json:"welcome"`
+	BuiltIn      string `json:"builtIn,omitempty"`
+	ActivationID string `json:"activationId,omitempty"`
 }
 
 //go:embed samples/markdown-rendering-test.md
@@ -80,10 +85,15 @@ type MenuState struct {
 
 type App struct {
 	mu                      sync.RWMutex
+	settingsWriteMu         sync.Mutex
+	menuRefreshMu           sync.Mutex
 	ctx                     context.Context
 	initPath                string
 	initialLoaded           bool
 	language                LanguageState
+	recentItems             []RecentItem
+	pendingRecentDocuments  map[string]string
+	activeWorkspace         *workspaceCapability
 	menuState               MenuState
 	settingsPath            string
 	updateEndpoint          string
@@ -106,9 +116,11 @@ type App struct {
 func NewApp() *App {
 	workingDirectory, _ := os.Getwd()
 	settingsPath := defaultSettingsPath()
+	settings := loadSettingsState(settingsPath)
 	return &App{
 		initPath:             resolveDocumentArgument(os.Args[1:], workingDirectory),
-		language:             loadLanguageState(settingsPath),
+		language:             settings.LanguageState,
+		recentItems:          settings.RecentItems,
 		menuState:            MenuState{ViewMode: "split", Theme: "github", SyncScroll: true},
 		settingsPath:         settingsPath,
 		updateEndpoint:       latestReleaseAPIURL,
@@ -123,7 +135,22 @@ func (a *App) startup(ctx context.Context) {
 	a.mu.Unlock()
 }
 
-func (a *App) shutdown(_ context.Context) {}
+func (a *App) shutdown(_ context.Context) {
+	a.mu.Lock()
+	workspace := a.activeWorkspace
+	a.activeWorkspace = nil
+	a.pendingRecentDocuments = nil
+	a.ctx = nil
+	cancel := a.updateCancel
+	a.updateCancel = nil
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if workspace != nil {
+		_ = workspace.root.Close()
+	}
+}
 
 func (a *App) LoadInitialDocument(locale string) (Document, error) {
 	locale = normalizeLocale(locale)
@@ -133,7 +160,11 @@ func (a *App) LoadInitialDocument(locale string) (Document, error) {
 	a.initialLoaded = true
 	a.mu.Unlock()
 	if path != "" {
-		return readDocument(path)
+		document, err := readDocument(path)
+		if err == nil {
+			a.recordRecentItem("file", document.Path)
+		}
+		return document, err
 	}
 	return welcomeDocument(locale), nil
 }
@@ -200,7 +231,11 @@ func (a *App) OpenFile() (Document, error) {
 	if path == "" {
 		return Document{}, nil
 	}
-	return readDocument(path)
+	document, err := readDocument(path)
+	if err == nil {
+		a.recordRecentItem("file", document.Path)
+	}
+	return document, err
 }
 
 func (a *App) SaveFile(path string, content string) (SaveResult, error) {
@@ -328,21 +363,40 @@ func (a *App) OpenExternal(rawURL string) error {
 }
 
 func readDocument(path string) (Document, error) {
-	info, err := os.Stat(path)
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return Document{}, fmt.Errorf("解析文件路径失败: %w", err)
+	}
+	file, err := openReadOnlyNonBlocking(absolute)
+	if err != nil {
+		return Document{}, fmt.Errorf("打开文件失败: %w", err)
+	}
+	defer file.Close()
+	return readDocumentFromFile(file, absolute)
+}
+
+func readDocumentFromFile(file *os.File, path string) (Document, error) {
+	info, err := file.Stat()
 	if err != nil {
 		return Document{}, fmt.Errorf("读取文件信息失败: %w", err)
 	}
-	if info.IsDir() {
-		return Document{}, errors.New("所选路径是文件夹")
+	if !info.Mode().IsRegular() {
+		if info.IsDir() {
+			return Document{}, errors.New("所选路径是文件夹")
+		}
+		return Document{}, errors.New("所选路径不是普通文件")
 	}
 	if info.Size() > maxDocumentSize {
 		return Document{}, fmt.Errorf("文档超过 %d MB 限制", maxDocumentSize>>20)
 	}
-	data, err := os.ReadFile(path)
+	data, err := io.ReadAll(io.LimitReader(file, maxDocumentSize+1))
 	if err != nil {
 		return Document{}, fmt.Errorf("读取文件失败: %w", err)
 	}
-	data = []byte(strings.TrimPrefix(string(data), "\uFEFF"))
+	if len(data) > maxDocumentSize {
+		return Document{}, fmt.Errorf("文档超过 %d MB 限制", maxDocumentSize>>20)
+	}
+	data = bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})
 	if !utf8.Valid(data) {
 		return Document{}, errors.New("文件不是有效的 UTF-8 文本")
 	}
@@ -351,6 +405,14 @@ func readDocument(path string) (Document, error) {
 		absolute = path
 	}
 	return Document{Path: absolute, Name: filepath.Base(absolute), Content: string(data)}, nil
+}
+
+func newOpaqueID() (string, error) {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(value[:]), nil
 }
 
 func writeDocument(path string, content string) (SaveResult, error) {

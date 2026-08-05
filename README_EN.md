@@ -9,6 +9,8 @@ InkMark is a local Markdown editor for macOS and Windows with live preview, nati
 ## Highlights
 
 - Open, edit, save, and save-as for `.md` and `.markdown` files
+- Open a folder as a workspace, lazily expand or refresh subfolders, open their Markdown files, and keep the tree in sync after saving
+- Reopen or clear up to 10 recently used files and folders from File → Recent
 - Debounced 120 ms live rendering; Markdown, math, highlighting, and diagrams are completed off-screen and committed once so continuous typing does not flash or jitter
 - Source-aware two-way scroll synchronization that reconciles after math and diagram reflow without idle drift
 - Save, Don't Save, and Cancel choices before replacing or closing a modified document
@@ -53,11 +55,12 @@ The macOS and Windows packages are not currently signed with commercial distribu
 ## Quick Start
 
 1. Launch InkMark directly, or open a Markdown file with InkMark from Finder or Explorer.
-2. Edit on the left and inspect the live preview on the right.
-3. Use the View menu for layouts and themes, and the Format menu for common Markdown markup.
-4. Save from the File menu or export to PDF, HTML, PNG, TXT, or a Word-compatible document.
-5. Choose Automatic, Simplified Chinese, or English in Settings.
-6. Use Help → Check for Updates to download, verify, and start the system installer; About also reports download and installation status.
+2. Use File → Open Folder to show the directory sidebar, or continue opening individual files as before.
+3. Write Markdown in the editor and inspect the live result in the preview.
+4. Use the View menu for editing layouts and themes, and the Format menu for common Markdown markup.
+5. Save from the File menu or export to PDF, HTML, PNG, TXT, or a Word-compatible document.
+6. Choose Automatic, Simplified Chinese, or English in Settings.
+7. Use Help → Check for Updates to download, verify, and start the system installer; About also reports download and installation status.
 
 ## Offline and Network Behaviour
 
@@ -103,20 +106,23 @@ pnpm --dir frontend test:scroll
 pnpm --dir frontend test:preview
 pnpm --dir frontend test:update
 pnpm --dir frontend test:ui
+pnpm --dir frontend test:workspace
 pnpm --dir frontend test:installer
 node scripts/verify-offline.mjs
 ```
 
-The suite covers file I/O, unsaved-document transitions and the native close guard, language settings, native menus, verified update downloads and installer orchestration, atomic preview commits, version comparison and Release responses, export structure, external-resource policy, scroll synchronization, bounded large-document anchors, and offline asset integrity.
+The suite covers file I/O, capability-bound workspace access, lazy sidebar expansion, recent items, unsaved-document transitions and the native close guard, language settings, native menus, verified update downloads and installer orchestration, atomic preview commits, version comparison and Release responses, export structure, external-resource policy, scroll synchronization, bounded large-document anchors, and offline asset integrity.
 
 ## Project Layout
 
 - `app.go`: native dialogs, file I/O, and export saving
 - `close_guard.go`: save guard for native close requests on macOS and Windows
 - `app_state.go`: language preferences, single-instance handling, and OS file-open events
+- `workspace.go` and `recent.go`: capability-bound folders, Markdown enumeration, and recent items
 - `update.go`, `update_download.go`, and `update_launch.go`: release checks, installer selection, verified downloads, and platform-installer orchestration
 - `menu.go`: native macOS and Windows menus
 - `frontend/src/App.vue`: editor, live preview, Settings, and About
+- `frontend/src/DirectorySidebar.vue` and `workspace-tree.ts`: folder sidebar and lazy tree state
 - `frontend/src/i18n.ts`: Chinese and English UI and welcome-page content
 - `frontend/src/ui-state.ts`: document status and pane-order preferences
 - `frontend/src/document-guard.ts`: safe transitions for documents with unsaved changes

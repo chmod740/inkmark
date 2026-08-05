@@ -9,6 +9,8 @@
 ## 主要功能
 
 - 打开、编辑、保存、另存为 `.md` 与 `.markdown` 文件
+- 可将文件夹作为工作区打开，通过侧边栏按需展开、刷新子目录并打开其中的 Markdown 文件；保存后目录树自动同步
+- “文件 → 最近”按最近使用顺序保留最多 10 个文件或文件夹，可直接再次打开或清除记录
 - 120ms 防抖实时渲染；Markdown、公式、代码高亮和图表在后台完整生成后一次更新预览，连续输入时页面不闪烁、不抖动
 - 编辑区与预览区按源码段落双向同步滚动，公式和图表重排后自动校准，并避免静止时漂移
 - 新建、打开或退出前如有未保存更改，可选择保存、不保存或取消
@@ -53,11 +55,12 @@ macOS 与 Windows 安装包目前未使用商业代码签名证书。首次运�
 ## 快速使用
 
 1. 直接启动墨笺，或在 Finder/资源管理器中使用墨笺打开 Markdown 文件。
-2. 在左侧编辑，右侧查看实时预览。
-3. 使用“视图”菜单切换工作区和主题，使用“格式”菜单插入常用 Markdown 标记。
-4. 使用“文件”菜单保存文档，或导出 PDF、HTML、PNG、TXT 与 Word 兼容文档。
-5. 在“设置”中选择自动、简体中文或 English。
-6. 在“帮助 → 检查更新”查看新版本；可直接下载、校验并启动系统安装器，“关于墨笺”也会显示下载和安装状态。
+2. 可使用“文件 → 打开文件夹”显示目录侧边栏，也可继续按原方式打开单个文件。
+3. 在编辑区编写 Markdown，并在预览区查看实时结果。
+4. 使用“视图”菜单切换编辑布局和主题，使用“格式”菜单插入常用 Markdown 标记。
+5. 使用“文件”菜单保存文档，或导出 PDF、HTML、PNG、TXT 与 Word 兼容文档。
+6. 在“设置”中选择自动、简体中文或 English。
+7. 在“帮助 → 检查更新”查看新版本；可直接下载、校验并启动系统安装器，“关于墨笺”也会显示下载和安装状态。
 
 ## 离线与联网说明
 
@@ -103,20 +106,23 @@ pnpm --dir frontend test:scroll
 pnpm --dir frontend test:preview
 pnpm --dir frontend test:update
 pnpm --dir frontend test:ui
+pnpm --dir frontend test:workspace
 pnpm --dir frontend test:installer
 node scripts/verify-offline.mjs
 ```
 
-测试覆盖文件读写、未保存文档切换与原生关闭守卫、语言设置、原生菜单、安全升级下载与安装编排、原子预览提交、版本比较与 Release 响应、导出结构、外部资源策略、同步滚动、大文档锚点上限和离线资源完整性。
+测试覆盖文件读写、受限工作区目录访问、侧边栏懒加载、最近项目、未保存文档切换与原生关闭守卫、语言设置、原生菜单、安全升级下载与安装编排、原子预览提交、版本比较与 Release 响应、导出结构、外部资源策略、同步滚动、大文档锚点上限和离线资源完整性。
 
 ## 项目结构
 
 - `app.go`：原生文件对话框、读写与导出保存
 - `close_guard.go`：macOS 与 Windows 原生关闭前的保存守卫
 - `app_state.go`：语言设置、单实例和系统文件打开
+- `workspace.go`、`recent.go`：受限目录工作区、Markdown 文件枚举和最近项目
 - `update.go`、`update_download.go`、`update_launch.go`：版本检测、安装包选择、安全下载校验和平台安装器编排
 - `menu.go`：macOS 与 Windows 原生菜单
 - `frontend/src/App.vue`：编辑器、实时预览、设置和关于页面
+- `frontend/src/DirectorySidebar.vue`、`workspace-tree.ts`：目录侧边栏和按需展开状态
 - `frontend/src/i18n.ts`：中英文界面与欢迎页文案
 - `frontend/src/ui-state.ts`：文档状态与分栏顺序偏好
 - `frontend/src/document-guard.ts`：未保存文档的安全切换守卫

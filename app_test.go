@@ -200,6 +200,9 @@ func TestInitialFileTakesPriorityOverWelcomeDocument(t *testing.T) {
 	if document.Path != path || document.Welcome || document.Content != "# Direct open" {
 		t.Fatalf("initial file was not loaded: %#v", document)
 	}
+	if recent := app.recentItemsSnapshot(); len(recent) != 1 || recent[0].Path != path || recent[0].ID == "" {
+		t.Fatalf("initial file was not synchronously added to recent items: %#v", recent)
+	}
 }
 
 func TestResolveDocumentArgument(t *testing.T) {

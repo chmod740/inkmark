@@ -7,6 +7,7 @@ import MarkdownIt from 'markdown-it'
 import taskLists from 'markdown-it-task-lists'
 import { katex as markdownKatex } from '@mdit/plugin-katex'
 import mermaid from 'mermaid'
+import DirectorySidebar from './DirectorySidebar.vue'
 import inkmarkIcon from './assets/inkmark-icon.svg'
 import {
   buildStandaloneHTML,
@@ -49,18 +50,41 @@ import {
 } from './i18n'
 import { UpdateDownloadSessionGate } from './update-session'
 import {
+  flattenWorkspaceTree,
+  loadedWorkspaceDirectoryKeys,
+  normalizeWorkspace,
+  normalizeWorkspaceDirectory,
+  retainExistingWorkspaceDirectories,
+  sameWorkspaceFile,
+  workspaceBackendDirectoryPath,
+  workspaceDirectoryExists,
+  workspaceDirectoryKey,
+  workspaceRootKey,
+  type WorkspaceChildren,
+  type WorkspaceData,
+  type WorkspaceEntryData,
+} from './workspace-tree'
+import {
+  ActivateRecentDocument,
   CancelUpdateDownload,
   CancelQuitRequest,
   CheckForUpdates,
+  ClearRecentItems,
+  CloseWorkspace,
   ConfirmQuit,
   DownloadUpdate,
   GetAppInfo,
   GetLanguageSettings,
   LoadInitialDocument,
+  OpenDirectory,
   OpenExternal,
   OpenFile,
+  OpenRecentDirectory,
+  OpenRecentFile,
   OpenSourceRepository,
   OpenUpdatePage,
+  OpenWorkspaceFile,
+  ReadWorkspaceDirectory,
   LaunchUpdateInstaller,
   RenderingTestDocument as LoadRenderingTestDocument,
   SaveExportFile,
@@ -91,7 +115,18 @@ interface DocumentData {
   content: string
   welcome?: boolean
   builtIn?: string
+  activationId?: string
 }
+
+interface RecentOpenEventData {
+  id: string
+  kind: 'file' | 'directory' | 'folder'
+  name: string
+}
+
+type PendingWorkspaceOpenRequest =
+  | { kind: 'picker' }
+  | { kind: 'recent-directory'; id: string }
 
 interface ApplicationInfoData {
   version: string
@@ -162,12 +197,20 @@ const updateInfo = ref<UpdateInfoData | null>(null)
 const updateState = ref<UpdateState>('idle')
 const updateDownload = ref<UpdateDownloadData | null>(null)
 const updateError = ref('')
+const workspace = ref<WorkspaceData | null>(null)
+const workspaceChildren = ref<WorkspaceChildren>({})
+const expandedWorkspaceDirectories = ref<ReadonlySet<string>>(new Set())
+const loadingWorkspaceDirectories = ref<ReadonlySet<string>>(new Set())
+const truncatedWorkspaceDirectories = ref<ReadonlySet<string>>(new Set())
+const workspaceRefreshing = ref(false)
 
 let renderTimer: number | undefined
 let quitting = false
 let pendingUpdateInstall = false
 let updateDownloadCancelled = false
 let documentTransitionInProgress = false
+let pendingWorkspaceOpenRequest: PendingWorkspaceOpenRequest | null = null
+let workspaceRefreshQueued = false
 let drainingSystemDocuments = false
 const pendingSystemDocuments: DocumentData[] = []
 let resolveUnsavedDecision: ((decision: UnsavedDecision) => void) | null = null
@@ -181,6 +224,25 @@ const previewCommit = new LatestPreviewCommit()
 type MermaidRenderResult = Awaited<ReturnType<typeof mermaid.render>>
 const mermaidRenderCache = new BoundedCache<string, MermaidRenderResult>(maximumMermaidCacheEntries)
 const updateDownloadSessions = new UpdateDownloadSessionGate()
+
+const workspaceRows = computed(() => flattenWorkspaceTree(
+  workspaceChildren.value,
+  expandedWorkspaceDirectories.value,
+  loadingWorkspaceDirectories.value,
+))
+const workspaceLabels = computed(() => ({
+  title: t('workspace.title'),
+  close: t('workspace.close'),
+  refresh: t('workspace.refresh'),
+  refreshing: t('workspace.refreshing'),
+  empty: t('workspace.empty'),
+  loading: t('workspace.loading'),
+  truncatedRoot: t('workspace.truncatedRoot'),
+  truncatedDirectory: t('workspace.truncatedDirectory'),
+  expandDirectory: t('workspace.expandDirectory'),
+  collapseDirectory: t('workspace.collapseDirectory'),
+  openFile: t('workspace.openFile'),
+}))
 
 const markdown = new MarkdownIt({
   html: true,
@@ -308,6 +370,7 @@ const exportLabels = computed<Record<ExportFormat, string>>(() => ({
 const shortcutRows = computed(() => [
   ['⌘/Ctrl+N', t('help.shortcut.new')],
   ['⌘/Ctrl+O', t('help.shortcut.open')],
+  ['⌘/Ctrl+Shift+O', t('help.shortcut.openFolder')],
   ['⌘/Ctrl+S', t('help.shortcut.save')],
   ['⌘/Ctrl+Shift+S', t('help.shortcut.saveAs')],
   ['⌘/Ctrl+B', t('help.shortcut.bold')],
@@ -348,6 +411,134 @@ function setDocument(document: DocumentData, status: TranslationKey = 'document.
   })
 }
 
+function setWorkspace(value: unknown) {
+  const nextWorkspace = normalizeWorkspace(value)
+  if (!nextWorkspace) return false
+  workspace.value = nextWorkspace
+  workspaceChildren.value = { [workspaceRootKey]: nextWorkspace.entries }
+  expandedWorkspaceDirectories.value = new Set()
+  loadingWorkspaceDirectories.value = new Set()
+  truncatedWorkspaceDirectories.value = new Set()
+  workspaceRefreshQueued = false
+  renderState.value = t('workspace.opened', { name: nextWorkspace.name })
+  void nextTick(scheduleLayoutReconciliation)
+  return true
+}
+
+function closeWorkspace() {
+  const workspaceID = workspace.value?.id
+  workspace.value = null
+  workspaceChildren.value = {}
+  expandedWorkspaceDirectories.value = new Set()
+  loadingWorkspaceDirectories.value = new Set()
+  truncatedWorkspaceDirectories.value = new Set()
+  workspaceRefreshQueued = false
+  if (workspaceID) void CloseWorkspace(workspaceID).catch(() => {})
+  void nextTick(scheduleLayoutReconciliation)
+}
+
+function workspaceOpenMustWait() {
+  return documentTransitionInProgress || Boolean(unsavedTransition.value) || workspaceRefreshing.value
+}
+
+function deferWorkspaceOpen(request: PendingWorkspaceOpenRequest) {
+  if (!pendingWorkspaceOpenRequest) pendingWorkspaceOpenRequest = request
+  renderState.value = t('workspace.openDeferred')
+}
+
+async function drainPendingWorkspaceOpen() {
+  if (workspaceOpenMustWait() || busy.value || !pendingWorkspaceOpenRequest) return
+  const request = pendingWorkspaceOpenRequest
+  pendingWorkspaceOpenRequest = null
+  if (request.kind === 'picker') await openDirectory()
+  else await openRecentDirectory(request.id)
+}
+
+function drainWorkspaceRefreshQueue() {
+  if (
+    !workspaceRefreshQueued
+    || workspaceRefreshing.value
+    || loadingWorkspaceDirectories.value.size
+    || !workspace.value
+  ) return
+  workspaceRefreshQueued = false
+  void refreshWorkspace({ silent: true })
+}
+
+async function refreshWorkspace({ silent = false }: { silent?: boolean } = {}) {
+  const activeWorkspace = workspace.value
+  if (!activeWorkspace) return false
+  if (workspaceRefreshing.value || loadingWorkspaceDirectories.value.size) {
+    workspaceRefreshQueued = true
+    if (!silent) renderState.value = t('workspace.refreshQueued')
+    return false
+  }
+
+  workspaceRefreshing.value = true
+  if (!silent) renderState.value = t('workspace.refreshing')
+  const previouslyLoaded = loadedWorkspaceDirectoryKeys(workspaceChildren.value)
+  const nextChildren: Record<string, readonly WorkspaceEntryData[]> = {}
+  const nextTruncated = new Set<string>()
+  const failedDirectories = new Set<string>()
+  let partial = false
+  try {
+    const rootResult = normalizeWorkspaceDirectory(
+      await ReadWorkspaceDirectory(activeWorkspace.id, workspaceBackendDirectoryPath(workspaceRootKey)),
+    )
+    if (workspace.value?.id !== activeWorkspace.id) return false
+    nextChildren[workspaceRootKey] = rootResult.entries
+
+    for (const directoryPath of previouslyLoaded) {
+      if (workspace.value?.id !== activeWorkspace.id) return false
+      if (!workspaceDirectoryExists(nextChildren, directoryPath)) continue
+      try {
+        const directoryResult = normalizeWorkspaceDirectory(
+          await ReadWorkspaceDirectory(
+            activeWorkspace.id,
+            workspaceBackendDirectoryPath(directoryPath),
+          ),
+        )
+        if (workspace.value?.id !== activeWorkspace.id) return false
+        nextChildren[directoryPath] = directoryResult.entries
+        if (directoryResult.truncated) nextTruncated.add(directoryPath)
+      } catch {
+        // A folder may disappear between refreshing its parent and reading it.
+        // Keep the refreshed parent, collapse the stale branch, and let a later
+        // refresh retry if the directory still exists.
+        partial = true
+        failedDirectories.add(directoryPath)
+      }
+    }
+
+    if (workspace.value?.id !== activeWorkspace.id) return false
+    const nextExpanded = new Set(retainExistingWorkspaceDirectories(
+      expandedWorkspaceDirectories.value,
+      nextChildren,
+    ))
+    failedDirectories.forEach((path) => nextExpanded.delete(path))
+    workspace.value = {
+      ...activeWorkspace,
+      entries: rootResult.entries,
+      truncated: rootResult.truncated,
+    }
+    workspaceChildren.value = nextChildren
+    expandedWorkspaceDirectories.value = nextExpanded
+    truncatedWorkspaceDirectories.value = nextTruncated
+    if (!silent) {
+      renderState.value = partial ? t('workspace.refreshPartial') : t('workspace.refreshed')
+    }
+    void nextTick(scheduleLayoutReconciliation)
+    return true
+  } catch (error) {
+    if (!silent && workspace.value?.id === activeWorkspace.id) showError(error)
+    return false
+  } finally {
+    workspaceRefreshing.value = false
+    drainWorkspaceRefreshQueue()
+    void drainPendingWorkspaceOpen()
+  }
+}
+
 function requestUnsavedDecision(transition: DocumentTransition): Promise<UnsavedDecision> {
   if (resolveUnsavedDecision) return Promise.resolve('cancel')
   activeDialog.value = null
@@ -384,6 +575,7 @@ async function performDocumentTransition(
   } finally {
     documentTransitionInProgress = false
     void drainSystemDocuments()
+    void drainPendingWorkspaceOpen()
   }
 }
 
@@ -405,6 +597,138 @@ async function openDocument() {
   })
 }
 
+async function openDirectory() {
+  if (workspaceOpenMustWait() || busy.value) {
+    deferWorkspaceOpen({ kind: 'picker' })
+    return
+  }
+  try {
+    busy.value = true
+    const openedWorkspace = await OpenDirectory()
+    setWorkspace(openedWorkspace)
+  } catch (error) {
+    showError(error)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function openRecentDirectory(id: string) {
+  if (workspaceOpenMustWait() || busy.value) {
+    deferWorkspaceOpen({ kind: 'recent-directory', id })
+    return
+  }
+  try {
+    busy.value = true
+    setWorkspace(await OpenRecentDirectory(id))
+  } catch (error) {
+    showError(error)
+  } finally {
+    busy.value = false
+    void drainPendingWorkspaceOpen()
+  }
+}
+
+async function toggleWorkspaceDirectory(entry: WorkspaceEntryData) {
+  const activeWorkspace = workspace.value
+  if (!activeWorkspace || entry.kind !== 'directory') return
+  const directoryKey = workspaceDirectoryKey(entry.path)
+  if (loadingWorkspaceDirectories.value.has(directoryKey)) return
+  const expanded = new Set(expandedWorkspaceDirectories.value)
+  if (expanded.has(directoryKey)) {
+    expanded.delete(directoryKey)
+    expandedWorkspaceDirectories.value = expanded
+    return
+  }
+
+  expanded.add(directoryKey)
+  expandedWorkspaceDirectories.value = expanded
+  if (Object.hasOwn(workspaceChildren.value, directoryKey)) return
+
+  const loading = new Set(loadingWorkspaceDirectories.value)
+  loading.add(directoryKey)
+  loadingWorkspaceDirectories.value = loading
+  try {
+    const result = normalizeWorkspaceDirectory(
+      await ReadWorkspaceDirectory(activeWorkspace.id, entry.path),
+    )
+    if (workspace.value?.id !== activeWorkspace.id) return
+    workspaceChildren.value = {
+      ...workspaceChildren.value,
+      [directoryKey]: result.entries,
+    }
+    if (result.truncated) {
+      const truncated = new Set(truncatedWorkspaceDirectories.value)
+      truncated.add(directoryKey)
+      truncatedWorkspaceDirectories.value = truncated
+    }
+  } catch (error) {
+    if (workspace.value?.id === activeWorkspace.id) {
+      const nextExpanded = new Set(expandedWorkspaceDirectories.value)
+      nextExpanded.delete(directoryKey)
+      expandedWorkspaceDirectories.value = nextExpanded
+      showError(error)
+    }
+  } finally {
+    const nextLoading = new Set(loadingWorkspaceDirectories.value)
+    nextLoading.delete(directoryKey)
+    loadingWorkspaceDirectories.value = nextLoading
+    drainWorkspaceRefreshQueue()
+  }
+}
+
+async function openWorkspaceDocument(entry: WorkspaceEntryData) {
+  const activeWorkspace = workspace.value
+  if (!activeWorkspace || entry.kind !== 'markdown') return
+  if (sameWorkspaceFile(entry.absolutePath, currentPath.value)) return
+  await performDocumentTransition('open', async () => {
+    try {
+      busy.value = true
+      const document = await OpenWorkspaceFile(activeWorkspace.id, entry.path) as DocumentData
+      if (document?.name) setDocument(document)
+    } catch (error) {
+      showError(error)
+    } finally {
+      busy.value = false
+    }
+  })
+}
+
+async function openRecentItem(value: unknown) {
+  if (!value || typeof value !== 'object') return
+  const candidate = value as Partial<RecentOpenEventData>
+  if (!candidate.id || !candidate.kind) return
+
+  if (candidate.kind === 'directory' || candidate.kind === 'folder') {
+    await openRecentDirectory(candidate.id)
+    return
+  }
+  if (busy.value) return
+  if (candidate.kind !== 'file') return
+  const recentID = candidate.id
+
+  await performDocumentTransition('open', async () => {
+    try {
+      busy.value = true
+      const document = await OpenRecentFile(recentID) as DocumentData
+      if (document?.name) setDocument(document)
+    } catch (error) {
+      showError(error)
+    } finally {
+      busy.value = false
+    }
+  })
+}
+
+async function clearRecentItems() {
+  try {
+    await ClearRecentItems()
+    renderState.value = t('workspace.recentCleared')
+  } catch (error) {
+    showError(error)
+  }
+}
+
 async function saveDocument(): Promise<boolean> {
   try {
     busy.value = true
@@ -415,6 +739,7 @@ async function saveDocument(): Promise<boolean> {
       savedSource.value = source.value
       builtInDocument.value = null
       renderState.value = t('document.savedLocally')
+      if (workspace.value) void refreshWorkspace({ silent: true })
       return true
     }
     return false
@@ -436,6 +761,7 @@ async function saveDocumentAs() {
       savedSource.value = source.value
       builtInDocument.value = null
       renderState.value = t('document.savedAsLocally')
+      if (workspace.value) void refreshWorkspace({ silent: true })
     }
   } catch (error) {
     showError(error)
@@ -1048,7 +1374,15 @@ async function drainSystemDocuments() {
     while (pendingSystemDocuments.length) {
       const document = pendingSystemDocuments.shift()
       if (!document) continue
-      await performDocumentTransition('open', () => setDocument(document))
+      await performDocumentTransition('open', async () => {
+        setDocument(document)
+        if (!document.activationId) return
+        try {
+          await ActivateRecentDocument(document.activationId)
+        } catch (error) {
+          showError(error)
+        }
+      })
     }
   } finally {
     drainingSystemDocuments = false
@@ -1056,9 +1390,14 @@ async function drainSystemDocuments() {
 }
 
 function handleMenuAction(action: string) {
+  if (action === 'open-folder') {
+    void openDirectory()
+    return
+  }
   if (busy.value) return
   if (action === 'new') void newDocument()
   else if (action === 'open') void openDocument()
+  else if (action === 'clear-recent') void clearRecentItems()
   else if (action === 'save') void saveDocument()
   else if (action === 'save-as') void saveDocumentAs()
   else if (action === 'export-pdf') void exportDocument('pdf')
@@ -1568,6 +1907,9 @@ watch(syncScroll, () => {
   scrollSync.reset()
   updateNativeMenu()
 })
+watch(busy, (isBusy) => {
+  if (!isBusy) void drainPendingWorkspaceOpen()
+})
 watch([fileName, dirty], () => { void SetWindowTitle(fileName.value, dirty.value) })
 
 onMounted(async () => {
@@ -1578,6 +1920,7 @@ onMounted(async () => {
   removeMenuListeners.push(
     EventsOn('inkmark:menu-action', handleMenuAction),
     EventsOn('inkmark:open-document', handleSystemDocument),
+    EventsOn('inkmark:open-recent', (item: unknown) => { void openRecentItem(item) }),
     EventsOn('inkmark:open-error', showError),
     EventsOn('inkmark:close-request', () => { void handleCloseRequest() }),
     EventsOn('inkmark:update-progress', handleUpdateProgress),
@@ -1695,8 +2038,24 @@ onBeforeUnmount(() => {
       <button type="button" class="copy-button" :disabled="busy" @click="copyHTML">{{ t('toolbar.copyHTML') }}</button>
     </nav>
 
-    <main class="editor-layout">
-      <section class="source-panel" :aria-label="t('panel.sourceAriaLabel')">
+    <div class="workspace-layout" :class="{ 'has-workspace': workspace }">
+      <DirectorySidebar
+        v-if="workspace"
+        :workspace="workspace"
+        :rows="workspaceRows"
+        :current-path="currentPath"
+        :labels="workspaceLabels"
+        :disabled="busy || workspaceRefreshing"
+        :refreshing="workspaceRefreshing"
+        :truncated-directories="truncatedWorkspaceDirectories"
+        @close="closeWorkspace"
+        @refresh="refreshWorkspace()"
+        @toggle="toggleWorkspaceDirectory"
+        @open="openWorkspaceDocument"
+      />
+
+      <main class="editor-layout">
+        <section class="source-panel" :aria-label="t('panel.sourceAriaLabel')">
         <div class="panel-caption">
           <span>{{ t('panel.source') }}</span>
           <small>UTF-8</small>
@@ -1715,9 +2074,9 @@ onBeforeUnmount(() => {
           @touchstart.passive="beginScroll('editor')"
           @wheel.passive="beginScroll('editor')"
         ></textarea>
-      </section>
+        </section>
 
-      <section class="preview-panel" :aria-label="t('panel.previewAriaLabel')">
+        <section class="preview-panel" :aria-label="t('panel.previewAriaLabel')">
         <div class="panel-caption preview-caption">
           <span>{{ t('panel.preview') }}</span>
           <small>{{ theme === 'wechat' ? 'WECHAT' : theme.toUpperCase() }}</small>
@@ -1734,8 +2093,9 @@ onBeforeUnmount(() => {
         >
           <article ref="preview" class="markdown-body"></article>
         </div>
-      </section>
-    </main>
+        </section>
+      </main>
+    </div>
 
     <footer class="status-bar">
       <span class="ready-light"></span>

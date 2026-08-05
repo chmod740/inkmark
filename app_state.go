@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
@@ -10,6 +12,13 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+const maxSettingsSize = 256 << 10
+
+type settingsState struct {
+	LanguageState
+	RecentItems []RecentItem `json:"recentItems,omitempty"`
+}
 
 func currentPlatform() string {
 	return goruntime.GOOS
@@ -39,25 +48,39 @@ func defaultSettingsPath() string {
 	return filepath.Join(directory, "InkMark", "settings.json")
 }
 
-func loadLanguageState(path string) LanguageState {
-	state := LanguageState{Mode: "auto", Locale: localeFromEnvironment()}
+func loadSettingsState(path string) settingsState {
+	state := settingsState{LanguageState: LanguageState{Mode: "auto", Locale: localeFromEnvironment()}}
 	if strings.TrimSpace(path) == "" {
 		return state
 	}
-	data, err := os.ReadFile(path)
+	file, err := openReadOnlyNonBlocking(path)
 	if err != nil {
 		return state
 	}
-	var saved LanguageState
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxSettingsSize {
+		return state
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxSettingsSize+1))
+	if err != nil || len(data) > maxSettingsSize {
+		return state
+	}
+	saved := state
 	if json.Unmarshal(data, &saved) != nil {
 		return state
 	}
-	saved.Mode = normalizeLanguageMode(saved.Mode)
-	saved.Locale = normalizeLocale(saved.Locale)
-	if saved.Mode == "zh-CN" || saved.Mode == "en" {
-		saved.Locale = saved.Mode
+	saved.LanguageState.Mode = normalizeLanguageMode(saved.LanguageState.Mode)
+	saved.LanguageState.Locale = normalizeLocale(saved.LanguageState.Locale)
+	if saved.LanguageState.Mode == "zh-CN" || saved.LanguageState.Mode == "en" {
+		saved.LanguageState.Locale = saved.LanguageState.Mode
 	}
+	saved.RecentItems = normalizeLoadedRecentItems(saved.RecentItems)
 	return saved
+}
+
+func loadLanguageState(path string) LanguageState {
+	return loadSettingsState(path).LanguageState
 }
 
 func localeFromEnvironment() string {
@@ -69,7 +92,7 @@ func localeFromEnvironment() string {
 	return "en"
 }
 
-func saveLanguageState(path string, state LanguageState) error {
+func saveSettingsState(path string, state settingsState) error {
 	if strings.TrimSpace(path) == "" {
 		return nil
 	}
@@ -94,10 +117,49 @@ func saveLanguageState(path string, state LanguageState) error {
 		temporary.Close()
 		return err
 	}
+	if err = temporary.Sync(); err != nil {
+		temporary.Close()
+		return err
+	}
 	if err = temporary.Close(); err != nil {
 		return err
 	}
-	return os.Rename(temporaryPath, path)
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return err
+	}
+	if directory, err := os.Open(filepath.Dir(path)); err == nil {
+		_ = directory.Sync()
+		_ = directory.Close()
+	}
+	return nil
+}
+
+// saveLanguageState is kept for compatibility with older tests and internal
+// callers. It preserves recent items already present in the unified file.
+func saveLanguageState(path string, language LanguageState) error {
+	state := loadSettingsState(path)
+	state.LanguageState = language
+	return saveSettingsState(path, state)
+}
+
+func (a *App) persistSettings() error {
+	a.settingsWriteMu.Lock()
+	defer a.settingsWriteMu.Unlock()
+	a.mu.RLock()
+	state, path := a.settingsSnapshotLocked()
+	a.mu.RUnlock()
+	if err := saveSettingsState(path, state); err != nil {
+		return fmt.Errorf("保存设置失败: %w", err)
+	}
+	return nil
+}
+
+// settingsSnapshotLocked requires a.mu to be held for reading or writing.
+func (a *App) settingsSnapshotLocked() (settingsState, string) {
+	return settingsState{
+		LanguageState: a.language,
+		RecentItems:   append([]RecentItem(nil), a.recentItems...),
+	}, a.settingsPath
 }
 
 func (a *App) GetLanguageSettings() LanguageState {
@@ -116,16 +178,12 @@ func (a *App) SetLanguage(mode string, locale string) (LanguageState, error) {
 
 	a.mu.Lock()
 	a.language = state
-	settingsPath := a.settingsPath
-	ctx := a.ctx
 	a.mu.Unlock()
 
-	if err := saveLanguageState(settingsPath, state); err != nil {
+	if err := a.persistSettings(); err != nil {
 		return state, err
 	}
-	if ctx != nil {
-		runtime.MenuSetApplicationMenu(ctx, a.applicationMenuFor(currentPlatform(), state.Locale))
-	}
+	a.refreshApplicationMenu()
 	return state, nil
 }
 
@@ -157,11 +215,18 @@ func (a *App) UpdateMenuState(locale string, viewMode string, theme string, sync
 	a.mu.Lock()
 	a.language.Locale = locale
 	a.menuState = MenuState{ViewMode: viewMode, Theme: theme, SyncScroll: syncScroll, PreviewFirst: previewFirst}
-	ctx := a.ctx
 	a.mu.Unlock()
-	if ctx != nil {
-		runtime.MenuSetApplicationMenu(ctx, a.applicationMenuFor(currentPlatform(), locale))
+	a.refreshApplicationMenu()
+}
+
+func (a *App) refreshApplicationMenu() {
+	a.menuRefreshMu.Lock()
+	defer a.menuRefreshMu.Unlock()
+	ctx := a.currentContext()
+	if ctx == nil {
+		return
 	}
+	runtime.MenuSetApplicationMenu(ctx, a.applicationMenuFor(currentPlatform(), a.currentLocale()))
 }
 
 func (a *App) currentMenuState() MenuState {
@@ -239,6 +304,12 @@ func (a *App) queueOrOpenDocument(path string) {
 		runtime.EventsEmit(ctx, openErrorEvent, err.Error())
 		return
 	}
+	activationID, err := a.newRecentDocumentActivation(document.Path)
+	if err != nil {
+		runtime.EventsEmit(ctx, openErrorEvent, "创建文档激活标识失败")
+		return
+	}
+	document.ActivationID = activationID
 	runtime.EventsEmit(ctx, openDocumentEvent, document)
 	runtime.WindowShow(ctx)
 	runtime.WindowUnminimise(ctx)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -27,7 +28,11 @@ var nativeMenuText = map[string]localizedMenuText{
 	"hide":               {zh: "隐藏墨笺", en: "Hide InkMark"},
 	"quit-app":           {zh: "退出墨笺", en: "Quit InkMark"},
 	"new":                {zh: "新建", en: "New"},
-	"open":               {zh: "打开…", en: "Open…"},
+	"open":               {zh: "打开文件…", en: "Open File…"},
+	"open-folder":        {zh: "打开文件夹…", en: "Open Folder…"},
+	"recent":             {zh: "最近", en: "Recent"},
+	"no-recent":          {zh: "无最近项目", en: "No Recent Items"},
+	"clear-recent":       {zh: "清除最近项目", en: "Clear Recent Items"},
 	"save":               {zh: "保存", en: "Save"},
 	"save-as":            {zh: "另存为…", en: "Save As…"},
 	"export":             {zh: "导出", en: "Export"},
@@ -115,6 +120,21 @@ func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu 
 	fileMenu := applicationMenu.AddSubmenu(label("file"))
 	fileMenu.AddText(label("new"), keys.CmdOrCtrl("n"), a.menuAction("new"))
 	fileMenu.AddText(label("open"), keys.CmdOrCtrl("o"), a.menuAction("open"))
+	fileMenu.AddText(label("open-folder"), keys.Combo("o", keys.CmdOrCtrlKey, keys.ShiftKey), a.menuAction("open-folder"))
+	recentMenu := fileMenu.AddSubmenu(label("recent"))
+	recentItems := a.recentItemsSnapshot()
+	if len(recentItems) == 0 {
+		recentMenu.AddText(label("no-recent"), nil, a.menuAction("recent-empty")).Disable()
+	} else {
+		for _, recentItem := range recentItems {
+			recentMenu.AddText(recentMenuLabel(recentItem), nil, a.recentMenuAction(recentItem))
+		}
+	}
+	recentMenu.AddSeparator()
+	clearRecent := recentMenu.AddText(label("clear-recent"), nil, a.menuAction("clear-recent"))
+	if len(recentItems) == 0 {
+		clearRecent.Disable()
+	}
 	fileMenu.AddSeparator()
 	fileMenu.AddText(label("save"), keys.CmdOrCtrl("s"), a.menuAction("save"))
 	fileMenu.AddText(label("save-as"), keys.Combo("s", keys.CmdOrCtrlKey, keys.ShiftKey), a.menuAction("save-as"))
@@ -231,5 +251,36 @@ func (a *App) menuAction(action string) menu.Callback {
 			return
 		}
 		wailsruntime.EventsEmit(ctx, menuActionEvent, action)
+	}
+}
+
+func recentMenuLabel(item RecentItem) string {
+	cleanLabel := func(value string) string {
+		value = strings.Map(func(character rune) rune {
+			if character < 0x20 || character == 0x7f {
+				return ' '
+			}
+			return character
+		}, value)
+		return strings.Join(strings.Fields(value), " ")
+	}
+	name := cleanLabel(item.Name)
+	if name == "" {
+		name = cleanLabel(filepath.Base(item.Path))
+	}
+	parent := cleanLabel(filepath.Base(filepath.Dir(item.Path)))
+	if parent == "." || parent == string(filepath.Separator) || parent == "" || parent == name {
+		return name
+	}
+	return name + " — " + parent
+}
+
+func (a *App) recentMenuAction(item RecentItem) menu.Callback {
+	return func(_ *menu.CallbackData) {
+		ctx := a.currentContext()
+		if ctx == nil {
+			return
+		}
+		wailsruntime.EventsEmit(ctx, openRecentEvent, RecentMenuEvent{ID: item.ID, Kind: item.Kind, Name: item.Name})
 	}
 }
