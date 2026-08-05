@@ -45,6 +45,10 @@ pnpm --dir frontend test:export
 Assert-LastExitCode "Run export tests"
 pnpm --dir frontend test:scroll
 Assert-LastExitCode "Run scroll sync tests"
+pnpm --dir frontend test:preview
+Assert-LastExitCode "Run atomic preview rendering tests"
+pnpm --dir frontend test:update
+Assert-LastExitCode "Run update workflow tests"
 pnpm --dir frontend test:ui
 Assert-LastExitCode "Run UI state tests"
 pnpm --dir frontend test:installer

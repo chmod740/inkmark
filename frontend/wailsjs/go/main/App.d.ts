@@ -4,13 +4,19 @@ import {main} from '../models';
 
 export function CancelQuitRequest():Promise<void>;
 
+export function CancelUpdateDownload():Promise<void>;
+
 export function CheckForUpdates():Promise<main.UpdateInfo>;
 
 export function ConfirmQuit():Promise<void>;
 
+export function DownloadUpdate(arg1:string):Promise<main.UpdateDownload>;
+
 export function GetAppInfo():Promise<main.AppInfo>;
 
 export function GetLanguageSettings():Promise<main.LanguageState>;
+
+export function LaunchUpdateInstaller():Promise<void>;
 
 export function LoadInitialDocument(arg1:string):Promise<main.Document>;
 

@@ -9,7 +9,7 @@ InkMark is a local Markdown editor for macOS and Windows with live preview, nati
 ## Highlights
 
 - Open, edit, save, and save-as for `.md` and `.markdown` files
-- Debounced 120 ms live rendering with editor-only, split, and preview-only layouts
+- Debounced 120 ms live rendering; Markdown, math, highlighting, and diagrams are completed off-screen and committed once so continuous typing does not flash or jitter
 - Source-aware two-way scroll synchronization that reconciles after math and diagram reflow without idle drift
 - Save, Don't Save, and Cancel choices before replacing or closing a modified document
 - One-click swapping of editor and preview sides, persisted across launches
@@ -20,7 +20,7 @@ InkMark is a local Markdown editor for macOS and Windows with live preview, nati
 - A built-in bilingual rendering test, available from Welcome and Help, covering tables, math, code, alerts, safe HTML, and ten Mermaid diagram types
 - One consistent icon for the app, file associations, desktop shortcuts, and in-app branding
 - An About page with version, author, source repository, and update status
-- GitHub Releases update checks with platform-specific installer selection
+- GitHub Releases update checks with in-app download and checksum verification; after unsaved work is resolved, InkMark closes the old version and opens the system installer
 
 ## Markdown and Preview Support
 
@@ -45,7 +45,7 @@ InkMark is a local Markdown editor for macOS and Windows with live preview, nati
 
 Download the appropriate installer from [GitHub Releases](https://github.com/chmod740/inkmark/releases/latest):
 
-- macOS 11 or later: `macos-universal.dmg`, supporting both Apple Silicon and Intel
+- macOS 11 or later: use `macos-universal.pkg` for in-place upgrades; Universal DMG and ZIP packages are also provided for Apple Silicon and Intel
 - Windows 10/11 x64: `windows-amd64-setup.exe`
 
 The macOS and Windows packages are not currently signed with commercial distribution certificates. Gatekeeper or SmartScreen may therefore show a warning on first launch. Confirm that the file came from this repository's Release page and verify it with the accompanying `SHA256SUMS` file.
@@ -57,7 +57,7 @@ The macOS and Windows packages are not currently signed with commercial distribu
 3. Use the View menu for layouts and themes, and the Format menu for common Markdown markup.
 4. Save from the File menu or export to PDF, HTML, PNG, TXT, or a Word-compatible document.
 5. Choose Automatic, Simplified Chinese, or English in Settings.
-6. Use Help → Check for Updates; the About page also reports update status.
+6. Use Help → Check for Updates to download, verify, and start the system installer; About also reports download and installation status.
 
 ## Offline and Network Behaviour
 
@@ -81,7 +81,7 @@ macOS:
 ./scripts/package-macos.sh
 ```
 
-The scripts build a Universal app and create a DMG, ZIP, and checksum file under `dist/`.
+The scripts build a Universal app and create PKG, DMG, ZIP, and checksum files under `dist/`.
 
 Windows:
 
@@ -100,19 +100,21 @@ pnpm --dir frontend typecheck
 pnpm --dir frontend test:i18n
 pnpm --dir frontend test:export
 pnpm --dir frontend test:scroll
+pnpm --dir frontend test:preview
+pnpm --dir frontend test:update
 pnpm --dir frontend test:ui
 pnpm --dir frontend test:installer
 node scripts/verify-offline.mjs
 ```
 
-The suite covers file I/O, unsaved-document transitions and the native close guard, language settings, native menus, version comparison and Release responses, export structure, external-resource policy, scroll synchronization, bounded large-document anchors, and offline asset integrity.
+The suite covers file I/O, unsaved-document transitions and the native close guard, language settings, native menus, verified update downloads and installer orchestration, atomic preview commits, version comparison and Release responses, export structure, external-resource policy, scroll synchronization, bounded large-document anchors, and offline asset integrity.
 
 ## Project Layout
 
 - `app.go`: native dialogs, file I/O, and export saving
 - `close_guard.go`: save guard for native close requests on macOS and Windows
 - `app_state.go`: language preferences, single-instance handling, and OS file-open events
-- `update.go`: app metadata, GitHub Releases checks, and platform installer selection
+- `update.go`, `update_download.go`, and `update_launch.go`: release checks, installer selection, verified downloads, and platform-installer orchestration
 - `menu.go`: native macOS and Windows menus
 - `frontend/src/App.vue`: editor, live preview, Settings, and About
 - `frontend/src/i18n.ts`: Chinese and English UI and welcome-page content
@@ -120,6 +122,7 @@ The suite covers file I/O, unsaved-document transitions and the native close gua
 - `frontend/src/document-guard.ts`: safe transitions for documents with unsaved changes
 - `frontend/src/export-document.ts`: HTML, PDF, PNG, TXT, and Word-compatible exports
 - `frontend/src/scroll-sync.ts`: stable bidirectional scroll synchronization
+- `frontend/src/preview-render.ts`: atomic preview commits and Mermaid caching
 - `samples/markdown-rendering-test.md`: built-in bilingual comprehensive rendering sample
 - `scripts/`: build, packaging, and regression-test scripts
 

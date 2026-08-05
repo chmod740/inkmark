@@ -64,6 +64,30 @@ export namespace main {
 	        this.name = source["name"];
 	    }
 	}
+	export class UpdateDownload {
+	    sessionID: string;
+	    assetName: string;
+	    version: string;
+	    bytesDownloaded: number;
+	    totalBytes: number;
+	    progress: number;
+	    ready: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new UpdateDownload(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionID = source["sessionID"];
+	        this.assetName = source["assetName"];
+	        this.version = source["version"];
+	        this.bytesDownloaded = source["bytesDownloaded"];
+	        this.totalBytes = source["totalBytes"];
+	        this.progress = source["progress"];
+	        this.ready = source["ready"];
+	    }
+	}
 	export class UpdateInfo {
 	    currentVersion: string;
 	    latestVersion: string;
@@ -71,6 +95,11 @@ export namespace main {
 	    releaseURL: string;
 	    downloadURL: string;
 	    publishedAt: string;
+	    assetName: string;
+	    assetSize: number;
+	    installable: boolean;
+	    checksumAvailable: boolean;
+	    installerKind: string;
 
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
@@ -84,6 +113,11 @@ export namespace main {
 	        this.releaseURL = source["releaseURL"];
 	        this.downloadURL = source["downloadURL"];
 	        this.publishedAt = source["publishedAt"];
+	        this.assetName = source["assetName"];
+	        this.assetSize = source["assetSize"];
+	        this.installable = source["installable"];
+	        this.checksumAvailable = source["checksumAvailable"];
+	        this.installerKind = source["installerKind"];
 	    }
 	}
 

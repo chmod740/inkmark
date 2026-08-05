@@ -17,12 +17,14 @@ import (
 )
 
 const (
-	appVersion             = "1.1.0"
+	appVersion             = "1.1.1"
 	appAuthor              = "PengHu"
 	sourceRepositoryURL    = "https://github.com/chmod740/inkmark"
 	latestReleaseAPIURL    = "https://api.github.com/repos/chmod740/inkmark/releases/latest"
 	updateRequestTimeout   = 12 * time.Second
+	updateDownloadTimeout  = 30 * time.Minute
 	maxReleaseResponseSize = 2 << 20
+	updateProgressEvent    = "inkmark:update-progress"
 )
 
 type AppInfo struct {
@@ -32,12 +34,17 @@ type AppInfo struct {
 }
 
 type UpdateInfo struct {
-	CurrentVersion  string `json:"currentVersion"`
-	LatestVersion   string `json:"latestVersion"`
-	UpdateAvailable bool   `json:"updateAvailable"`
-	ReleaseURL      string `json:"releaseURL"`
-	DownloadURL     string `json:"downloadURL"`
-	PublishedAt     string `json:"publishedAt"`
+	CurrentVersion    string `json:"currentVersion"`
+	LatestVersion     string `json:"latestVersion"`
+	UpdateAvailable   bool   `json:"updateAvailable"`
+	ReleaseURL        string `json:"releaseURL"`
+	DownloadURL       string `json:"downloadURL"`
+	PublishedAt       string `json:"publishedAt"`
+	AssetName         string `json:"assetName"`
+	AssetSize         int64  `json:"assetSize"`
+	Installable       bool   `json:"installable"`
+	ChecksumAvailable bool   `json:"checksumAvailable"`
+	InstallerKind     string `json:"installerKind"`
 }
 
 type githubRelease struct {
@@ -50,6 +57,8 @@ type githubRelease struct {
 type githubReleaseAsset struct {
 	Name               string `json:"name"`
 	BrowserDownloadURL string `json:"browser_download_url"`
+	Size               int64  `json:"size"`
+	Digest             string `json:"digest"`
 }
 
 type httpDoer interface {
@@ -57,7 +66,26 @@ type httpDoer interface {
 }
 
 func newUpdateHTTPClient() httpDoer {
-	return &http.Client{Timeout: updateRequestTimeout}
+	return newTrustedUpdateClient(updateRequestTimeout)
+}
+
+func newUpdateDownloadHTTPClient() httpDoer {
+	return newTrustedUpdateClient(updateDownloadTimeout)
+}
+
+func newTrustedUpdateClient(timeout time.Duration) httpDoer {
+	return &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(request *http.Request, via []*http.Request) error {
+			if len(via) >= 6 {
+				return errors.New("too many update download redirects")
+			}
+			if !isTrustedUpdateTransportURL(request.URL.String()) {
+				return errors.New("update download redirected to an untrusted URL")
+			}
+			return nil
+		},
+	}
 }
 
 func (a *App) GetAppInfo() AppInfo {
@@ -69,10 +97,24 @@ func (a *App) GetAppInfo() AppInfo {
 }
 
 func (a *App) CheckForUpdates() (UpdateInfo, error) {
-	a.mu.RLock()
+	a.mu.Lock()
+	if a.updateChecking {
+		a.mu.Unlock()
+		return UpdateInfo{}, errors.New("an update check is already in progress")
+	}
+	if a.updateDownloading || a.updateLaunching {
+		a.mu.Unlock()
+		return UpdateInfo{}, errors.New("an update is already being downloaded or installed")
+	}
+	a.updateChecking = true
 	endpoint := a.updateEndpoint
 	client := a.updateClient
-	a.mu.RUnlock()
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		a.updateChecking = false
+		a.mu.Unlock()
+	}()
 	if strings.TrimSpace(endpoint) == "" {
 		endpoint = latestReleaseAPIURL
 	}
@@ -114,24 +156,43 @@ func (a *App) CheckForUpdates() (UpdateInfo, error) {
 		return UpdateInfo{}, errors.New("update response contains an untrusted release URL")
 	}
 
-	downloadURL := selectReleaseAsset(release.Assets, runtime.GOOS, runtime.GOARCH)
-	if downloadURL != "" && !isTrustedGitHubURL(downloadURL) {
+	asset, hasAsset := selectReleaseAssetDetails(release.Assets, runtime.GOOS, runtime.GOARCH)
+	if hasAsset && !isTrustedUpdateTransportURL(asset.BrowserDownloadURL) {
 		return UpdateInfo{}, errors.New("update response contains an untrusted download URL")
 	}
-	info := UpdateInfo{
-		CurrentVersion:  appVersion,
-		LatestVersion:   latestVersion,
-		UpdateAvailable: compareVersions(latestVersion, appVersion) > 0,
-		ReleaseURL:      release.HTMLURL,
-		DownloadURL:     downloadURL,
-		PublishedAt:     release.PublishedAt,
+	checksumAsset, hasChecksumAsset := selectChecksumAsset(release.Assets)
+	if hasChecksumAsset && !isTrustedUpdateTransportURL(checksumAsset.BrowserDownloadURL) {
+		return UpdateInfo{}, errors.New("update response contains an untrusted checksum URL")
 	}
-	if info.DownloadURL == "" {
-		info.DownloadURL = info.ReleaseURL
+	installerKind := installerKindForAsset(asset.Name, runtime.GOOS)
+	checksumAvailable := validSHA256Digest(asset.Digest) || hasChecksumAsset
+	info := UpdateInfo{
+		CurrentVersion:    appVersion,
+		LatestVersion:     latestVersion,
+		UpdateAvailable:   compareVersions(latestVersion, appVersion) > 0,
+		ReleaseURL:        release.HTMLURL,
+		DownloadURL:       asset.BrowserDownloadURL,
+		PublishedAt:       release.PublishedAt,
+		AssetName:         asset.Name,
+		AssetSize:         asset.Size,
+		Installable:       hasAsset && installerKind != "",
+		ChecksumAvailable: checksumAvailable,
+		InstallerKind:     installerKind,
 	}
 
 	a.mu.Lock()
 	a.latestUpdate = info
+	a.updateAsset = asset
+	if hasChecksumAsset {
+		a.checksumAsset = checksumAsset
+	} else {
+		a.checksumAsset = githubReleaseAsset{}
+	}
+	// A new check invalidates any installer prepared for an older release.
+	if a.downloadedUpdate.Version != info.LatestVersion || a.downloadedUpdate.AssetName != info.AssetName {
+		a.downloadedUpdate = downloadedUpdate{}
+		a.updateLaunching = false
+	}
 	a.mu.Unlock()
 	return info, nil
 }
@@ -173,6 +234,19 @@ func isTrustedGitHubURL(rawURL string) bool {
 	}
 	host := strings.ToLower(parsed.Hostname())
 	return host == "github.com" || strings.HasSuffix(host, ".githubusercontent.com")
+}
+
+func isTrustedUpdateTransportURL(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme != "https" || parsed.User != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "github.com" ||
+		host == "api.github.com" ||
+		host == "objects.githubusercontent.com" ||
+		host == "release-assets.githubusercontent.com" ||
+		strings.HasSuffix(host, ".githubusercontent.com")
 }
 
 func canonicalVersion(value string) (string, error) {
@@ -298,20 +372,28 @@ func comparePrerelease(left []string, right []string) int {
 }
 
 func selectReleaseAsset(assets []githubReleaseAsset, operatingSystem string, architecture string) string {
+	asset, ok := selectReleaseAssetDetails(assets, operatingSystem, architecture)
+	if !ok {
+		return ""
+	}
+	return asset.BrowserDownloadURL
+}
+
+func selectReleaseAssetDetails(assets []githubReleaseAsset, operatingSystem string, architecture string) (githubReleaseAsset, bool) {
 	bestScore := -1
-	bestURL := ""
+	bestAsset := githubReleaseAsset{}
 	for _, asset := range assets {
 		name := strings.ToLower(asset.Name)
 		score := releaseAssetScore(name, operatingSystem, architecture)
 		if score > bestScore {
 			bestScore = score
-			bestURL = asset.BrowserDownloadURL
+			bestAsset = asset
 		}
 	}
 	if bestScore < 0 {
-		return ""
+		return githubReleaseAsset{}, false
 	}
-	return bestURL
+	return bestAsset, true
 }
 
 func releaseAssetScore(name string, operatingSystem string, architecture string) int {
@@ -321,20 +403,26 @@ func releaseAssetScore(name string, operatingSystem string, architecture string)
 		if !strings.HasSuffix(name, ".exe") && !strings.HasSuffix(name, ".msi") {
 			return -1
 		}
-		score += 40
-		if strings.Contains(name, "setup") || strings.Contains(name, "installer") {
-			score += 15
+		if !strings.Contains(name, "setup") && !strings.Contains(name, "installer") {
+			return -1
 		}
+		score += 40
+		score += 15
 	case "darwin":
-		if !strings.HasSuffix(name, ".dmg") && !strings.HasSuffix(name, ".zip") {
+		if !strings.HasSuffix(name, ".pkg") && !strings.HasSuffix(name, ".dmg") && !strings.HasSuffix(name, ".zip") {
 			return -1
 		}
 		if !strings.Contains(name, "mac") && !strings.Contains(name, "darwin") {
 			return -1
 		}
 		score += 40
-		if strings.HasSuffix(name, ".dmg") {
-			score += 15
+		switch {
+		case strings.HasSuffix(name, ".pkg"):
+			score += 35
+		case strings.HasSuffix(name, ".dmg"):
+			score += 20
+		case strings.HasSuffix(name, ".zip"):
+			score += 5
 		}
 	case "linux":
 		if !strings.Contains(name, "linux") {
@@ -375,4 +463,37 @@ func releaseAssetScore(name string, operatingSystem string, architecture string)
 		score += 10
 	}
 	return score
+}
+
+func installerKindForAsset(name string, operatingSystem string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	switch operatingSystem {
+	case "windows":
+		if (strings.HasSuffix(name, ".exe") || strings.HasSuffix(name, ".msi")) &&
+			(strings.Contains(name, "setup") || strings.Contains(name, "installer")) {
+			return "windows-installer"
+		}
+	case "darwin":
+		if strings.HasSuffix(name, ".pkg") {
+			return "macos-package"
+		}
+		if strings.HasSuffix(name, ".dmg") {
+			return "macos-disk-image"
+		}
+	case "linux":
+		if strings.HasSuffix(name, ".appimage") || strings.HasSuffix(name, ".deb") || strings.HasSuffix(name, ".rpm") {
+			return "linux-installer"
+		}
+	}
+	return ""
+}
+
+func selectChecksumAsset(assets []githubReleaseAsset) (githubReleaseAsset, bool) {
+	for _, asset := range assets {
+		name := strings.ToLower(strings.TrimSpace(asset.Name))
+		if name == "sha256sums" || name == "sha256sums.txt" || name == "checksums-sha256.txt" {
+			return asset, true
+		}
+	}
+	return githubReleaseAsset{}, false
 }

@@ -9,7 +9,7 @@
 ## 主要功能
 
 - 打开、编辑、保存、另存为 `.md` 与 `.markdown` 文件
-- 120ms 防抖实时渲染，支持仅编辑、分栏编辑和仅预览三种视图
+- 120ms 防抖实时渲染；Markdown、公式、代码高亮和图表在后台完整生成后一次更新预览，连续输入时页面不闪烁、不抖动
 - 编辑区与预览区按源码段落双向同步滚动，公式和图表重排后自动校准，并避免静止时漂移
 - 新建、打开或退出前如有未保存更改，可选择保存、不保存或取消
 - 编辑区与预览区可一键调换左右位置，选择会在重启后保留
@@ -20,7 +20,7 @@
 - 欢迎页和“帮助”菜单提供中英双语综合渲染测试页，覆盖表格、公式、代码、提示块、安全 HTML 与十类 Mermaid 图
 - 应用、文件关联、桌面快捷方式和应用内使用统一图标
 - “关于墨笺”显示版本、作者、源码仓库和更新状态
-- “帮助”菜单可以检查 GitHub Releases，并为当前平台打开对应安装包
+- “帮助”菜单可以检查 GitHub Releases，在应用内下载并校验当前平台安装包；确认未保存文档后自动关闭旧版本并打开系统安装界面
 
 ## Markdown 与预览
 
@@ -45,7 +45,7 @@
 
 从 [GitHub Releases](https://github.com/chmod740/inkmark/releases/latest) 下载对应安装包：
 
-- macOS 11 或更高版本：`macos-universal.dmg`，同时支持 Apple Silicon 与 Intel
+- macOS 11 或更高版本：优先使用 `macos-universal.pkg` 原位升级，也提供同时支持 Apple Silicon 与 Intel 的 DMG 和 ZIP
 - Windows 10/11 x64：`windows-amd64-setup.exe`
 
 macOS 与 Windows 安装包目前未使用商业代码签名证书。首次运行时系统可能显示 Gatekeeper 或 SmartScreen 提示，请确认文件来自本仓库 Release，并使用同一 Release 中的 `SHA256SUMS` 校验完整性。
@@ -57,7 +57,7 @@ macOS 与 Windows 安装包目前未使用商业代码签名证书。首次运�
 3. 使用“视图”菜单切换工作区和主题，使用“格式”菜单插入常用 Markdown 标记。
 4. 使用“文件”菜单保存文档，或导出 PDF、HTML、PNG、TXT 与 Word 兼容文档。
 5. 在“设置”中选择自动、简体中文或 English。
-6. 在“帮助 → 检查更新”查看新版本；“关于墨笺”也会显示更新状态。
+6. 在“帮助 → 检查更新”查看新版本；可直接下载、校验并启动系统安装器，“关于墨笺”也会显示下载和安装状态。
 
 ## 离线与联网说明
 
@@ -81,7 +81,7 @@ macOS：
 ./scripts/package-macos.sh
 ```
 
-脚本生成 Universal 应用，并在 `dist/` 中创建 DMG、ZIP 和校验文件。
+脚本生成 Universal 应用，并在 `dist/` 中创建 PKG、DMG、ZIP 和校验文件。
 
 Windows：
 
@@ -100,19 +100,21 @@ pnpm --dir frontend typecheck
 pnpm --dir frontend test:i18n
 pnpm --dir frontend test:export
 pnpm --dir frontend test:scroll
+pnpm --dir frontend test:preview
+pnpm --dir frontend test:update
 pnpm --dir frontend test:ui
 pnpm --dir frontend test:installer
 node scripts/verify-offline.mjs
 ```
 
-测试覆盖文件读写、未保存文档切换与原生关闭守卫、语言设置、原生菜单、版本比较与 Release 响应、导出结构、外部资源策略、同步滚动、大文档锚点上限和离线资源完整性。
+测试覆盖文件读写、未保存文档切换与原生关闭守卫、语言设置、原生菜单、安全升级下载与安装编排、原子预览提交、版本比较与 Release 响应、导出结构、外部资源策略、同步滚动、大文档锚点上限和离线资源完整性。
 
 ## 项目结构
 
 - `app.go`：原生文件对话框、读写与导出保存
 - `close_guard.go`：macOS 与 Windows 原生关闭前的保存守卫
 - `app_state.go`：语言设置、单实例和系统文件打开
-- `update.go`：版本信息、GitHub Releases 检测和平台安装包选择
+- `update.go`、`update_download.go`、`update_launch.go`：版本检测、安装包选择、安全下载校验和平台安装器编排
 - `menu.go`：macOS 与 Windows 原生菜单
 - `frontend/src/App.vue`：编辑器、实时预览、设置和关于页面
 - `frontend/src/i18n.ts`：中英文界面与欢迎页文案
@@ -120,6 +122,7 @@ node scripts/verify-offline.mjs
 - `frontend/src/document-guard.ts`：未保存文档的安全切换守卫
 - `frontend/src/export-document.ts`：HTML、PDF、PNG、TXT 和 Word 兼容导出
 - `frontend/src/scroll-sync.ts`：稳定的双向滚动同步
+- `frontend/src/preview-render.ts`：预览原子提交与 Mermaid 缓存
 - `samples/markdown-rendering-test.md`：应用内置的中英双语综合渲染样例
 - `scripts/`：构建、打包和回归测试脚本
 

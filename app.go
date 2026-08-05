@@ -79,29 +79,41 @@ type MenuState struct {
 }
 
 type App struct {
-	mu             sync.RWMutex
-	ctx            context.Context
-	initPath       string
-	initialLoaded  bool
-	language       LanguageState
-	menuState      MenuState
-	settingsPath   string
-	updateEndpoint string
-	updateClient   httpDoer
-	latestUpdate   UpdateInfo
-	closeGuard     closeGuardState
+	mu                      sync.RWMutex
+	ctx                     context.Context
+	initPath                string
+	initialLoaded           bool
+	language                LanguageState
+	menuState               MenuState
+	settingsPath            string
+	updateEndpoint          string
+	updateClient            httpDoer
+	updateDownloadClient    httpDoer
+	latestUpdate            UpdateInfo
+	updateAsset             githubReleaseAsset
+	checksumAsset           githubReleaseAsset
+	downloadedUpdate        downloadedUpdate
+	updateChecking          bool
+	updateDownloading       bool
+	updateLaunching         bool
+	updateCancel            context.CancelFunc
+	updateCacheDir          string
+	allowTestUpdateURLs     bool
+	updateInstallerLauncher func(updateLaunchRequest) error
+	closeGuard              closeGuardState
 }
 
 func NewApp() *App {
 	workingDirectory, _ := os.Getwd()
 	settingsPath := defaultSettingsPath()
 	return &App{
-		initPath:       resolveDocumentArgument(os.Args[1:], workingDirectory),
-		language:       loadLanguageState(settingsPath),
-		menuState:      MenuState{ViewMode: "split", Theme: "github", SyncScroll: true},
-		settingsPath:   settingsPath,
-		updateEndpoint: latestReleaseAPIURL,
-		updateClient:   newUpdateHTTPClient(),
+		initPath:             resolveDocumentArgument(os.Args[1:], workingDirectory),
+		language:             loadLanguageState(settingsPath),
+		menuState:            MenuState{ViewMode: "split", Theme: "github", SyncScroll: true},
+		settingsPath:         settingsPath,
+		updateEndpoint:       latestReleaseAPIURL,
+		updateClient:         newUpdateHTTPClient(),
+		updateDownloadClient: newUpdateDownloadHTTPClient(),
 	}
 }
 

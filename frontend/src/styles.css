@@ -206,6 +206,8 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .shortcut-list dt { text-align: right; }
 .shortcut-list kbd { display: inline-block; min-width: 92px; margin: 0; padding: 5px 8px; color: var(--ink); border: 1px solid var(--border); border-radius: 4px; background: var(--paper-soft); text-align: center; opacity: 1; }
 .shortcut-list dd { padding-top: 5px; }
+.shortcut-list progress { width: min(220px, 100%); margin-right: 8px; accent-color: #1a6667; vertical-align: middle; }
+.shortcut-list .update-error { max-width: 330px; color: #a12d28; overflow-wrap: anywhere; }
 .about-heading { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
 .about-heading img { width: 68px; height: 68px; border-radius: 14px; box-shadow: 0 4px 12px rgba(4, 20, 22, .18); }
 .about-heading h2 { margin-bottom: 5px; }

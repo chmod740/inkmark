@@ -6,6 +6,10 @@ export function CancelQuitRequest() {
   return window['go']['main']['App']['CancelQuitRequest']();
 }
 
+export function CancelUpdateDownload() {
+  return window['go']['main']['App']['CancelUpdateDownload']();
+}
+
 export function CheckForUpdates() {
   return window['go']['main']['App']['CheckForUpdates']();
 }
@@ -14,12 +18,20 @@ export function ConfirmQuit() {
   return window['go']['main']['App']['ConfirmQuit']();
 }
 
+export function DownloadUpdate(arg1) {
+  return window['go']['main']['App']['DownloadUpdate'](arg1);
+}
+
 export function GetAppInfo() {
   return window['go']['main']['App']['GetAppInfo']();
 }
 
 export function GetLanguageSettings() {
   return window['go']['main']['App']['GetLanguageSettings']();
+}
+
+export function LaunchUpdateInstaller() {
+  return window['go']['main']['App']['LaunchUpdateInstaller']();
 }
 
 export function LoadInitialDocument(arg1) {

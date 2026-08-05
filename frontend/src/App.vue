@@ -25,6 +25,12 @@ import {
   type ScrollPane,
 } from './scroll-sync'
 import {
+  BoundedCache,
+  LatestPreviewCommit,
+  maximumMermaidCacheEntries,
+  mermaidCacheKey,
+} from './preview-render'
+import {
   normalizePreviewFirst,
   previewFirstStorageKey,
   resolveDocumentHeaderState,
@@ -41,10 +47,13 @@ import {
   type Locale,
   type TranslationKey,
 } from './i18n'
+import { UpdateDownloadSessionGate } from './update-session'
 import {
+  CancelUpdateDownload,
   CancelQuitRequest,
   CheckForUpdates,
   ConfirmQuit,
+  DownloadUpdate,
   GetAppInfo,
   GetLanguageSettings,
   LoadInitialDocument,
@@ -52,6 +61,7 @@ import {
   OpenFile,
   OpenSourceRepository,
   OpenUpdatePage,
+  LaunchUpdateInstaller,
   RenderingTestDocument as LoadRenderingTestDocument,
   SaveExportFile,
   SaveFile,
@@ -96,9 +106,24 @@ interface UpdateInfoData {
   releaseURL: string
   downloadURL: string
   publishedAt: string
+  assetName: string
+  assetSize: number
+  installable: boolean
+  checksumAvailable: boolean
+  installerKind: string
 }
 
-type UpdateState = 'idle' | 'checking' | 'current' | 'available' | 'unavailable' | 'error'
+interface UpdateDownloadData {
+  sessionID: string
+  assetName: string
+  version: string
+  bytesDownloaded: number
+  totalBytes: number
+  progress: number
+  ready: boolean
+}
+
+type UpdateState = 'idle' | 'checking' | 'current' | 'available' | 'downloading' | 'cancelling' | 'ready' | 'installing' | 'unavailable' | 'error'
 
 interface PreviewCapture {
   canvas: HTMLCanvasElement
@@ -135,10 +160,13 @@ const resolvingUnsavedPrompt = ref(false)
 const applicationInfo = ref<ApplicationInfoData>({ version: '', author: '', repositoryURL: '' })
 const updateInfo = ref<UpdateInfoData | null>(null)
 const updateState = ref<UpdateState>('idle')
+const updateDownload = ref<UpdateDownloadData | null>(null)
+const updateError = ref('')
 
 let renderTimer: number | undefined
-let renderSequence = 0
 let quitting = false
+let pendingUpdateInstall = false
+let updateDownloadCancelled = false
 let documentTransitionInProgress = false
 let drainingSystemDocuments = false
 const pendingSystemDocuments: DocumentData[] = []
@@ -149,6 +177,10 @@ let editorScrollAnchors: ScrollAnchor[] = []
 let previewScrollAnchors: ScrollAnchor[] = []
 const removeMenuListeners: Array<() => void> = []
 const scrollSync = new ScrollSyncController()
+const previewCommit = new LatestPreviewCommit()
+type MermaidRenderResult = Awaited<ReturnType<typeof mermaid.render>>
+const mermaidRenderCache = new BoundedCache<string, MermaidRenderResult>(maximumMermaidCacheEntries)
+const updateDownloadSessions = new UpdateDownloadSessionGate()
 
 const markdown = new MarkdownIt({
   html: true,
@@ -216,10 +248,17 @@ const unsavedPromptMessage = computed(() => {
 const aboutVersion = computed(() => applicationInfo.value.version || '—')
 const aboutAuthor = computed(() => applicationInfo.value.author || '—')
 const updateStatusText = computed(() => {
-  const version = updateInfo.value?.latestVersion || updateInfo.value?.currentVersion || aboutVersion.value
+  const currentVersion = updateInfo.value?.currentVersion || aboutVersion.value
+  const latestVersion = updateInfo.value?.latestVersion || currentVersion
   if (updateState.value === 'checking') return t('help.checkingUpdate')
-  if (updateState.value === 'current') return t('help.updateCurrent', { version })
-  if (updateState.value === 'available') return t('help.updateAvailable', { version })
+  if (updateState.value === 'current') return t('help.updateCurrent', { version: currentVersion })
+  if (updateState.value === 'available') return t('help.updateAvailable', { version: latestVersion })
+  if (updateState.value === 'downloading') {
+    return t('help.updateDownloading', { progress: Math.round((updateDownload.value?.progress || 0) * 100) })
+  }
+  if (updateState.value === 'cancelling') return t('help.updateCancelling')
+  if (updateState.value === 'ready') return t('help.updateReady', { version: latestVersion })
+  if (updateState.value === 'installing') return t('help.updateInstalling', { version: latestVersion })
   if (updateState.value === 'unavailable') return t('help.updateUnavailable')
   if (updateState.value === 'error') return t('help.updateFailed')
   return t('help.updateNotChecked')
@@ -738,14 +777,28 @@ function requestApplicationQuit() {
 async function handleCloseRequest() {
   try {
     const completed = await performDocumentTransition('quit', async () => {
+      if (pendingUpdateInstall) {
+        updateState.value = 'installing'
+        await LaunchUpdateInstaller()
+      }
       quitting = true
       await ConfirmQuit()
     })
-    if (!completed) await CancelQuitRequest()
+    if (!completed) {
+      await CancelQuitRequest()
+      if (pendingUpdateInstall) {
+        pendingUpdateInstall = false
+        updateState.value = 'ready'
+        activeDialog.value = 'about'
+      }
+    }
   } catch (error) {
     quitting = false
+    pendingUpdateInstall = false
+    if (updateDownload.value?.ready) updateState.value = 'ready'
     await CancelQuitRequest().catch(() => undefined)
     showError(error)
+    activeDialog.value = 'about'
   }
 }
 
@@ -791,12 +844,13 @@ function showAboutDialog() {
 }
 
 async function checkForUpdates(showDialog = true) {
-  if (updateState.value === 'checking') return
+  if (['checking', 'downloading', 'cancelling', 'installing'].includes(updateState.value)) return
   if (showDialog) {
     activeDialog.value = 'about'
     if (!applicationInfo.value.version) void loadApplicationInfo()
   }
   updateState.value = 'checking'
+  updateError.value = ''
   try {
     const result = await CheckForUpdates() as UpdateInfoData
     updateInfo.value = {
@@ -806,7 +860,13 @@ async function checkForUpdates(showDialog = true) {
       releaseURL: result?.releaseURL?.trim() || '',
       downloadURL: result?.downloadURL?.trim() || '',
       publishedAt: result?.publishedAt?.trim() || '',
+      assetName: result?.assetName?.trim() || '',
+      assetSize: Number(result?.assetSize) || 0,
+      installable: Boolean(result?.installable),
+      checksumAvailable: Boolean(result?.checksumAvailable),
+      installerKind: result?.installerKind?.trim() || '',
     }
+    updateDownload.value = null
     if (!applicationInfo.value.version && updateInfo.value.currentVersion) {
       applicationInfo.value = { ...applicationInfo.value, version: updateInfo.value.currentVersion }
     }
@@ -818,6 +878,7 @@ async function checkForUpdates(showDialog = true) {
   } catch (error) {
     console.error('Unable to check for updates', error)
     updateInfo.value = null
+    updateError.value = errorMessage(error)
     updateState.value = 'error'
   }
 }
@@ -840,8 +901,72 @@ async function openUpdatePage() {
 }
 
 async function upgradeApplication() {
+  if (updateState.value === 'downloading' || updateState.value === 'cancelling' || updateState.value === 'installing') return
+  if (updateState.value === 'ready') {
+    pendingUpdateInstall = true
+    activeDialog.value = null
+    requestApplicationQuit()
+    return
+  }
   if (updateState.value !== 'available') await checkForUpdates()
-  if (updateState.value === 'available') await openUpdatePage()
+  if (updateState.value !== 'available' || !updateInfo.value) return
+  if (!updateInfo.value.installable || !updateInfo.value.checksumAvailable) {
+    await openUpdatePage()
+    return
+  }
+  updateState.value = 'downloading'
+  updateDownload.value = null
+  updateError.value = ''
+  updateDownloadCancelled = false
+  const downloadSession = updateDownloadSessions.begin()
+  try {
+    const result = await DownloadUpdate(downloadSession) as UpdateDownloadData
+    if (updateDownloadCancelled || !updateDownloadSessions.isActive(downloadSession)) {
+      updateDownloadSessions.finish(downloadSession)
+      updateState.value = 'available'
+      return
+    }
+    updateDownload.value = normalizeUpdateDownload(result)
+    updateDownloadSessions.finish(downloadSession)
+    updateState.value = 'ready'
+    pendingUpdateInstall = true
+    activeDialog.value = null
+    requestApplicationQuit()
+  } catch (error) {
+    if (updateDownloadCancelled || !updateDownloadSessions.isActive(downloadSession)) {
+      updateDownloadSessions.finish(downloadSession)
+      updateState.value = 'available'
+      return
+    }
+    updateDownloadSessions.finish(downloadSession)
+    updateError.value = errorMessage(error)
+    updateState.value = 'error'
+  }
+}
+
+async function cancelUpdateDownload() {
+  if (updateState.value !== 'downloading') return
+  updateDownloadCancelled = true
+  updateState.value = 'cancelling'
+  await CancelUpdateDownload()
+}
+
+function handleUpdateProgress(payload: UpdateDownloadData) {
+  if (updateState.value !== 'downloading' || !updateDownloadSessions.isActive(payload?.sessionID || '')) return
+  updateDownload.value = normalizeUpdateDownload(payload)
+}
+
+function normalizeUpdateDownload(payload: UpdateDownloadData): UpdateDownloadData {
+  const progress = Math.max(0, Math.min(1, Number(payload?.progress) || 0))
+  return {
+    sessionID: payload?.sessionID || '',
+    assetName: payload?.assetName?.trim() || updateInfo.value?.assetName || '',
+    version: payload?.version?.trim() || updateInfo.value?.latestVersion || '',
+    bytesDownloaded: Math.max(0, Number(payload?.bytesDownloaded) || 0),
+    totalBytes: Math.max(0, Number(payload?.totalBytes) || 0),
+    progress,
+    ready: Boolean(payload?.ready),
+  }
 }
 
 async function toggleFullscreen() {
@@ -967,7 +1092,7 @@ function scheduleRender() {
   window.clearTimeout(renderTimer)
   // Invalidate any Mermaid work still running for the previous document.
   // Otherwise an old asynchronous render may keep changing preview height.
-  renderSequence += 1
+  previewCommit.invalidate()
   renderState.value = t('status.waiting')
   renderTimer = window.setTimeout(renderNow, 120)
 }
@@ -975,7 +1100,7 @@ function scheduleRender() {
 async function renderNow(sourceText = source.value, renderTheme = theme.value): Promise<boolean> {
   const target = preview.value
   if (!target) return false
-  const sequence = ++renderSequence
+  const sequence = previewCommit.begin()
   renderState.value = t('status.rendering')
   try {
     const renderedHTML = markdown.render(sourceText)
@@ -985,19 +1110,27 @@ async function renderNow(sourceText = source.value, renderTheme = theme.value): 
       ADD_ATTR: ['target', 'rel', 'checked', 'disabled', 'data-alert', 'data-display-mode', 'data-source-line'],
       FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'svg'],
     })
-    target.innerHTML = cleanHTML
-    decoratePreview(target)
-    renderMath(target)
-    highlightCode(target)
-    await renderDiagrams(target, sequence, renderTheme)
-    if (sequence !== renderSequence) return false
-    await nextTick()
-    refreshScrollAnchors()
-    reconcileActiveScroll()
+    const committed = await previewCommit.stageAndCommit(sequence, async () => {
+      const staging = target.cloneNode(false) as HTMLElement
+      staging.innerHTML = cleanHTML
+      decoratePreview(staging)
+      renderMath(staging)
+      highlightCode(staging)
+      await renderDiagrams(staging, sequence, renderTheme)
+      return staging
+    }, (staging) => {
+      // All expensive and asynchronous work happens off-screen. Replacing the
+      // children once keeps the old preview stable until the new one is ready.
+      target.classList.remove('render-error')
+      target.replaceChildren(...Array.from(staging.childNodes))
+      refreshScrollAnchors()
+      reconcileActiveScroll()
+    })
+    if (!committed) return false
     renderState.value = t('status.rendered')
     return true
   } catch (error) {
-    if (sequence !== renderSequence) return false
+    if (!previewCommit.isCurrent(sequence)) return false
     target.textContent = t('error.markdownRenderFailed', { message: errorMessage(error) })
     target.classList.add('render-error')
     renderState.value = t('status.renderFailed')
@@ -1133,6 +1266,7 @@ function highlightCode(root: HTMLElement) {
 async function renderDiagrams(root: HTMLElement, sequence: number, renderTheme: Theme) {
   const diagrams = Array.from(root.querySelectorAll<HTMLElement>('pre.mermaid'))
   if (!diagrams.length) return
+  const usedCacheKeys = new Set<string>()
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'strict',
@@ -1142,17 +1276,27 @@ async function renderDiagrams(root: HTMLElement, sequence: number, renderTheme: 
     flowchart: { useMaxWidth: true, htmlLabels: false },
   })
   for (let index = 0; index < diagrams.length; index += 1) {
-    if (sequence !== renderSequence) return
+    if (!previewCommit.isCurrent(sequence)) return
     const diagram = diagrams[index]
     const definition = diagram.textContent || ''
+    const cacheKey = mermaidCacheKey(renderTheme, definition)
     try {
-      const id = `inkmark-diagram-${sequence}-${index}`
-      const rendered = await mermaid.render(id, definition)
-      if (sequence !== renderSequence) return
+      // Do not insert the same cached SVG twice into one document because its
+      // internal IDs may collide. Repeated renders can still reuse it safely.
+      let rendered = usedCacheKeys.has(cacheKey) ? undefined : mermaidRenderCache.get(cacheKey)
+      if (!rendered) {
+        const id = `inkmark-diagram-${sequence}-${index}`
+        rendered = await mermaid.render(id, definition)
+        if (!previewCommit.isCurrent(sequence)) return
+        if (!usedCacheKeys.has(cacheKey)) mermaidRenderCache.set(cacheKey, rendered)
+      }
+      if (!previewCommit.isCurrent(sequence)) return
       diagram.innerHTML = rendered.svg
       diagram.classList.add('mermaid-rendered')
       rendered.bindFunctions?.(diagram)
+      usedCacheKeys.add(cacheKey)
     } catch {
+      if (!previewCommit.isCurrent(sequence)) return
       diagram.textContent = definition
       diagram.classList.add('mermaid-error')
     }
@@ -1436,6 +1580,7 @@ onMounted(async () => {
     EventsOn('inkmark:open-document', handleSystemDocument),
     EventsOn('inkmark:open-error', showError),
     EventsOn('inkmark:close-request', () => { void handleCloseRequest() }),
+    EventsOn('inkmark:update-progress', handleUpdateProgress),
   )
   layoutResizeObserver = new ResizeObserver(scheduleLayoutReconciliation)
   if (editor.value) layoutResizeObserver.observe(editor.value)
@@ -1455,6 +1600,9 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.clearTimeout(renderTimer)
+  previewCommit.invalidate()
+  if (updateState.value === 'downloading') void CancelUpdateDownload()
+  mermaidRenderCache.clear()
   if (layoutReconcileFrame !== null) window.cancelAnimationFrame(layoutReconcileFrame)
   layoutReconcileFrame = null
   layoutResizeObserver?.disconnect()
@@ -1687,6 +1835,17 @@ onBeforeUnmount(() => {
             </dd>
             <dt>{{ t('help.updateStatus') }}</dt>
             <dd role="status" aria-live="polite">{{ updateStatusText }}</dd>
+            <template v-if="updateState === 'downloading'">
+              <dt>{{ t('help.downloadProgress') }}</dt>
+              <dd>
+                <progress :value="updateDownload?.progress || 0" max="1"></progress>
+                {{ Math.round((updateDownload?.progress || 0) * 100) }}%
+              </dd>
+            </template>
+            <template v-if="updateError">
+              <dt>{{ t('help.updateError') }}</dt>
+              <dd class="update-error">{{ updateError }}</dd>
+            </template>
             <template v-if="updateInfo">
               <dt>{{ t('help.currentVersion') }}</dt>
               <dd>{{ updateInfo.currentVersion || aboutVersion }}</dd>
@@ -1701,18 +1860,37 @@ onBeforeUnmount(() => {
         </template>
         <footer class="dialog-actions">
           <button
-            v-if="activeDialog === 'about' && updateState !== 'available'"
+            v-if="activeDialog === 'about' && !['available', 'downloading', 'cancelling', 'ready', 'installing'].includes(updateState)"
             type="button"
             class="button secondary"
             :disabled="updateState === 'checking'"
             @click="checkForUpdates()"
           >{{ updateState === 'checking' ? t('help.checkingUpdate') : t('help.checkUpdate') }}</button>
           <button
+            v-else-if="activeDialog === 'about' && updateState === 'downloading'"
+            type="button"
+            class="button secondary"
+            @click="cancelUpdateDownload"
+          >{{ t('help.cancelDownload') }}</button>
+          <button
+            v-else-if="activeDialog === 'about' && updateState === 'cancelling'"
+            type="button"
+            class="button secondary"
+            disabled
+          >{{ t('help.updateCancellingButton') }}</button>
+          <button
             v-else-if="activeDialog === 'about'"
             type="button"
             class="button secondary"
-            @click="openUpdatePage"
-          >{{ t('help.downloadUpdate') }}</button>
+            :disabled="updateState === 'installing'"
+            @click="upgradeApplication"
+          >{{ updateState === 'ready'
+              ? t('help.installUpdate')
+              : updateState === 'installing'
+                ? t('help.updateInstallingButton')
+                : updateInfo?.installable && updateInfo?.checksumAvailable
+                  ? t('help.downloadAndInstall')
+                  : t('help.openDownloadPage') }}</button>
           <span v-if="activeDialog === 'about'" class="status-spacer"></span>
           <button type="button" class="button primary" @click="activeDialog = null">{{ t('common.close') }}</button>
         </footer>

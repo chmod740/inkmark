@@ -25,9 +25,19 @@ trap 'rm -rf -- "$stage_dir"' EXIT
 mkdir -p "$release_dir"
 dmg_path="$release_dir/InkMark-Markdown-$version-macos-universal.dmg"
 zip_path="$release_dir/InkMark-Markdown-$version-macos-universal.zip"
+pkg_path="$release_dir/InkMark-Markdown-$version-macos-universal.pkg"
 
 ditto "$app_path" "$stage_dir/InkMark Markdown.app"
 ln -s /Applications "$stage_dir/Applications"
+
+# The system Installer package is the preferred update asset. It replaces the
+# existing app bundle in /Applications after the running version has closed.
+pkgbuild \
+  --component "$stage_dir/InkMark Markdown.app" \
+  --install-location /Applications \
+  --identifier "com.chmod740.inkmark.pkg" \
+  --version "$version" \
+  "$pkg_path"
 
 hdiutil create \
   -volname "InkMark Markdown" \
@@ -36,14 +46,28 @@ hdiutil create \
   -format UDZO \
   -ov "$dmg_path"
 
-ditto -c -k --sequesterRsrc --keepParent "$app_path" "$zip_path"
+ditto -c -k --sequesterRsrc --keepParent "$stage_dir/InkMark Markdown.app" "$zip_path"
 hdiutil verify "$dmg_path"
 
+checksum_files=()
+for artifact in "$release_dir"/InkMark-Markdown-"$version"-*; do
+  [[ -f "$artifact" ]] || continue
+  case "$artifact" in
+    *.pkg|*.dmg|*.zip|*.exe|*.msi|*.AppImage|*.deb|*.rpm)
+      checksum_files+=("$(basename "$artifact")")
+      ;;
+  esac
+done
+if [[ ${#checksum_files[@]} -eq 0 ]]; then
+  echo "No release artifacts found for checksum generation" >&2
+  exit 1
+fi
 (
   cd "$release_dir"
-  shasum -a 256 "$(basename "$dmg_path")" "$(basename "$zip_path")" > SHA256SUMS
+  shasum -a 256 "${checksum_files[@]}" > SHA256SUMS
 )
 
+echo "macOS PKG: $pkg_path"
 echo "macOS DMG: $dmg_path"
 echo "macOS ZIP: $zip_path"
 echo "Checksums: $release_dir/SHA256SUMS"
