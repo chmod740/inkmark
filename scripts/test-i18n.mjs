@@ -78,13 +78,13 @@ test('about and update messages are complete in both languages', () => {
     'help.updateStatus',
     'help.checkUpdate',
     'help.downloadUpdate',
+    'help.downloadAndInstall',
     'help.updateNotChecked',
     'help.updateCurrent',
     'help.updateAvailable',
     'help.updateUnavailable',
     'help.updateFailed',
     'menu.checkUpdate',
-    'menu.upgrade',
   ]
   for (const locale of ['zh-CN', 'en']) {
     for (const key of keys) assert.ok(translations[locale][key]?.trim(), `${locale}.${key} must exist`)
@@ -97,6 +97,8 @@ test('about and update messages are complete in both languages', () => {
     translate('en', 'help.updateCurrent', { version: '1.0.0' }),
     'You are using the latest version (1.0.0)',
   )
+  assert.equal(translate('zh-CN', 'help.downloadAndInstall'), '下载并安装新版本')
+  assert.equal(translate('en', 'help.downloadAndInstall'), 'Download and Install New Version')
 })
 
 test('about dialog wires application metadata and native update menu actions', async () => {
@@ -105,7 +107,7 @@ test('about dialog wires application metadata and native update menu actions', a
     assert.ok(appSource.includes(bridgeMethod), `${bridgeMethod} must be wired into App.vue`)
   }
   assert.ok(appSource.includes("action === 'check-update'"))
-  assert.ok(appSource.includes("action === 'upgrade'"))
+  assert.ok(!appSource.includes("action === 'upgrade'"))
   assert.ok(appSource.includes('aria-live="polite"'))
 })
 

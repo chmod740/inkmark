@@ -118,35 +118,41 @@ FunctionEnd
 
 Function WaitForUpdateProcess
     StrCpy $UpdateWaitResult "1"
-    StrCmp $UpdateWaitPID "" update_wait_done
+    StrCmp $UpdateWaitPID "" update_wait_invalid
     IntFmt $0 "%u" $UpdateWaitPID
     StrCmp $0 $UpdateWaitPID 0 update_wait_invalid
-    IntCmp $UpdateWaitPID 0 update_wait_invalid update_wait_invalid update_wait_open
+    StrCmp $UpdateWaitPID "0" update_wait_invalid update_wait_open
 
     update_wait_open:
     # SYNCHRONIZE is sufficient to wait for a process and cannot terminate it.
-    System::Call 'kernel32::OpenProcess(i 0x00100000, i 0, i $UpdateWaitPID) p.r0'
+    # Capture GetLastError in the same System plug-in call. A separate
+    # GetLastError call may overwrite ERROR_INVALID_PARAMETER after the
+    # parent process has already exited.
+    System::Call 'kernel32::OpenProcess(i 0x00100000, i 0, i $UpdateWaitPID) p.r0 ?e'
+    Pop $1
     StrCmp $0 0 update_wait_open_failed
 
     update_wait_again:
-    System::Call 'kernel32::WaitForSingleObject(p r0, i ${UPDATE_WAIT_TIMEOUT_MS}) i.r1'
+    System::Call 'kernel32::WaitForSingleObject(p r0, i ${UPDATE_WAIT_TIMEOUT_MS}) i.r1 ?e'
+    Pop $2
     StrCmp $1 0 update_wait_close
     StrCmp $1 258 update_wait_timeout update_wait_failed
 
     update_wait_timeout:
-    IfSilent update_wait_abort update_wait_prompt
+    IfSilent update_wait_close_abort update_wait_prompt
 
     update_wait_prompt:
     MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION \
       "${INFO_PRODUCTNAME} is still closing. Retry after it exits, or cancel this update." \
-      IDRETRY update_wait_again IDCANCEL update_wait_abort
+      IDRETRY update_wait_again IDCANCEL update_wait_close_abort
 
     update_wait_open_failed:
     # ERROR_INVALID_PARAMETER means the PID has already exited.
-    System::Call 'kernel32::GetLastError() i.r1'
+    DetailPrint "OpenProcess for PID $UpdateWaitPID failed with Windows error $1."
     StrCmp $1 87 update_wait_done update_wait_failed_no_handle
 
     update_wait_failed:
+    DetailPrint "WaitForSingleObject for PID $UpdateWaitPID failed with Windows error $2."
     System::Call 'kernel32::CloseHandle(p r0)'
 
     update_wait_failed_no_handle:
@@ -160,6 +166,10 @@ Function WaitForUpdateProcess
     update_wait_close:
     System::Call 'kernel32::CloseHandle(p r0)'
     Goto update_wait_done
+
+    update_wait_close_abort:
+    System::Call 'kernel32::CloseHandle(p r0)'
+    Goto update_wait_abort
 
     update_wait_invalid:
     IfSilent update_wait_abort update_wait_invalid_prompt

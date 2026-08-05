@@ -179,7 +179,6 @@ const zhCNTranslations = {
   'menu.keyboardShortcuts': '键盘快捷键',
   'menu.about': '关于墨笺',
   'menu.checkUpdate': '检查更新…',
-  'menu.upgrade': '升级/下载更新…',
 
   'help.shortcutsTitle': '键盘快捷键',
   'help.shortcutsIntro': '使用以下快捷键更快地编辑和管理文档。',
@@ -197,7 +196,7 @@ const zhCNTranslations = {
   'help.checkUpdate': '检查更新',
   'help.checkingUpdate': '正在检查更新…',
   'help.downloadUpdate': '升级/下载更新',
-  'help.downloadAndInstall': '下载并安装',
+  'help.downloadAndInstall': '下载并安装新版本',
   'help.installUpdate': '退出并安装',
   'help.cancelDownload': '取消下载',
   'help.openDownloadPage': '打开下载页面',
@@ -406,7 +405,6 @@ const enTranslations: TranslationDictionary = {
   'menu.keyboardShortcuts': 'Keyboard Shortcuts',
   'menu.about': 'About InkMark',
   'menu.checkUpdate': 'Check for Updates…',
-  'menu.upgrade': 'Upgrade / Download Update…',
 
   'help.shortcutsTitle': 'Keyboard Shortcuts',
   'help.shortcutsIntro': 'Use these shortcuts to edit and manage documents more quickly.',
@@ -424,7 +422,7 @@ const enTranslations: TranslationDictionary = {
   'help.checkUpdate': 'Check for Updates',
   'help.checkingUpdate': 'Checking for updates…',
   'help.downloadUpdate': 'Upgrade / Download Update',
-  'help.downloadAndInstall': 'Download and Install',
+  'help.downloadAndInstall': 'Download and Install New Version',
   'help.installUpdate': 'Quit and Install',
   'help.cancelDownload': 'Cancel Download',
   'help.openDownloadPage': 'Open Download Page',

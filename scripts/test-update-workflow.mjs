@@ -44,6 +44,12 @@ test('download progress, cancellation, and install states are exposed in the Abo
   assert.match(source, /updateDownloadSessions\.isActive\(payload\?\.sessionID \|\| ''\)/)
   assert.match(source, /<progress :value="updateDownload\?\.progress \|\| 0" max="1"><\/progress>/)
   assert.match(source, /updateInfo\?\.installable && updateInfo\?\.checksumAvailable/)
+  assert.match(
+    source,
+    /v-else-if="activeDialog === 'about'[\s\S]*&& updateInfo\?\.updateAvailable[\s\S]*&& \['available', 'ready', 'installing'\]\.includes\(updateState\)"/,
+    'the install action must only appear after a newer version is found',
+  )
+  assert.doesNotMatch(source, /action === 'upgrade'/, 'the native menu must not expose an unconditional upgrade action')
 })
 
 test('the current-version status never reports an older remote release as installed', async () => {

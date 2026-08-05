@@ -1409,7 +1409,6 @@ function handleMenuAction(action: string) {
   else if (action === 'show-shortcuts') activeDialog.value = 'shortcuts'
   else if (action === 'about') showAboutDialog()
   else if (action === 'check-update') void checkForUpdates()
-  else if (action === 'upgrade') void upgradeApplication()
   else if (action === 'source-code') void openSourceRepository()
   else if (action === 'show-welcome') void showWelcome()
   else if (action === 'show-render-test') void showRenderingTest()
@@ -2239,7 +2238,9 @@ onBeforeUnmount(() => {
             disabled
           >{{ t('help.updateCancellingButton') }}</button>
           <button
-            v-else-if="activeDialog === 'about'"
+            v-else-if="activeDialog === 'about'
+              && updateInfo?.updateAvailable
+              && ['available', 'ready', 'installing'].includes(updateState)"
             type="button"
             class="button secondary"
             :disabled="updateState === 'installing'"

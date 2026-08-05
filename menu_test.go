@@ -155,7 +155,6 @@ func TestHelpMenuContainsUpdateAndRepositoryActions(t *testing.T) {
 	want := map[string]bool{
 		"Rendering Test Page": false,
 		"Check for Updates…":  false,
-		"Upgrade InkMark…":    false,
 		"Source Repository":   false,
 		"About InkMark":       false,
 	}
@@ -167,6 +166,25 @@ func TestHelpMenuContainsUpdateAndRepositoryActions(t *testing.T) {
 	for label, found := range want {
 		if !found {
 			t.Errorf("Help menu is missing %q", label)
+		}
+	}
+
+	for _, test := range []struct {
+		platform  string
+		locale    string
+		helpLabel string
+		forbidden string
+	}{
+		{platform: "darwin", locale: "zh-CN", helpLabel: "帮助", forbidden: "升级墨笺…"},
+		{platform: "darwin", locale: "en", helpLabel: "Help", forbidden: "Upgrade InkMark…"},
+		{platform: "windows", locale: "zh-CN", helpLabel: "帮助", forbidden: "升级墨笺…"},
+		{platform: "windows", locale: "en", helpLabel: "Help", forbidden: "Upgrade InkMark…"},
+	} {
+		help := findTopLevelMenu(t, NewApp().applicationMenuFor(test.platform, test.locale), test.helpLabel)
+		for _, item := range help.Items {
+			if item.Label == test.forbidden {
+				t.Errorf("%s/%s Help menu must not expose %q before an update is found", test.platform, test.locale, test.forbidden)
+			}
 		}
 	}
 }

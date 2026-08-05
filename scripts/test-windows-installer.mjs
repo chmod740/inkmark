@@ -18,10 +18,26 @@ test('Windows installer exposes a safe in-place update protocol', async () => {
   assert.match(source, /\$\{GetOptions\}\s+\$0\s+"\/WAITPID="\s+\$UpdateWaitPID/)
   assert.match(source, /IntFmt \$0 "%u" \$UpdateWaitPID/)
   assert.match(source, /StrCmp \$0 \$UpdateWaitPID 0 update_wait_invalid/)
-  assert.match(source, /kernel32::OpenProcess\(i 0x00100000/)
+  assert.match(source, /StrCmp \$UpdateWaitPID "0" update_wait_invalid update_wait_open/)
+  assert.doesNotMatch(source, /IntCmp \$UpdateWaitPID/, 'Windows process identifiers are unsigned')
+  assert.match(
+    source,
+    /kernel32::OpenProcess\(i 0x00100000[^\r\n]+p\.r0 \?e'\s*\r?\n\s*Pop \$1\s*\r?\n\s*StrCmp \$0 0 update_wait_open_failed/,
+    'OpenProcess must capture GetLastError atomically before checking a stale PID',
+  )
+  assert.doesNotMatch(source, /kernel32::GetLastError/, 'a second plug-in call can overwrite the OpenProcess error')
+  assert.match(source, /StrCmp \$UpdateWaitPID "" update_wait_invalid/)
   assert.match(source, /!define UPDATE_WAIT_TIMEOUT_MS 120000/)
-  assert.match(source, /kernel32::WaitForSingleObject\(p r0, i \$\{UPDATE_WAIT_TIMEOUT_MS\}\)/)
+  assert.match(
+    source,
+    /kernel32::WaitForSingleObject\(p r0, i \$\{UPDATE_WAIT_TIMEOUT_MS\}\) i\.r1 \?e'\s*\r?\n\s*Pop \$2/,
+  )
   assert.match(source, /kernel32::CloseHandle/)
+  assert.match(
+    source,
+    /update_wait_timeout:[\s\S]*IfSilent update_wait_close_abort update_wait_prompt[\s\S]*IDCANCEL update_wait_close_abort[\s\S]*update_wait_close_abort:[\s\S]*kernel32::CloseHandle\(p r0\)[\s\S]*Goto update_wait_abort/,
+    'timeout cancellation must close the process handle before aborting',
+  )
   assert.ok(waitCall >= 0 && waitCall < fileInstall, 'the old process must exit before app files are replaced')
   assert.match(source, /MUI_PAGE_CUSTOMFUNCTION_PRE SkipUpdateDirectoryPage/)
   assert.match(source, /Function SkipUpdateDirectoryPage[\s\S]*StrCmp \$UpdateMode "1"[\s\S]*StrCmp \$ExistingInstallFound "1"[\s\S]*Abort/)
