@@ -101,6 +101,56 @@ test('about and update messages are complete in both languages', () => {
   assert.equal(translate('en', 'help.downloadAndInstall'), 'Download and Install New Version')
 })
 
+test('WebDAV connection, remote save, conflict, and disconnect messages are complete', () => {
+  const keys = [
+    'app.localMode',
+    'app.webdavConnected',
+    'menu.connectWebDAV',
+    'workspace.providerWebDAV',
+    'webdav.title',
+    'webdav.serverURL',
+    'webdav.username',
+    'webdav.password',
+    'webdav.connect',
+    'webdav.connecting',
+    'webdav.connectedBadge',
+    'webdav.endpointRequired',
+    'webdav.invalidResponse',
+    'webdav.authenticationFailed',
+    'webdav.permissionDenied',
+    'webdav.networkError',
+    'webdav.timeout',
+    'webdav.unsupported',
+    'webdav.locked',
+    'webdav.canceled',
+    'webdav.invalidRequest',
+    'webdav.tooLarge',
+    'webdav.rateLimited',
+    'webdav.serverError',
+    'webdav.operationFailed',
+    'webdav.connectionFailed',
+    'webdav.remoteSave',
+    'webdav.savedRemotely',
+    'webdav.remoteSaveFailed',
+    'webdav.conflictTitle',
+    'webdav.conflictMessage',
+    'webdav.conflictReload',
+    'webdav.conflictOverwrite',
+    'webdav.disconnectTitle',
+    'webdav.disconnectMessage',
+    'webdav.disconnectConfirm',
+  ]
+  for (const locale of ['zh-CN', 'en']) {
+    for (const key of keys) assert.ok(translations[locale][key]?.trim(), `${locale}.${key} must exist`)
+  }
+  assert.equal(translate('zh-CN', 'app.localMode'), '本地模式')
+  assert.equal(translate('en', 'app.webdavConnected'), 'WebDAV Connected')
+  assert.match(
+    translate('en', 'webdav.conflictMessage', { name: 'README.md' }),
+    /README\.md.*modified by another client/,
+  )
+})
+
 test('about dialog wires application metadata and native update menu actions', async () => {
   const appSource = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
   for (const bridgeMethod of ['GetAppInfo', 'CheckForUpdates', 'OpenUpdatePage', 'OpenSourceRepository']) {

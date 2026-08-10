@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import type { WorkspaceData, WorkspaceEntryData, WorkspaceTreeRow } from './workspace-tree'
-import { sameWorkspaceFile, workspaceDirectoryKey, workspaceTreeIndent } from './workspace-tree'
+import type {
+  WorkspaceData,
+  WorkspaceEntryData,
+  WorkspaceProvider,
+  WorkspaceTreeRow,
+} from './workspace-tree'
+import { isActiveWorkspaceFile, workspaceDirectoryKey, workspaceTreeIndent } from './workspace-tree'
 
 interface SidebarLabels {
   title: string
@@ -14,12 +19,15 @@ interface SidebarLabels {
   expandDirectory: string
   collapseDirectory: string
   openFile: string
+  providerWebDAV: string
 }
 
 const props = defineProps<{
   workspace: WorkspaceData
   rows: readonly WorkspaceTreeRow[]
-  currentPath: string
+  currentProvider: WorkspaceProvider | null
+  currentWorkspaceId: string
+  currentWorkspacePath: string
   labels: SidebarLabels
   disabled: boolean
   refreshing: boolean
@@ -58,7 +66,14 @@ function rowTitle(row: WorkspaceTreeRow) {
 
 function isActive(row: WorkspaceTreeRow) {
   return row.entry.kind === 'markdown'
-    && sameWorkspaceFile(row.entry.absolutePath, props.currentPath)
+    && isActiveWorkspaceFile(
+      props.workspace.provider,
+      props.workspace.id,
+      row.entry.path,
+      props.currentProvider,
+      props.currentWorkspaceId,
+      props.currentWorkspacePath,
+    )
 }
 
 function rowDisabled(row: WorkspaceTreeRow) {
@@ -69,11 +84,26 @@ function rowDisabled(row: WorkspaceTreeRow) {
 </script>
 
 <template>
-  <aside class="workspace-sidebar" :aria-label="labels.title">
+  <aside
+    class="workspace-sidebar"
+    :class="`provider-${workspace.provider}`"
+    :aria-label="labels.title"
+  >
     <header class="workspace-sidebar-header">
       <div class="workspace-sidebar-heading" :title="workspace.path">
-        <span class="workspace-root-icon" aria-hidden="true"></span>
+        <span
+          class="workspace-root-icon"
+          :class="{ webdav: workspace.provider === 'webdav' }"
+          aria-hidden="true"
+        ></span>
         <span class="workspace-root-name">{{ workspace.name }}</span>
+        <span
+          v-if="workspace.provider === 'webdav'"
+          class="workspace-provider-icon webdav"
+          role="img"
+          :aria-label="labels.providerWebDAV"
+          :title="labels.providerWebDAV"
+        >☁</span>
       </div>
       <button
         type="button"

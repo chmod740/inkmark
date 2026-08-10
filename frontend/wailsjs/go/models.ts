@@ -23,6 +23,12 @@ export namespace main {
 	    welcome: boolean;
 	    builtIn?: string;
 	    activationId?: string;
+	    storageKind?: string;
+	    displayLocation?: string;
+	    workspaceId?: string;
+	    workspacePath?: string;
+	    remoteDocumentId?: string;
+	    etag?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new Document(source);
@@ -36,6 +42,12 @@ export namespace main {
 	        this.welcome = source["welcome"];
 	        this.builtIn = source["builtIn"];
 	        this.activationId = source["activationId"];
+	        this.storageKind = source["storageKind"];
+	        this.displayLocation = source["displayLocation"];
+	        this.workspaceId = source["workspaceId"];
+	        this.workspacePath = source["workspacePath"];
+	        this.remoteDocumentId = source["remoteDocumentId"];
+	        this.etag = source["etag"];
 	    }
 	}
 	export class LanguageState {
@@ -122,6 +134,40 @@ export namespace main {
 	        this.installerKind = source["installerKind"];
 	    }
 	}
+	export class WebDAVConfig {
+	    endpoint: string;
+	    username: string;
+	    password: string;
+
+	    static createFrom(source: any = {}) {
+	        return new WebDAVConfig(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.endpoint = source["endpoint"];
+	        this.username = source["username"];
+	        this.password = source["password"];
+	    }
+	}
+	export class WebDAVSaveResult {
+	    path: string;
+	    name: string;
+	    etag: string;
+	    conflict: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new WebDAVSaveResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.name = source["name"];
+	        this.etag = source["etag"];
+	        this.conflict = source["conflict"];
+	    }
+	}
 	export class WorkspaceEntry {
 	    name: string;
 	    path: string;
@@ -142,6 +188,7 @@ export namespace main {
 	}
 	export class Workspace {
 	    id: string;
+	    provider: string;
 	    name: string;
 	    path: string;
 	    entries: WorkspaceEntry[];
@@ -154,6 +201,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.provider = source["provider"];
 	        this.name = source["name"];
 	        this.path = source["path"];
 	        this.entries = this.convertValues(source["entries"], WorkspaceEntry);

@@ -12,9 +12,15 @@ export function CheckForUpdates():Promise<main.UpdateInfo>;
 
 export function ClearRecentItems():Promise<void>;
 
+export function CloseWebDAVDocument(arg1:string,arg2:string):Promise<void>;
+
+export function CloseWebDAVWorkspace(arg1:string):Promise<void>;
+
 export function CloseWorkspace(arg1:string):Promise<void>;
 
 export function ConfirmQuit():Promise<void>;
+
+export function ConnectWebDAV(arg1:main.WebDAVConfig):Promise<main.Workspace>;
 
 export function DownloadUpdate(arg1:string):Promise<main.UpdateDownload>;
 
@@ -23,6 +29,8 @@ export function GetAppInfo():Promise<main.AppInfo>;
 export function GetLanguageSettings():Promise<main.LanguageState>;
 
 export function LaunchUpdateInstaller():Promise<void>;
+
+export function ListWebDAVDirectory(arg1:string,arg2:string):Promise<main.WorkspaceDirectory>;
 
 export function LoadInitialDocument(arg1:string):Promise<main.Document>;
 
@@ -40,7 +48,11 @@ export function OpenSourceRepository():Promise<void>;
 
 export function OpenUpdatePage():Promise<void>;
 
+export function OpenWebDAVFile(arg1:string,arg2:string):Promise<main.Document>;
+
 export function OpenWorkspaceFile(arg1:string,arg2:string):Promise<main.Document>;
+
+export function OverwriteWebDAVFile(arg1:string,arg2:string,arg3:string):Promise<main.WebDAVSaveResult>;
 
 export function ReadWorkspaceDirectory(arg1:string,arg2:string):Promise<main.WorkspaceDirectory>;
 
@@ -51,6 +63,8 @@ export function SaveExportFile(arg1:string,arg2:string,arg3:string,arg4:string):
 export function SaveFile(arg1:string,arg2:string):Promise<main.SaveResult>;
 
 export function SaveFileAs(arg1:string,arg2:string):Promise<main.SaveResult>;
+
+export function SaveWebDAVFile(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.WebDAVSaveResult>;
 
 export function SetLanguage(arg1:string,arg2:string):Promise<main.LanguageState>;
 

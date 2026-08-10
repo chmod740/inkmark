@@ -2,13 +2,15 @@
 
 [English](README_EN.md) · [下载最新版](https://github.com/chmod740/inkmark/releases/latest) · [问题反馈](https://github.com/chmod740/inkmark/issues)
 
-墨笺是一款面向 macOS 与 Windows 的本地 Markdown 编辑器，提供实时预览、原生菜单、多种排版主题和完整的文档导出能力。编辑、渲染和导出所需资源全部随应用提供；只有用户主动检查更新或访问外部链接时才需要网络。
+墨笺是一款面向 macOS 与 Windows 的 Markdown 编辑器，提供本地文件与 WebDAV 文档编辑、实时预览、原生菜单、多种排版主题和完整的文档导出能力。编辑、渲染和导出所需资源全部随应用提供；联网功能只会在用户主动连接 WebDAV、检查更新或访问外部链接时使用。
 
 ![墨笺分栏编辑与实时预览](docs/images/inkmark-editor.jpg)
 
 ## 主要功能
 
 - 打开、编辑、保存、另存为 `.md` 与 `.markdown` 文件
+- 通过“文件 → 连接 WebDAV”连接 HTTPS WebDAV 服务，在云端目录侧边栏中浏览、打开、编辑并保存 Markdown 文件；密码仅保留在当前应用进程内
+- 远端保存使用 WebDAV 写锁与 ETag 并发保护；文件被其他遵循 DAV 锁的客户端修改时，可选择重新加载、取消或明确覆盖，避免静默丢失更改
 - 可将文件夹作为工作区打开，通过侧边栏按需展开、刷新子目录并打开其中的 Markdown 文件；保存后目录树自动同步
 - “文件 → 最近”按最近使用顺序保留最多 10 个文件或文件夹，可直接再次打开或清除记录
 - 120ms 防抖实时渲染；Markdown、公式、代码高亮和图表在后台完整生成后一次更新预览，连续输入时页面不闪烁、不抖动
@@ -55,12 +57,14 @@ macOS 与 Windows 安装包目前未使用商业代码签名证书。首次运�
 ## 快速使用
 
 1. 直接启动墨笺，或在 Finder/资源管理器中使用墨笺打开 Markdown 文件。
-2. 可使用“文件 → 打开文件夹”显示目录侧边栏，也可继续按原方式打开单个文件。
-3. 在编辑区编写 Markdown，并在预览区查看实时结果。
-4. 使用“视图”菜单切换编辑布局和主题，使用“格式”菜单插入常用 Markdown 标记。
-5. 使用“文件”菜单保存文档，或导出 PDF、HTML、PNG、TXT 与 Word 兼容文档。
-6. 在“设置”中选择自动、简体中文或 English。
-7. 在“帮助 → 检查更新”查看新版本；可直接下载、校验并启动系统安装器，“关于墨笺”也会显示下载和安装状态。
+2. 可使用“文件 → 打开文件夹”显示本地目录侧边栏，或使用“文件 → 连接 WebDAV”连接云端目录。
+3. WebDAV 连接信息只用于当前会话，关闭应用后需要重新输入，密码不会进入设置或最近项目。
+   如果同一服务还提供绕过 WebDAV 锁的网页或 API 写入入口，需要服务端让所有写入路径共享原子条件更新或锁，才能获得跨入口并发保护。
+4. 在编辑区编写 Markdown，并在预览区查看实时结果。
+5. 使用“视图”菜单切换编辑布局和主题，使用“格式”菜单插入常用 Markdown 标记。
+6. 使用“文件”菜单保存文档，或导出 PDF、HTML、PNG、TXT 与 Word 兼容文档；WebDAV 文档的“另存为”会生成本地副本。
+7. 在“设置”中选择自动、简体中文或 English。
+8. 在“帮助 → 检查更新”查看新版本；可直接下载、校验并启动系统安装器，“关于墨笺”也会显示下载和安装状态。
 
 ## 离线与联网说明
 
@@ -68,6 +72,7 @@ macOS 与 Windows 安装包目前未使用商业代码签名证书。首次运�
 
 以下操作会按用户请求联网：
 
+- 连接 WebDAV、读取远端目录以及打开或保存远端 Markdown 文件
 - 检查新版本时访问 GitHub Releases API
 - 下载更新或打开源码仓库时访问 GitHub
 - 点击文档中的外部链接
@@ -107,11 +112,12 @@ pnpm --dir frontend test:preview
 pnpm --dir frontend test:update
 pnpm --dir frontend test:ui
 pnpm --dir frontend test:workspace
+pnpm --dir frontend test:webdav
 pnpm --dir frontend test:installer
 node scripts/verify-offline.mjs
 ```
 
-测试覆盖文件读写、受限工作区目录访问、侧边栏懒加载、最近项目、未保存文档切换与原生关闭守卫、语言设置、原生菜单、安全升级下载与安装编排、原子预览提交、版本比较与 Release 响应、导出结构、外部资源策略、同步滚动、大文档锚点上限和离线资源完整性。
+测试覆盖本地文件读写、WebDAV 认证与目录解析、路径编码、ETag 冲突、远端保存、受限工作区目录访问、侧边栏懒加载、最近项目、未保存文档切换与原生关闭守卫、语言设置、原生菜单、安全升级下载与安装编排、原子预览提交、版本比较与 Release 响应、导出结构、外部资源策略、同步滚动、大文档锚点上限和离线资源完整性。真实 WebDAV 回归测试仅在运行时提供 `INKMARK_WEBDAV_URL`、`INKMARK_WEBDAV_USERNAME` 与 `INKMARK_WEBDAV_PASSWORD` 时执行，并会清理临时资源。
 
 ## 项目结构
 
@@ -119,6 +125,7 @@ node scripts/verify-offline.mjs
 - `close_guard.go`：macOS 与 Windows 原生关闭前的保存守卫
 - `app_state.go`：语言设置、单实例和系统文件打开
 - `workspace.go`、`recent.go`：受限目录工作区、Markdown 文件枚举和最近项目
+- `webdav.go`、`webdav_app.go`：HTTPS WebDAV 协议、远端能力会话、目录浏览以及写锁与 ETag 安全保存
 - `update.go`、`update_download.go`、`update_launch.go`：版本检测、安装包选择、安全下载校验和平台安装器编排
 - `menu.go`：macOS 与 Windows 原生菜单
 - `frontend/src/App.vue`：编辑器、实时预览、设置和关于页面

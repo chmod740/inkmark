@@ -20,6 +20,7 @@ pnpm --dir frontend test:preview
 pnpm --dir frontend test:update
 pnpm --dir frontend test:ui
 pnpm --dir frontend test:workspace
+pnpm --dir frontend test:webdav
 pnpm --dir frontend test:installer
 node scripts/verify-offline.mjs
 

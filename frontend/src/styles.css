@@ -66,6 +66,11 @@ button { color: inherit; }
 .header-actions { display: flex; align-items: center; gap: 8px; }
 .offline-badge { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; color: #c9d9d5; font-size: 11px; white-space: nowrap; }
 .offline-badge i, .ready-light { width: 7px; height: 7px; border-radius: 50%; background: #8cc978; box-shadow: 0 0 7px rgba(140,201,120,.7); }
+.connection-badge { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: #c9d9d5; font-size: 11px; white-space: nowrap; }
+.connection-badge::before { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #8cc978; box-shadow: 0 0 7px rgba(140,201,120,.7); content: ""; }
+.connection-badge.webdav-connected { color: #e3f5f3; }
+.connection-badge.webdav-connected::before { background: #63d3d0; box-shadow: 0 0 8px rgba(99,211,208,.75); }
+.connection-badge.is-connecting::before { background: #e4bd68; box-shadow: 0 0 7px rgba(228,189,104,.65); animation: connection-pulse 1.15s ease-in-out infinite; }
 .settings-button {
   display: grid;
   width: 32px;
@@ -208,6 +213,47 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   background: #e0bb70;
   content: "";
 }
+.provider-webdav .workspace-root-icon.webdav {
+  width: 17px;
+  height: 9px;
+  margin-top: 4px;
+  border-color: #477b83;
+  border-radius: 6px;
+  background: #7db9c1;
+}
+.provider-webdav .workspace-root-icon.webdav::before {
+  left: 2px;
+  top: -6px;
+  width: 8px;
+  height: 8px;
+  border: 1px solid #477b83;
+  border-bottom: 0;
+  border-radius: 50% 50% 0 0;
+  background: #9ccbd0;
+}
+.provider-webdav .workspace-root-icon.webdav::after {
+  position: absolute;
+  right: 1px;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8cc4ca;
+  content: "";
+}
+.workspace-provider-icon {
+  display: inline-grid;
+  min-width: 20px;
+  height: 17px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #22666c;
+  border: 1px solid #8fb4b7;
+  border-radius: 8px;
+  background: #e3f0ef;
+  font-size: 11px;
+  line-height: 1;
+}
 .workspace-root-name {
   min-width: 0;
   overflow: hidden;
@@ -316,6 +362,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .workspace-truncated { padding-top: 8px; border-top: 1px solid #c2c8c5; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @keyframes workspace-spin { to { transform: rotate(360deg); } }
+@keyframes connection-pulse { 50% { opacity: .42; } }
 
 .editor-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-width: 0; min-height: 0; gap: 3px; padding: 3px; background: #858d8a; }
 .source-panel, .preview-panel { display: grid; grid-template-rows: 34px minmax(0, 1fr); min-width: 0; min-height: 0; border: 1px solid #66706c; background: var(--paper); box-shadow: inset 1px 1px #fff; }
@@ -356,6 +403,60 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 }
 .app-dialog h2 { margin: 0 0 18px; font: 700 22px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
 .app-dialog > p { color: var(--muted); line-height: 1.65; }
+.webdav-dialog { width: min(580px, calc(100vw - 48px)); }
+.connection-form { display: grid; gap: 16px; margin-top: 19px; }
+.connection-field { display: grid; gap: 6px; }
+.connection-field > label { color: var(--ink); font-size: 13px; font-weight: 700; }
+.connection-field input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  outline: 0;
+  background: var(--paper);
+}
+.connection-field input:focus { border-color: #2a777a; box-shadow: 0 0 0 3px rgba(42,119,122,.16); }
+.connection-field input[aria-invalid="true"] { border-color: #b54038; box-shadow: 0 0 0 3px rgba(181,64,56,.12); }
+.connection-field-hint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.connection-password-control { position: relative; }
+.connection-password-control input { padding-inline-end: 76px; }
+.connection-password-toggle {
+  position: absolute;
+  inset-block: 5px;
+  inset-inline-end: 5px;
+  padding: 0 9px;
+  color: #315f60;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+}
+.connection-password-toggle:hover, .connection-password-toggle:focus-visible { background: rgba(42,119,122,.11); }
+.connection-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding: 10px 12px;
+  color: #40524e;
+  border: 1px solid #aab7b3;
+  border-radius: 5px;
+  background: #eef2ef;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.connection-status::before { width: 8px; height: 8px; flex: 0 0 auto; margin-top: 5px; border-radius: 50%; background: #71807b; content: ""; }
+.connection-status.is-busy::before { border: 1px solid #777; border-right-color: transparent; background: transparent; animation: workspace-spin .8s linear infinite; }
+.connection-status.is-connected { color: #155e55; border-color: #82b8ac; background: #e9f5f1; }
+.connection-status.is-connected::before { background: #3c9987; }
+.connection-status.is-error { color: #912e29; border-color: #d6a29f; background: #fff2f1; overflow-wrap: anywhere; }
+.connection-status.is-error::before { background: #bd473f; }
+.remote-document-state { color: #216b70; }
+.remote-document-state::before { margin-inline-end: 5px; content: "☁"; }
+.webdav-conflict-message { padding: 11px 13px; color: #6b4a16; border: 1px solid #d0b16e; border-radius: 5px; background: #fff7df; line-height: 1.55; }
 .settings-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 18px; align-items: start; }
 .settings-row > label { padding-top: 8px; font-weight: 700; }
 .settings-row select { width: 100%; min-height: 38px; padding: 6px 34px 6px 10px; color: var(--ink); border: 1px solid var(--border); border-radius: 5px; background: var(--paper); }
@@ -473,6 +574,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 [data-color-scheme="dark"] .workspace-header-button { color: #afbfbb; }
 [data-color-scheme="dark"] .workspace-header-button:hover:not(:disabled),
 [data-color-scheme="dark"] .workspace-header-button:focus-visible { border-color: #536264; background: #344245; }
+[data-color-scheme="dark"] .workspace-provider-icon { color: #9cdadd; border-color: #426b6f; background: #213b3e; }
 [data-color-scheme="dark"] .workspace-tree-row:not(:disabled):hover { background: rgba(86, 164, 166, .12); }
 [data-color-scheme="dark"] .workspace-tree-row.is-active { border-color: #327a7e; background: linear-gradient(#28666b, #144c51); }
 [data-color-scheme="dark"] .workspace-disclosure { color: #91a39e; }
@@ -483,6 +585,12 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 [data-color-scheme="dark"] .panel-caption { color: #cfdbd7; border-color: #344447; background: linear-gradient(#253234, #1c2729); }
 [data-color-scheme="dark"] .panel-caption small { color: #8ca19c; }
 [data-color-scheme="dark"] .source-editor { color: #d5dfdc; background: #151d1f; }
+[data-color-scheme="dark"] .connection-field input { border-color: #52615d; background: #131c1e; }
+[data-color-scheme="dark"] .connection-password-toggle { color: #9dd3cf; }
+[data-color-scheme="dark"] .connection-status { color: #c4d0cc; border-color: #485a56; background: #1a2627; }
+[data-color-scheme="dark"] .connection-status.is-connected { color: #a6ddd2; border-color: #376d64; background: #17302c; }
+[data-color-scheme="dark"] .connection-status.is-error { color: #f0aaa5; border-color: #704440; background: #321e1e; }
+[data-color-scheme="dark"] .webdav-conflict-message { color: #e6c77f; border-color: #705d34; background: #302919; }
 .theme-dark .preview-viewport { background: #0d1117; }
 .theme-dark .markdown-body { color: #c9d1d9; background: #0d1117; }
 .theme-dark .markdown-body h1, .theme-dark .markdown-body h2, .theme-dark .markdown-body h3, .theme-dark .markdown-body h4, .theme-dark .markdown-body h5 { color: #f0f6fc; }

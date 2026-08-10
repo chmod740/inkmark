@@ -22,12 +22,24 @@ export function ClearRecentItems() {
   return window['go']['main']['App']['ClearRecentItems']();
 }
 
+export function CloseWebDAVDocument(arg1, arg2) {
+  return window['go']['main']['App']['CloseWebDAVDocument'](arg1, arg2);
+}
+
+export function CloseWebDAVWorkspace(arg1) {
+  return window['go']['main']['App']['CloseWebDAVWorkspace'](arg1);
+}
+
 export function CloseWorkspace(arg1) {
   return window['go']['main']['App']['CloseWorkspace'](arg1);
 }
 
 export function ConfirmQuit() {
   return window['go']['main']['App']['ConfirmQuit']();
+}
+
+export function ConnectWebDAV(arg1) {
+  return window['go']['main']['App']['ConnectWebDAV'](arg1);
 }
 
 export function DownloadUpdate(arg1) {
@@ -44,6 +56,10 @@ export function GetLanguageSettings() {
 
 export function LaunchUpdateInstaller() {
   return window['go']['main']['App']['LaunchUpdateInstaller']();
+}
+
+export function ListWebDAVDirectory(arg1, arg2) {
+  return window['go']['main']['App']['ListWebDAVDirectory'](arg1, arg2);
 }
 
 export function LoadInitialDocument(arg1) {
@@ -78,8 +94,16 @@ export function OpenUpdatePage() {
   return window['go']['main']['App']['OpenUpdatePage']();
 }
 
+export function OpenWebDAVFile(arg1, arg2) {
+  return window['go']['main']['App']['OpenWebDAVFile'](arg1, arg2);
+}
+
 export function OpenWorkspaceFile(arg1, arg2) {
   return window['go']['main']['App']['OpenWorkspaceFile'](arg1, arg2);
+}
+
+export function OverwriteWebDAVFile(arg1, arg2, arg3) {
+  return window['go']['main']['App']['OverwriteWebDAVFile'](arg1, arg2, arg3);
 }
 
 export function ReadWorkspaceDirectory(arg1, arg2) {
@@ -100,6 +124,10 @@ export function SaveFile(arg1, arg2) {
 
 export function SaveFileAs(arg1, arg2) {
   return window['go']['main']['App']['SaveFileAs'](arg1, arg2);
+}
+
+export function SaveWebDAVFile(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveWebDAVFile'](arg1, arg2, arg3, arg4);
 }
 
 export function SetLanguage(arg1, arg2) {

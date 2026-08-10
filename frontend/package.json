@@ -15,6 +15,7 @@
     "test:preview": "node --experimental-strip-types --test ../scripts/test-preview-render.mjs",
     "test:update": "node --experimental-strip-types --test ../scripts/test-update-workflow.mjs",
     "test:workspace": "node --experimental-strip-types --test ../scripts/test-workspace-tree.mjs",
+    "test:webdav": "node --experimental-strip-types --test ../scripts/test-webdav-ui.mjs",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {

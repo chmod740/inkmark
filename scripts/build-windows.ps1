@@ -53,6 +53,8 @@ pnpm --dir frontend test:ui
 Assert-LastExitCode "Run UI state tests"
 pnpm --dir frontend test:workspace
 Assert-LastExitCode "Run workspace tree tests"
+pnpm --dir frontend test:webdav
+Assert-LastExitCode "Run WebDAV UI tests"
 pnpm --dir frontend test:installer
 Assert-LastExitCode "Verify Windows installer configuration"
 node scripts/verify-offline.mjs

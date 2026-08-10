@@ -55,6 +55,8 @@ import {
   normalizeWorkspace,
   normalizeWorkspaceDirectory,
   retainExistingWorkspaceDirectories,
+  isActiveWorkspaceFile,
+  localWorkspaceRelativePath,
   sameWorkspaceFile,
   workspaceBackendDirectoryPath,
   workspaceDirectoryExists,
@@ -63,6 +65,7 @@ import {
   type WorkspaceChildren,
   type WorkspaceData,
   type WorkspaceEntryData,
+  type WorkspaceProvider,
 } from './workspace-tree'
 import {
   ActivateRecentDocument,
@@ -70,7 +73,10 @@ import {
   CancelQuitRequest,
   CheckForUpdates,
   ClearRecentItems,
+  CloseWebDAVDocument,
   CloseWorkspace,
+  CloseWebDAVWorkspace,
+  ConnectWebDAV,
   ConfirmQuit,
   DownloadUpdate,
   GetAppInfo,
@@ -79,17 +85,21 @@ import {
   OpenDirectory,
   OpenExternal,
   OpenFile,
+  OverwriteWebDAVFile,
   OpenRecentDirectory,
   OpenRecentFile,
   OpenSourceRepository,
   OpenUpdatePage,
+  OpenWebDAVFile,
   OpenWorkspaceFile,
+  ListWebDAVDirectory,
   ReadWorkspaceDirectory,
   LaunchUpdateInstaller,
   RenderingTestDocument as LoadRenderingTestDocument,
   SaveExportFile,
   SaveFile,
   SaveFileAs,
+  SaveWebDAVFile,
   SetLanguage,
   SetWindowTitle,
   UpdateMenuState,
@@ -116,6 +126,19 @@ interface DocumentData {
   welcome?: boolean
   builtIn?: string
   activationId?: string
+  storageKind?: 'local' | 'webdav' | 'builtin'
+  displayLocation?: string
+  workspacePath?: string
+  workspaceId?: string
+  remoteDocumentId?: string
+  etag?: string
+}
+
+interface WebDAVSaveResultData {
+  path: string
+  name: string
+  etag: string
+  conflict: boolean
 }
 
 interface RecentOpenEventData {
@@ -175,7 +198,14 @@ interface ExportSnapshot {
 
 const source = ref('')
 const savedSource = ref('')
-const currentPath = ref('')
+const localDocumentPath = ref('')
+const documentLocation = ref('')
+const documentStorageKind = ref<'local' | 'webdav' | 'builtin'>('builtin')
+const documentWorkspaceId = ref('')
+const currentWorkspacePath = ref('')
+const remoteDocumentId = ref('')
+const remoteWorkspaceId = ref('')
+const remoteDocumentETag = ref('')
 const fileName = ref('README.md')
 const theme = ref<Theme>(readPreference<Theme>('inkmark-theme', 'github'))
 const viewMode = ref<ViewMode>(readPreference<ViewMode>('inkmark-view', 'split'))
@@ -189,7 +219,7 @@ const preview = ref<HTMLElement | null>(null)
 const previewPane = ref<HTMLElement | null>(null)
 const syncScroll = ref(true)
 const builtInDocument = ref<BuiltInDocumentKind | null>(null)
-const activeDialog = ref<'settings' | 'shortcuts' | 'about' | null>(null)
+const activeDialog = ref<'settings' | 'shortcuts' | 'about' | 'webdav' | null>(null)
 const unsavedTransition = ref<DocumentTransition | null>(null)
 const resolvingUnsavedPrompt = ref(false)
 const applicationInfo = ref<ApplicationInfoData>({ version: '', author: '', repositoryURL: '' })
@@ -203,6 +233,14 @@ const expandedWorkspaceDirectories = ref<ReadonlySet<string>>(new Set())
 const loadingWorkspaceDirectories = ref<ReadonlySet<string>>(new Set())
 const truncatedWorkspaceDirectories = ref<ReadonlySet<string>>(new Set())
 const workspaceRefreshing = ref(false)
+const webDAVBaseURL = ref('')
+const webDAVUsername = ref('')
+const webDAVPassword = ref('')
+const showWebDAVPassword = ref(false)
+const webDAVConnecting = ref(false)
+const webDAVConnectionError = ref('')
+const webDAVConflictOpen = ref(false)
+const webDAVConflictBusy = ref(false)
 
 let renderTimer: number | undefined
 let quitting = false
@@ -230,6 +268,12 @@ const workspaceRows = computed(() => flattenWorkspaceTree(
   expandedWorkspaceDirectories.value,
   loadingWorkspaceDirectories.value,
 ))
+const currentWorkspaceProvider = computed<WorkspaceProvider | null>(() => {
+  if (!documentWorkspaceId.value || !currentWorkspacePath.value) return null
+  if (documentStorageKind.value === 'webdav') return 'webdav'
+  if (documentStorageKind.value === 'local') return 'local'
+  return null
+})
 const workspaceLabels = computed(() => ({
   title: t('workspace.title'),
   close: t('workspace.close'),
@@ -242,6 +286,7 @@ const workspaceLabels = computed(() => ({
   expandDirectory: t('workspace.expandDirectory'),
   collapseDirectory: t('workspace.collapseDirectory'),
   openFile: t('workspace.openFile'),
+  providerWebDAV: t('workspace.providerWebDAV'),
 }))
 
 const markdown = new MarkdownIt({
@@ -283,7 +328,7 @@ const lineCount = computed(() => source.value ? source.value.split(/\r?\n/).leng
 const characterCount = computed(() => Array.from(source.value).length)
 const documentHeaderState = computed(() => resolveDocumentHeaderState(
   dirty.value,
-  currentPath.value,
+  documentLocation.value,
   builtInDocument.value,
 ))
 const documentStateLabel = computed(() => {
@@ -293,10 +338,17 @@ const documentStateLabel = computed(() => {
   return t('document.unsaved')
 })
 const locationLabel = computed(() => {
-  if (documentHeaderState.value.location === 'path') return currentPath.value
+  if (documentHeaderState.value.location === 'path') return documentLocation.value
   if (documentHeaderState.value.location === 'welcome') return t('document.welcomeLocation')
   if (documentHeaderState.value.location === 'render-test') return t('document.renderTestLocation')
   return t('document.unsavedLocation')
+})
+const connectionStatusLabel = computed(() => {
+  if (webDAVConnecting.value) return t('webdav.connecting')
+  if (workspace.value?.provider === 'webdav' || documentStorageKind.value === 'webdav') {
+    return t('webdav.connectedBadge')
+  }
+  return t('app.localMode')
 })
 const unsavedPromptMessage = computed(() => {
   if (unsavedTransition.value === 'new') {
@@ -391,10 +443,12 @@ function readPreference<T extends string>(key: string, fallback: T): T {
 }
 
 function setDocument(document: DocumentData, status: TranslationKey = 'document.opened') {
+  const previousRemoteWorkspaceId = remoteWorkspaceId.value
+  const previousRemoteDocumentId = remoteDocumentId.value
+  webDAVConflictOpen.value = false
   scrollSync.reset()
   editorScrollAnchors = []
   previewScrollAnchors = []
-  currentPath.value = document.path || ''
   fileName.value = document.name || t('document.untitledFilename')
   source.value = document.content || ''
   savedSource.value = source.value
@@ -403,7 +457,43 @@ function setDocument(document: DocumentData, status: TranslationKey = 'document.
     : document.builtIn === 'welcome' || document.welcome
       ? 'welcome'
       : null
+  documentStorageKind.value = document.storageKind === 'webdav'
+    ? 'webdav'
+    : builtInDocument.value
+      ? 'builtin'
+      : 'local'
+  localDocumentPath.value = documentStorageKind.value === 'local' ? document.path || '' : ''
+  documentLocation.value = document.displayLocation
+    || (documentStorageKind.value === 'local' ? localDocumentPath.value : '')
+  const inferredLocalWorkspacePath = (
+    documentStorageKind.value === 'local' && workspace.value?.provider === 'local'
+      ? localWorkspaceRelativePath(workspace.value.path, localDocumentPath.value)
+      : ''
+  )
+  currentWorkspacePath.value = document.workspacePath || inferredLocalWorkspacePath
+  remoteDocumentId.value = documentStorageKind.value === 'webdav' ? document.remoteDocumentId || '' : ''
+  remoteWorkspaceId.value = documentStorageKind.value === 'webdav'
+    ? document.workspaceId || (workspace.value?.provider === 'webdav' ? workspace.value.id : '')
+    : ''
+  documentWorkspaceId.value = document.workspaceId
+    || (inferredLocalWorkspacePath && workspace.value?.provider === 'local' ? workspace.value.id : '')
+    || remoteWorkspaceId.value
+  remoteDocumentETag.value = documentStorageKind.value === 'webdav' ? document.etag || '' : ''
   renderState.value = t(status)
+  if (
+    previousRemoteWorkspaceId
+    && previousRemoteDocumentId
+    && previousRemoteDocumentId !== remoteDocumentId.value
+  ) {
+    void CloseWebDAVDocument(previousRemoteWorkspaceId, previousRemoteDocumentId).catch(() => {})
+  }
+  if (
+    previousRemoteWorkspaceId
+    && previousRemoteWorkspaceId !== remoteWorkspaceId.value
+    && workspace.value?.id !== previousRemoteWorkspaceId
+  ) {
+    void CloseWebDAVWorkspace(previousRemoteWorkspaceId).catch(() => {})
+  }
   void nextTick(async () => {
     if (editor.value) editor.value.scrollTop = 0
     if (previewPane.value) previewPane.value.scrollTop = 0
@@ -414,27 +504,57 @@ function setDocument(document: DocumentData, status: TranslationKey = 'document.
 function setWorkspace(value: unknown) {
   const nextWorkspace = normalizeWorkspace(value)
   if (!nextWorkspace) return false
+  const previousWorkspace = workspace.value
   workspace.value = nextWorkspace
+  if (nextWorkspace.provider === 'local' && documentStorageKind.value === 'local') {
+    const relativeDocumentPath = localWorkspaceRelativePath(nextWorkspace.path, localDocumentPath.value)
+    if (relativeDocumentPath) {
+      documentWorkspaceId.value = nextWorkspace.id
+      currentWorkspacePath.value = relativeDocumentPath
+    }
+  }
   workspaceChildren.value = { [workspaceRootKey]: nextWorkspace.entries }
   expandedWorkspaceDirectories.value = new Set()
   loadingWorkspaceDirectories.value = new Set()
   truncatedWorkspaceDirectories.value = new Set()
   workspaceRefreshQueued = false
   renderState.value = t('workspace.opened', { name: nextWorkspace.name })
+  if (previousWorkspace && previousWorkspace.id !== nextWorkspace.id) {
+    if (previousWorkspace.provider === 'webdav') {
+      if (remoteWorkspaceId.value !== previousWorkspace.id) {
+        void CloseWebDAVWorkspace(previousWorkspace.id).catch(() => {})
+      }
+    } else {
+      void CloseWorkspace(previousWorkspace.id).catch(() => {})
+    }
+  }
   void nextTick(scheduleLayoutReconciliation)
   return true
 }
 
 function closeWorkspace() {
-  const workspaceID = workspace.value?.id
+  const activeWorkspace = workspace.value
   workspace.value = null
   workspaceChildren.value = {}
   expandedWorkspaceDirectories.value = new Set()
   loadingWorkspaceDirectories.value = new Set()
   truncatedWorkspaceDirectories.value = new Set()
   workspaceRefreshQueued = false
-  if (workspaceID) void CloseWorkspace(workspaceID).catch(() => {})
+  if (activeWorkspace?.provider === 'webdav') {
+    if (remoteWorkspaceId.value !== activeWorkspace.id) {
+      void CloseWebDAVWorkspace(activeWorkspace.id).catch(() => {})
+    }
+  } else if (activeWorkspace?.id) {
+    void CloseWorkspace(activeWorkspace.id).catch(() => {})
+  }
   void nextTick(scheduleLayoutReconciliation)
+}
+
+async function readActiveWorkspaceDirectory(activeWorkspace: WorkspaceData, relativePath: string) {
+  if (activeWorkspace.provider === 'webdav') {
+    return ListWebDAVDirectory(activeWorkspace.id, relativePath)
+  }
+  return ReadWorkspaceDirectory(activeWorkspace.id, relativePath)
 }
 
 function workspaceOpenMustWait() {
@@ -483,7 +603,7 @@ async function refreshWorkspace({ silent = false }: { silent?: boolean } = {}) {
   let partial = false
   try {
     const rootResult = normalizeWorkspaceDirectory(
-      await ReadWorkspaceDirectory(activeWorkspace.id, workspaceBackendDirectoryPath(workspaceRootKey)),
+      await readActiveWorkspaceDirectory(activeWorkspace, workspaceBackendDirectoryPath(workspaceRootKey)),
     )
     if (workspace.value?.id !== activeWorkspace.id) return false
     nextChildren[workspaceRootKey] = rootResult.entries
@@ -493,8 +613,8 @@ async function refreshWorkspace({ silent = false }: { silent?: boolean } = {}) {
       if (!workspaceDirectoryExists(nextChildren, directoryPath)) continue
       try {
         const directoryResult = normalizeWorkspaceDirectory(
-          await ReadWorkspaceDirectory(
-            activeWorkspace.id,
+          await readActiveWorkspaceDirectory(
+            activeWorkspace,
             workspaceBackendDirectoryPath(directoryPath),
           ),
         )
@@ -597,6 +717,60 @@ async function openDocument() {
   })
 }
 
+function clearWebDAVConnectionForm(clearEndpoint = true) {
+  if (clearEndpoint) webDAVBaseURL.value = ''
+  webDAVUsername.value = ''
+  webDAVPassword.value = ''
+  showWebDAVPassword.value = false
+  webDAVConnectionError.value = ''
+}
+
+function dismissActiveDialog() {
+  if (activeDialog.value === 'webdav' && webDAVConnecting.value) return
+  activeDialog.value = null
+}
+
+function dismissWebDAVConflict() {
+  if (webDAVConflictBusy.value) return
+  webDAVConflictOpen.value = false
+}
+
+function showWebDAVConnectionDialog() {
+  if (busy.value || webDAVConnecting.value) return
+  clearWebDAVConnectionForm()
+  activeDialog.value = 'webdav'
+}
+
+async function connectWebDAV() {
+  if (busy.value || webDAVConnecting.value) return
+  const endpoint = webDAVBaseURL.value.trim()
+  const username = webDAVUsername.value.trim()
+  const password = webDAVPassword.value
+  if (!endpoint) {
+    webDAVConnectionError.value = t('webdav.endpointRequired')
+    return
+  }
+
+  webDAVConnecting.value = true
+  busy.value = true
+  webDAVConnectionError.value = ''
+  renderState.value = t('webdav.connecting')
+  try {
+    const openedWorkspace = await ConnectWebDAV({ endpoint, username, password })
+    if (!setWorkspace(openedWorkspace)) throw new Error(t('webdav.invalidResponse'))
+    renderState.value = t('webdav.connected', { name: workspace.value?.name || 'WebDAV' })
+    activeDialog.value = null
+  } catch (error) {
+    const message = localizedErrorMessage(error)
+    webDAVConnectionError.value = message
+    renderState.value = t('webdav.connectionFailed', { message })
+  } finally {
+    webDAVPassword.value = ''
+    webDAVConnecting.value = false
+    busy.value = false
+  }
+}
+
 async function openDirectory() {
   if (workspaceOpenMustWait() || busy.value) {
     deferWorkspaceOpen({ kind: 'picker' })
@@ -650,7 +824,7 @@ async function toggleWorkspaceDirectory(entry: WorkspaceEntryData) {
   loadingWorkspaceDirectories.value = loading
   try {
     const result = normalizeWorkspaceDirectory(
-      await ReadWorkspaceDirectory(activeWorkspace.id, entry.path),
+      await readActiveWorkspaceDirectory(activeWorkspace, entry.path),
     )
     if (workspace.value?.id !== activeWorkspace.id) return
     workspaceChildren.value = {
@@ -680,11 +854,21 @@ async function toggleWorkspaceDirectory(entry: WorkspaceEntryData) {
 async function openWorkspaceDocument(entry: WorkspaceEntryData) {
   const activeWorkspace = workspace.value
   if (!activeWorkspace || entry.kind !== 'markdown') return
-  if (sameWorkspaceFile(entry.absolutePath, currentPath.value)) return
+  const currentProvider = documentStorageKind.value === 'webdav' ? 'webdav' : 'local'
+  if (isActiveWorkspaceFile(
+    activeWorkspace.provider,
+    activeWorkspace.id,
+    entry.path,
+    currentProvider,
+    documentWorkspaceId.value,
+    currentWorkspacePath.value,
+  )) return
   await performDocumentTransition('open', async () => {
     try {
       busy.value = true
-      const document = await OpenWorkspaceFile(activeWorkspace.id, entry.path) as DocumentData
+      const document = activeWorkspace.provider === 'webdav'
+        ? await OpenWebDAVFile(activeWorkspace.id, entry.path) as DocumentData
+        : await OpenWorkspaceFile(activeWorkspace.id, entry.path) as DocumentData
       if (document?.name) setDocument(document)
     } catch (error) {
       showError(error)
@@ -732,9 +916,50 @@ async function clearRecentItems() {
 async function saveDocument(): Promise<boolean> {
   try {
     busy.value = true
-    const result = await SaveFile(currentPath.value, source.value)
+    if (documentStorageKind.value === 'webdav') {
+      if (!remoteWorkspaceId.value || !remoteDocumentId.value) {
+        throw new Error(t('webdav.notFound'))
+      }
+      renderState.value = t('webdav.savingRemotely')
+      const remoteResult = await SaveWebDAVFile(
+        remoteWorkspaceId.value,
+        remoteDocumentId.value,
+        source.value,
+        remoteDocumentETag.value,
+      ) as WebDAVSaveResultData
+      if (remoteResult?.conflict) {
+        renderState.value = t('webdav.conflictTitle')
+        webDAVConflictOpen.value = true
+        return false
+      }
+      remoteDocumentETag.value = remoteResult?.etag || remoteDocumentETag.value
+      savedSource.value = source.value
+      renderState.value = t('webdav.savedRemotely', { name: fileName.value })
+      if (workspace.value?.id === remoteWorkspaceId.value) void refreshWorkspace({ silent: true })
+      return true
+    }
+
+    const previousLocalPath = localDocumentPath.value
+    const previousDocumentWorkspaceId = documentWorkspaceId.value
+    const previousWorkspacePath = currentWorkspacePath.value
+    const result = await SaveFile(previousLocalPath, source.value)
     if (result?.path) {
-      currentPath.value = result.path
+      localDocumentPath.value = result.path
+      documentLocation.value = result.path
+      const activeWorkspacePath = workspace.value?.provider === 'local'
+        ? localWorkspaceRelativePath(workspace.value.path, result.path)
+        : ''
+      if (activeWorkspacePath && workspace.value?.provider === 'local') {
+        documentWorkspaceId.value = workspace.value.id
+        currentWorkspacePath.value = activeWorkspacePath
+      } else if (previousWorkspacePath && sameWorkspaceFile(previousLocalPath, result.path)) {
+        documentWorkspaceId.value = previousDocumentWorkspaceId
+        currentWorkspacePath.value = previousWorkspacePath
+      } else {
+        documentWorkspaceId.value = ''
+        currentWorkspacePath.value = ''
+      }
+      documentStorageKind.value = 'local'
       fileName.value = result.name
       savedSource.value = source.value
       builtInDocument.value = null
@@ -751,16 +976,78 @@ async function saveDocument(): Promise<boolean> {
   }
 }
 
+async function overwriteConflictingWebDAVDocument() {
+  if (webDAVConflictBusy.value || !remoteWorkspaceId.value || !remoteDocumentId.value) return
+  webDAVConflictBusy.value = true
+  busy.value = true
+  try {
+    const result = await OverwriteWebDAVFile(
+      remoteWorkspaceId.value,
+      remoteDocumentId.value,
+      source.value,
+    ) as WebDAVSaveResultData
+    if (result?.conflict) throw new Error(t('webdav.conflictMessage', { name: fileName.value }))
+    remoteDocumentETag.value = result?.etag || ''
+    savedSource.value = source.value
+    webDAVConflictOpen.value = false
+    renderState.value = t('webdav.savedRemotely', { name: fileName.value })
+    if (workspace.value?.id === remoteWorkspaceId.value) void refreshWorkspace({ silent: true })
+  } catch (error) {
+    showError(error)
+  } finally {
+    busy.value = false
+    webDAVConflictBusy.value = false
+  }
+}
+
+async function reloadConflictingWebDAVDocument() {
+  if (webDAVConflictBusy.value || !remoteWorkspaceId.value || !currentWorkspacePath.value) return
+  webDAVConflictBusy.value = true
+  busy.value = true
+  try {
+    const document = await OpenWebDAVFile(remoteWorkspaceId.value, currentWorkspacePath.value) as DocumentData
+    if (!document?.name) throw new Error(t('webdav.invalidResponse'))
+    webDAVConflictOpen.value = false
+    setDocument(document)
+  } catch (error) {
+    showError(error)
+  } finally {
+    busy.value = false
+    webDAVConflictBusy.value = false
+  }
+}
+
 async function saveDocumentAs() {
   try {
     busy.value = true
-    const result = await SaveFileAs(currentPath.value, source.value)
+    const previousRemoteWorkspaceId = remoteWorkspaceId.value
+    const previousRemoteDocumentId = remoteDocumentId.value
+    const saveAsHint = documentStorageKind.value === 'webdav' ? fileName.value : localDocumentPath.value
+    const result = await SaveFileAs(saveAsHint, source.value)
     if (result?.path) {
-      currentPath.value = result.path
+      localDocumentPath.value = result.path
+      documentLocation.value = result.path
+      const activeWorkspacePath = workspace.value?.provider === 'local'
+        ? localWorkspaceRelativePath(workspace.value.path, result.path)
+        : ''
+      documentWorkspaceId.value = activeWorkspacePath && workspace.value?.provider === 'local'
+        ? workspace.value.id
+        : ''
+      currentWorkspacePath.value = activeWorkspacePath
+      documentStorageKind.value = 'local'
+      remoteDocumentId.value = ''
+      remoteWorkspaceId.value = ''
+      remoteDocumentETag.value = ''
       fileName.value = result.name
       savedSource.value = source.value
       builtInDocument.value = null
       renderState.value = t('document.savedAsLocally')
+      if (previousRemoteWorkspaceId && previousRemoteDocumentId) {
+        void CloseWebDAVDocument(previousRemoteWorkspaceId, previousRemoteDocumentId).catch(() => {})
+      }
+      if (previousRemoteWorkspaceId && workspace.value?.id !== previousRemoteWorkspaceId) {
+        void CloseWebDAVWorkspace(previousRemoteWorkspaceId).catch(() => {})
+      }
       if (workspace.value) void refreshWorkspace({ silent: true })
     }
   } catch (error) {
@@ -775,7 +1062,7 @@ async function exportDocument(format: ExportFormat) {
   const snapshot: ExportSnapshot = {
     source: source.value,
     theme: theme.value,
-    path: currentPath.value,
+    path: documentStorageKind.value === 'local' ? localDocumentPath.value : '',
     name: fileName.value,
     title: exportDocumentTitle(fileName.value),
   }
@@ -836,7 +1123,7 @@ function assertExportSnapshot(snapshot: ExportSnapshot) {
   if (
     source.value !== snapshot.source
     || theme.value !== snapshot.theme
-    || currentPath.value !== snapshot.path
+    || (documentStorageKind.value === 'local' ? localDocumentPath.value : '') !== snapshot.path
     || fileName.value !== snapshot.name
   ) {
     throw new Error(t('error.documentChangedDuringExport'))
@@ -1397,6 +1684,7 @@ function handleMenuAction(action: string) {
   if (busy.value) return
   if (action === 'new') void newDocument()
   else if (action === 'open') void openDocument()
+  else if (action === 'connect-webdav') showWebDAVConnectionDialog()
   else if (action === 'clear-recent') void clearRecentItems()
   else if (action === 'save') void saveDocument()
   else if (action === 'save-as') void saveDocumentAs()
@@ -1869,8 +2157,13 @@ function onKeydown(event: KeyboardEvent) {
     answerUnsavedPrompt('cancel')
     return
   }
+  if (event.key === 'Escape' && webDAVConflictOpen.value) {
+    event.preventDefault()
+    dismissWebDAVConflict()
+    return
+  }
   if (event.key === 'Escape' && activeDialog.value) {
-    activeDialog.value = null
+    dismissActiveDialog()
     return
   }
   if (!(event.metaKey || event.ctrlKey)) return
@@ -1897,8 +2190,31 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+function localizedErrorMessage(error: unknown) {
+  const message = errorMessage(error)
+  const match = message.match(/^\[INKMARK_WEBDAV:([a-z_]+)\]/)
+  if (!match) return message
+  const translations: Partial<Record<string, TranslationKey>> = {
+    authentication: 'webdav.authenticationFailed',
+    permission: 'webdav.permissionDenied',
+    not_found: 'webdav.notFound',
+    conflict: 'webdav.conflictTitle',
+    locked: 'webdav.locked',
+    unsupported: 'webdav.unsupported',
+    too_large: 'webdav.tooLarge',
+    rate_limited: 'webdav.rateLimited',
+    timeout: 'webdav.timeout',
+    canceled: 'webdav.canceled',
+    network: 'webdav.networkError',
+    server: 'webdav.serverError',
+    protocol: 'webdav.invalidResponse',
+    invalid_input: 'webdav.invalidRequest',
+  }
+  return t(translations[match[1]] || 'webdav.operationFailed')
+}
+
 function showError(error: unknown) {
-  renderState.value = errorMessage(error)
+  renderState.value = localizedErrorMessage(error)
 }
 
 watch(source, () => scheduleRender())
@@ -1908,6 +2224,12 @@ watch(syncScroll, () => {
 })
 watch(busy, (isBusy) => {
   if (!isBusy) void drainPendingWorkspaceOpen()
+})
+watch(activeDialog, (nextDialog, previousDialog) => {
+  if (previousDialog === 'webdav' && nextDialog !== 'webdav') clearWebDAVConnectionForm()
+})
+watch([webDAVBaseURL, webDAVUsername, webDAVPassword], () => {
+  if (activeDialog.value === 'webdav' && !webDAVConnecting.value) webDAVConnectionError.value = ''
 })
 watch([fileName, dirty], () => { void SetWindowTitle(fileName.value, dirty.value) })
 
@@ -1941,6 +2263,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  clearWebDAVConnectionForm()
   window.clearTimeout(renderTimer)
   previewCommit.invalidate()
   if (updateState.value === 'downloading') void CancelUpdateDownload()
@@ -1975,13 +2298,22 @@ onBeforeUnmount(() => {
         <div class="document-title-row">
           <span v-if="dirty" class="dirty-dot" :title="t('document.dirtyTitle')"></span>
           <h1>{{ fileName }}</h1>
-          <span class="document-state">{{ documentStateLabel }}</span>
+          <span
+            class="document-state"
+            :class="{ 'remote-document-state': documentStorageKind === 'webdav' }"
+          >{{ documentStateLabel }}</span>
         </div>
         <p :title="locationLabel">{{ locationLabel }}</p>
       </div>
 
       <div class="header-actions">
-        <span class="offline-badge"><i></i> {{ t('app.offline') }}</span>
+        <span
+          class="connection-badge"
+          :class="{
+            'webdav-connected': workspace?.provider === 'webdav' || documentStorageKind === 'webdav',
+            'is-connecting': webDAVConnecting,
+          }"
+        >{{ connectionStatusLabel }}</span>
         <button type="button" class="settings-button" :title="t('settings.title')" @click="activeDialog = 'settings'" aria-haspopup="dialog">⚙</button>
       </div>
     </header>
@@ -2042,7 +2374,9 @@ onBeforeUnmount(() => {
         v-if="workspace"
         :workspace="workspace"
         :rows="workspaceRows"
-        :current-path="currentPath"
+        :current-provider="currentWorkspaceProvider"
+        :current-workspace-id="documentWorkspaceId"
+        :current-workspace-path="currentWorkspacePath"
         :labels="workspaceLabels"
         :disabled="busy || workspaceRefreshing"
         :refreshing="workspaceRefreshing"
@@ -2139,8 +2473,50 @@ onBeforeUnmount(() => {
       </section>
     </div>
 
-    <div v-if="activeDialog" class="modal-backdrop" @click.self="activeDialog = null">
-      <section class="app-dialog" role="dialog" aria-modal="true" :aria-labelledby="`dialog-${activeDialog}`">
+    <div v-if="webDAVConflictOpen" class="modal-backdrop" @click.self="dismissWebDAVConflict">
+      <section
+        class="app-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="dialog-webdav-conflict"
+        aria-describedby="dialog-webdav-conflict-message"
+      >
+        <h2 id="dialog-webdav-conflict">{{ t('webdav.conflictTitle') }}</h2>
+        <p id="dialog-webdav-conflict-message" class="webdav-conflict-message">
+          {{ t('webdav.conflictMessage', { name: fileName }) }}
+        </p>
+        <footer class="dialog-actions">
+          <button
+            type="button"
+            class="button secondary"
+            :disabled="webDAVConflictBusy"
+            @click="dismissWebDAVConflict"
+          >{{ t('webdav.conflictCancel') }}</button>
+          <span class="status-spacer"></span>
+          <button
+            type="button"
+            class="button secondary"
+            :disabled="webDAVConflictBusy"
+            @click="reloadConflictingWebDAVDocument"
+          >{{ t('webdav.conflictReload') }}</button>
+          <button
+            type="button"
+            class="button primary"
+            :disabled="webDAVConflictBusy"
+            @click="overwriteConflictingWebDAVDocument"
+          >{{ t('webdav.conflictOverwrite') }}</button>
+        </footer>
+      </section>
+    </div>
+
+    <div v-if="activeDialog" class="modal-backdrop" @click.self="dismissActiveDialog">
+      <section
+        class="app-dialog"
+        :class="{ 'webdav-dialog': activeDialog === 'webdav' }"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="`dialog-${activeDialog}`"
+      >
         <template v-if="activeDialog === 'settings'">
           <h2 id="dialog-settings">{{ t('settings.title') }}</h2>
           <div class="settings-row">
@@ -2157,6 +2533,73 @@ onBeforeUnmount(() => {
               </p>
             </div>
           </div>
+        </template>
+        <template v-else-if="activeDialog === 'webdav'">
+          <h2 id="dialog-webdav">{{ t('webdav.title') }}</h2>
+          <p>{{ t('webdav.description') }}</p>
+          <form
+            id="webdav-connection-form"
+            class="connection-form"
+            autocomplete="off"
+            @submit.prevent="connectWebDAV"
+          >
+            <div class="connection-field">
+              <label for="webdav-server-url">{{ t('webdav.serverURL') }}</label>
+              <input
+                id="webdav-server-url"
+                v-model="webDAVBaseURL"
+                type="url"
+                inputmode="url"
+                spellcheck="false"
+                autocomplete="off"
+                :placeholder="t('webdav.serverURLPlaceholder')"
+                :aria-invalid="Boolean(webDAVConnectionError)"
+                :disabled="webDAVConnecting"
+                autofocus
+              />
+            </div>
+            <div class="connection-field">
+              <label for="webdav-username">{{ t('webdav.username') }}</label>
+              <input
+                id="webdav-username"
+                v-model="webDAVUsername"
+                type="text"
+                autocomplete="off"
+                autocapitalize="none"
+                spellcheck="false"
+                :placeholder="t('webdav.usernamePlaceholder')"
+                :disabled="webDAVConnecting"
+              />
+            </div>
+            <div class="connection-field">
+              <label for="webdav-password">{{ t('webdav.password') }}</label>
+              <div class="connection-password-control">
+                <input
+                  id="webdav-password"
+                  v-model="webDAVPassword"
+                  :type="showWebDAVPassword ? 'text' : 'password'"
+                  autocomplete="off"
+                  :placeholder="t('webdav.passwordPlaceholder')"
+                  :disabled="webDAVConnecting"
+                />
+                <button
+                  type="button"
+                  class="connection-password-toggle"
+                  :disabled="webDAVConnecting"
+                  :aria-label="showWebDAVPassword ? t('webdav.hidePassword') : t('webdav.showPassword')"
+                  @click="showWebDAVPassword = !showWebDAVPassword"
+                >{{ showWebDAVPassword ? t('webdav.hidePassword') : t('webdav.showPassword') }}</button>
+              </div>
+              <p class="connection-field-hint">{{ t('webdav.passwordNotStored') }}</p>
+            </div>
+            <p
+              v-if="webDAVConnecting || webDAVConnectionError"
+              class="connection-status"
+              :class="{ 'is-busy': webDAVConnecting, 'is-error': Boolean(webDAVConnectionError) }"
+              role="status"
+              aria-live="polite"
+            >{{ webDAVConnecting ? t('webdav.connecting') : webDAVConnectionError }}</p>
+          </form>
         </template>
         <template v-else-if="activeDialog === 'shortcuts'">
           <h2 id="dialog-shortcuts">{{ t('help.shortcutsTitle') }}</h2>
@@ -2218,42 +2661,58 @@ onBeforeUnmount(() => {
           </dl>
         </template>
         <footer class="dialog-actions">
-          <button
-            v-if="activeDialog === 'about' && !['available', 'downloading', 'cancelling', 'ready', 'installing'].includes(updateState)"
-            type="button"
-            class="button secondary"
-            :disabled="updateState === 'checking'"
-            @click="checkForUpdates()"
-          >{{ updateState === 'checking' ? t('help.checkingUpdate') : t('help.checkUpdate') }}</button>
-          <button
-            v-else-if="activeDialog === 'about' && updateState === 'downloading'"
-            type="button"
-            class="button secondary"
-            @click="cancelUpdateDownload"
-          >{{ t('help.cancelDownload') }}</button>
-          <button
-            v-else-if="activeDialog === 'about' && updateState === 'cancelling'"
-            type="button"
-            class="button secondary"
-            disabled
-          >{{ t('help.updateCancellingButton') }}</button>
-          <button
-            v-else-if="activeDialog === 'about'
-              && updateInfo?.updateAvailable
-              && ['available', 'ready', 'installing'].includes(updateState)"
-            type="button"
-            class="button secondary"
-            :disabled="updateState === 'installing'"
-            @click="upgradeApplication"
-          >{{ updateState === 'ready'
-              ? t('help.installUpdate')
-              : updateState === 'installing'
-                ? t('help.updateInstallingButton')
-                : updateInfo?.installable && updateInfo?.checksumAvailable
-                  ? t('help.downloadAndInstall')
-                  : t('help.openDownloadPage') }}</button>
-          <span v-if="activeDialog === 'about'" class="status-spacer"></span>
-          <button type="button" class="button primary" @click="activeDialog = null">{{ t('common.close') }}</button>
+          <template v-if="activeDialog === 'webdav'">
+            <button
+              type="button"
+              class="button secondary"
+              :disabled="webDAVConnecting"
+              @click="dismissActiveDialog"
+            >{{ t('common.cancel') }}</button>
+            <button
+              type="submit"
+              form="webdav-connection-form"
+              class="button primary"
+              :disabled="webDAVConnecting || !webDAVBaseURL.trim()"
+            >{{ webDAVConnecting ? t('webdav.connecting') : t('webdav.connect') }}</button>
+          </template>
+          <template v-else>
+            <button
+              v-if="activeDialog === 'about' && !['available', 'downloading', 'cancelling', 'ready', 'installing'].includes(updateState)"
+              type="button"
+              class="button secondary"
+              :disabled="updateState === 'checking'"
+              @click="checkForUpdates()"
+            >{{ updateState === 'checking' ? t('help.checkingUpdate') : t('help.checkUpdate') }}</button>
+            <button
+              v-else-if="activeDialog === 'about' && updateState === 'downloading'"
+              type="button"
+              class="button secondary"
+              @click="cancelUpdateDownload"
+            >{{ t('help.cancelDownload') }}</button>
+            <button
+              v-else-if="activeDialog === 'about' && updateState === 'cancelling'"
+              type="button"
+              class="button secondary"
+              disabled
+            >{{ t('help.updateCancellingButton') }}</button>
+            <button
+              v-else-if="activeDialog === 'about'
+                && updateInfo?.updateAvailable
+                && ['available', 'ready', 'installing'].includes(updateState)"
+              type="button"
+              class="button secondary"
+              :disabled="updateState === 'installing'"
+              @click="upgradeApplication"
+            >{{ updateState === 'ready'
+                ? t('help.installUpdate')
+                : updateState === 'installing'
+                  ? t('help.updateInstallingButton')
+                  : updateInfo?.installable && updateInfo?.checksumAvailable
+                    ? t('help.downloadAndInstall')
+                    : t('help.openDownloadPage') }}</button>
+            <span v-if="activeDialog === 'about'" class="status-spacer"></span>
+            <button type="button" class="button primary" @click="activeDialog = null">{{ t('common.close') }}</button>
+          </template>
         </footer>
       </section>
     </div>

@@ -2,13 +2,15 @@
 
 [简体中文](README.md) · [Download Latest Release](https://github.com/chmod740/inkmark/releases/latest) · [Report an Issue](https://github.com/chmod740/inkmark/issues)
 
-InkMark is a local Markdown editor for macOS and Windows with live preview, native menus, multiple reading themes, and complete document export. Everything required for editing, rendering, and exporting ships with the app; a network connection is used only when you explicitly check for updates or open an external link.
+InkMark is a Markdown editor for macOS and Windows with local and WebDAV document editing, live preview, native menus, multiple reading themes, and complete document export. Everything required for editing, rendering, and exporting ships with the app; network features are used only when you explicitly connect to WebDAV, check for updates, or open an external link.
 
 ![InkMark split editor and live preview](docs/images/inkmark-editor.jpg)
 
 ## Highlights
 
 - Open, edit, save, and save-as for `.md` and `.markdown` files
+- Connect to an HTTPS WebDAV service from File → Connect to WebDAV, then browse, open, edit, and save Markdown files from the cloud directory sidebar; passwords remain only in the current app process
+- WebDAV write-lock and ETag concurrency protection for remote saves, with explicit reload, cancel, and overwrite choices when another DAV-lock-aware client changes a file
 - Open a folder as a workspace, lazily expand or refresh subfolders, open their Markdown files, and keep the tree in sync after saving
 - Reopen or clear up to 10 recently used files and folders from File → Recent
 - Debounced 120 ms live rendering; Markdown, math, highlighting, and diagrams are completed off-screen and committed once so continuous typing does not flash or jitter
@@ -55,12 +57,14 @@ The macOS and Windows packages are not currently signed with commercial distribu
 ## Quick Start
 
 1. Launch InkMark directly, or open a Markdown file with InkMark from Finder or Explorer.
-2. Use File → Open Folder to show the directory sidebar, or continue opening individual files as before.
-3. Write Markdown in the editor and inspect the live result in the preview.
-4. Use the View menu for editing layouts and themes, and the Format menu for common Markdown markup.
-5. Save from the File menu or export to PDF, HTML, PNG, TXT, or a Word-compatible document.
-6. Choose Automatic, Simplified Chinese, or English in Settings.
-7. Use Help → Check for Updates to download, verify, and start the system installer; About also reports download and installation status.
+2. Use File → Open Folder for a local directory sidebar, or File → Connect to WebDAV for a cloud directory.
+3. WebDAV connection details are session-only. The app asks again after restart, and passwords never enter settings or recent items.
+   If the same service also exposes web or API writers that bypass DAV locks, the server must provide atomic conditional updates or a shared lock across every write path for cross-channel concurrency protection.
+4. Write Markdown in the editor and inspect the live result in the preview.
+5. Use the View menu for editing layouts and themes, and the Format menu for common Markdown markup.
+6. Save from the File menu or export to PDF, HTML, PNG, TXT, or a Word-compatible document. Save As creates a local copy of a WebDAV document.
+7. Choose Automatic, Simplified Chinese, or English in Settings.
+8. Use Help → Check for Updates to download, verify, and start the system installer; About also reports download and installation status.
 
 ## Offline and Network Behaviour
 
@@ -68,6 +72,7 @@ The editor never loads JavaScript, CSS, fonts, KaTeX, Mermaid, or highlighting a
 
 Network access occurs only for user-requested actions:
 
+- Connecting to WebDAV, listing remote folders, and opening or saving remote Markdown files
 - Checking GitHub Releases for a new version
 - Downloading an update or opening the source repository on GitHub
 - Opening an external link in a document
@@ -107,11 +112,12 @@ pnpm --dir frontend test:preview
 pnpm --dir frontend test:update
 pnpm --dir frontend test:ui
 pnpm --dir frontend test:workspace
+pnpm --dir frontend test:webdav
 pnpm --dir frontend test:installer
 node scripts/verify-offline.mjs
 ```
 
-The suite covers file I/O, capability-bound workspace access, lazy sidebar expansion, recent items, unsaved-document transitions and the native close guard, language settings, native menus, verified update downloads and installer orchestration, atomic preview commits, version comparison and Release responses, export structure, external-resource policy, scroll synchronization, bounded large-document anchors, and offline asset integrity.
+The suite covers local file I/O, WebDAV authentication and directory parsing, path encoding, ETag conflicts, remote saves, capability-bound workspace access, lazy sidebar expansion, recent items, unsaved-document transitions and the native close guard, language settings, native menus, verified update downloads and installer orchestration, atomic preview commits, version comparison and Release responses, export structure, external-resource policy, scroll synchronization, bounded large-document anchors, and offline asset integrity. A live WebDAV regression runs only when `INKMARK_WEBDAV_URL`, `INKMARK_WEBDAV_USERNAME`, and `INKMARK_WEBDAV_PASSWORD` are supplied at runtime, and it cleans up its temporary resources.
 
 ## Project Layout
 
@@ -119,6 +125,7 @@ The suite covers file I/O, capability-bound workspace access, lazy sidebar expan
 - `close_guard.go`: save guard for native close requests on macOS and Windows
 - `app_state.go`: language preferences, single-instance handling, and OS file-open events
 - `workspace.go` and `recent.go`: capability-bound folders, Markdown enumeration, and recent items
+- `webdav.go` and `webdav_app.go`: HTTPS WebDAV protocol handling, remote capability sessions, directory browsing, and write-lock plus ETag-safe saves
 - `update.go`, `update_download.go`, and `update_launch.go`: release checks, installer selection, verified downloads, and platform-installer orchestration
 - `menu.go`: native macOS and Windows menus
 - `frontend/src/App.vue`: editor, live preview, Settings, and About

@@ -30,6 +30,7 @@ var nativeMenuText = map[string]localizedMenuText{
 	"new":                {zh: "新建", en: "New"},
 	"open":               {zh: "打开文件…", en: "Open File…"},
 	"open-folder":        {zh: "打开文件夹…", en: "Open Folder…"},
+	"connect-webdav":     {zh: "连接 WebDAV…", en: "Connect to WebDAV…"},
 	"recent":             {zh: "最近", en: "Recent"},
 	"no-recent":          {zh: "无最近项目", en: "No Recent Items"},
 	"clear-recent":       {zh: "清除最近项目", en: "Clear Recent Items"},
@@ -120,6 +121,7 @@ func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu 
 	fileMenu.AddText(label("new"), keys.CmdOrCtrl("n"), a.menuAction("new"))
 	fileMenu.AddText(label("open"), keys.CmdOrCtrl("o"), a.menuAction("open"))
 	fileMenu.AddText(label("open-folder"), keys.Combo("o", keys.CmdOrCtrlKey, keys.ShiftKey), a.menuAction("open-folder"))
+	fileMenu.AddText(label("connect-webdav"), nil, a.menuAction("connect-webdav"))
 	recentMenu := fileMenu.AddSubmenu(label("recent"))
 	recentItems := a.recentItemsSnapshot()
 	if len(recentItems) == 0 {

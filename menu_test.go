@@ -200,6 +200,10 @@ func TestFileMenuContainsFolderAndEmptyRecentMenu(t *testing.T) {
 	if got := keys.Stringify(openFolder.Accelerator, "windows"); got != "Ctrl+Shift+O" {
 		t.Fatalf("unexpected Open Folder shortcut: %s", got)
 	}
+	connectWebDAV := findMenuItem(t, fileMenu, "Connect to WebDAV…")
+	if connectWebDAV.Click == nil {
+		t.Fatal("Connect to WebDAV must emit a menu action")
+	}
 	recent := findMenuItem(t, fileMenu, "Recent")
 	if recent.SubMenu == nil {
 		t.Fatal("Recent must be a submenu")
@@ -208,6 +212,28 @@ func TestFileMenuContainsFolderAndEmptyRecentMenu(t *testing.T) {
 	clear := findMenuItem(t, recent.SubMenu, "Clear Recent Items")
 	if !empty.Disabled || !clear.Disabled {
 		t.Fatalf("empty recent menu entries must be disabled: %#v / %#v", empty, clear)
+	}
+}
+
+func TestFileMenuContainsLocalizedWebDAVConnection(t *testing.T) {
+	for _, test := range []struct {
+		platform string
+		locale   string
+		file     string
+		connect  string
+	}{
+		{platform: "darwin", locale: "zh-CN", file: "文件", connect: "连接 WebDAV…"},
+		{platform: "darwin", locale: "en", file: "File", connect: "Connect to WebDAV…"},
+		{platform: "windows", locale: "zh-CN", file: "文件", connect: "连接 WebDAV…"},
+		{platform: "windows", locale: "en", file: "File", connect: "Connect to WebDAV…"},
+	} {
+		t.Run(test.platform+"/"+test.locale, func(t *testing.T) {
+			fileMenu := findTopLevelMenu(t, NewApp().applicationMenuFor(test.platform, test.locale), test.file)
+			item := findMenuItem(t, fileMenu, test.connect)
+			if item.Click == nil || item.Disabled {
+				t.Fatalf("WebDAV connection item must be enabled with a callback: %#v", item)
+			}
+		})
 	}
 }
 
