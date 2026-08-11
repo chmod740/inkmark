@@ -34,6 +34,8 @@ export function GetAppInfo():Promise<main.AppInfo>;
 
 export function GetLanguageSettings():Promise<main.LanguageState>;
 
+export function GetThirdPartyNotices():Promise<string>;
+
 export function ImportLocalImageData(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.ImageAsset>;
 
 export function ImportWebDAVImageData(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.ImageAsset>;

@@ -119,6 +119,7 @@ import {
   FetchPublicImage,
   GetAppInfo,
   GetLanguageSettings,
+  GetThirdPartyNotices,
   LoadInitialDocument,
   OpenDirectory,
   OpenExternal,
@@ -169,6 +170,7 @@ type ImageInsertMode = 'local' | 'data' | 'webdav' | 'public'
 type WebDAVConnectionFormMode = 'connect' | 'new' | 'edit'
 type WebDAVDialogView = 'saved' | 'temporary' | 'new' | 'edit'
 type WebDAVConnectionOperation = 'idle' | 'connecting-saved' | 'saving' | 'deleting'
+type AboutView = 'overview' | 'third-party'
 
 interface DocumentData {
   path: string
@@ -286,6 +288,9 @@ const appDialog = ref<HTMLElement | null>(null)
 const syncScroll = ref(true)
 const builtInDocument = ref<BuiltInDocumentKind | null>(null)
 const activeDialog = ref<'settings' | 'shortcuts' | 'about' | 'webdav' | 'image' | null>(null)
+const aboutView = ref<AboutView>('overview')
+const thirdPartyNotices = ref('')
+const thirdPartyNoticesState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
 const unsavedTransition = ref<DocumentTransition | null>(null)
 const resolvingUnsavedPrompt = ref(false)
 const applicationInfo = ref<ApplicationInfoData>({ version: '', author: '', repositoryURL: '' })
@@ -2039,14 +2044,38 @@ async function loadApplicationInfo() {
 }
 
 function showAboutDialog() {
+  aboutView.value = 'overview'
   activeDialog.value = 'about'
   if (!applicationInfo.value.version) void loadApplicationInfo()
   if (updateState.value === 'idle') void checkForUpdates(false)
 }
 
+async function showThirdPartyLicenses() {
+  aboutView.value = 'third-party'
+  await nextTick(() => focusActiveDialog())
+  if (thirdPartyNoticesState.value === 'ready' || thirdPartyNoticesState.value === 'loading') return
+  thirdPartyNoticesState.value = 'loading'
+  try {
+    const notices = await GetThirdPartyNotices()
+    if (!notices.trim()) throw new Error('The embedded third-party notice is empty')
+    thirdPartyNotices.value = notices
+    thirdPartyNoticesState.value = 'ready'
+  } catch (error) {
+    console.error('Unable to load third-party licenses', error)
+    thirdPartyNotices.value = ''
+    thirdPartyNoticesState.value = 'error'
+  }
+}
+
+function showAboutOverview() {
+  aboutView.value = 'overview'
+  void nextTick(() => focusActiveDialog())
+}
+
 async function checkForUpdates(showDialog = true) {
   if (['checking', 'downloading', 'cancelling', 'installing'].includes(updateState.value)) return
   if (showDialog) {
+    aboutView.value = 'overview'
     activeDialog.value = 'about'
     if (!applicationInfo.value.version) void loadApplicationInfo()
   }
@@ -3072,6 +3101,7 @@ watch(activeDialog, (nextDialog, previousDialog) => {
     lastFocusedElement = null
   }
   if (previousDialog === 'image' && nextDialog !== 'image') clearImageInsertForm()
+  if (previousDialog === 'about' && nextDialog !== 'about') aboutView.value = 'overview'
   if (!nextDialog && previousDialog) {
     const returnFocus = dialogReturnFocus
     dialogReturnFocus = null
@@ -3397,6 +3427,7 @@ onBeforeUnmount(() => {
           'webdav-dialog': activeDialog === 'webdav',
           'has-webdav-delete-confirmation': activeDialog === 'webdav' && Boolean(webDAVDeleteCandidate),
           'image-dialog': activeDialog === 'image',
+          'about-licenses-dialog': activeDialog === 'about' && aboutView === 'third-party',
         }"
         role="dialog"
         aria-modal="true"
@@ -3846,6 +3877,32 @@ onBeforeUnmount(() => {
             </template>
           </dl>
         </template>
+        <template v-else-if="activeDialog === 'about' && aboutView === 'third-party'">
+          <header class="about-licenses-heading">
+            <h2 id="dialog-about">{{ t('help.thirdPartyLicenses') }}</h2>
+            <p>{{ t('help.thirdPartyLicensesDescription') }}</p>
+          </header>
+          <p
+            v-if="thirdPartyNoticesState === 'loading'"
+            class="about-licenses-status"
+            role="status"
+            aria-live="polite"
+          >{{ t('help.thirdPartyLicensesLoading') }}</p>
+          <p
+            v-else-if="thirdPartyNoticesState === 'error'"
+            class="about-licenses-status update-error"
+            role="alert"
+          >{{ t('help.thirdPartyLicensesUnavailable') }}</p>
+          <textarea
+            v-else
+            class="third-party-notices"
+            :aria-label="t('help.thirdPartyLicensesContent')"
+            :value="thirdPartyNotices"
+            readonly
+            spellcheck="false"
+            wrap="off"
+          ></textarea>
+        </template>
         <template v-else>
           <div class="about-heading">
             <img :src="inkmarkIcon" alt="" />
@@ -3869,6 +3926,15 @@ onBeforeUnmount(() => {
                 @click.prevent="openSourceRepository"
               >{{ applicationInfo.repositoryURL }}</a>
               <span v-else>{{ t('help.repositoryUnavailable') }}</span>
+            </dd>
+            <dt>{{ t('help.thirdPartyLicenses') }}</dt>
+            <dd class="about-license-entry">
+              <button
+                type="button"
+                class="about-license-link"
+                @click="showThirdPartyLicenses"
+              >{{ t('help.thirdPartyLicensesOpen') }}</button>
+              <small>{{ t('help.thirdPartyLicensesDescription') }}</small>
             </dd>
             <dt>{{ t('help.updateStatus') }}</dt>
             <dd role="status" aria-live="polite">{{ updateStatusText }}</dd>
@@ -3942,7 +4008,14 @@ onBeforeUnmount(() => {
           </template>
           <template v-else>
             <button
-              v-if="activeDialog === 'about' && !['available', 'downloading', 'cancelling', 'ready', 'installing'].includes(updateState)"
+              v-if="activeDialog === 'about' && aboutView === 'third-party'"
+              type="button"
+              class="button secondary"
+              data-dialog-initial
+              @click="showAboutOverview"
+            >{{ t('help.thirdPartyLicensesBack') }}</button>
+            <button
+              v-else-if="activeDialog === 'about' && !['available', 'downloading', 'cancelling', 'ready', 'installing'].includes(updateState)"
               type="button"
               class="button secondary"
               :disabled="updateState === 'checking'"

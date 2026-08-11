@@ -2,6 +2,10 @@ $ErrorActionPreference = "Stop"
 
 $ProjectDir = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectDir
+$NoticeSource = Join-Path $ProjectDir "THIRD_PARTY_NOTICES.txt"
+if (-not (Test-Path $NoticeSource -PathType Leaf) -or (Get-Item $NoticeSource).Length -eq 0) {
+    throw "Missing third-party notice: $NoticeSource"
+}
 
 function Assert-LastExitCode {
     param([string]$Step)
@@ -63,13 +67,21 @@ pnpm --dir frontend test:installer
 Assert-LastExitCode "Verify Windows installer configuration"
 node scripts/verify-offline.mjs
 Assert-LastExitCode "Verify offline assets"
+pnpm --dir frontend test:notices
+Assert-LastExitCode "Verify third-party notice"
 
 $Executable = Join-Path $ProjectDir "build\bin\inkmark.exe"
 if (-not (Test-Path $Executable)) {
     throw "Windows build output is missing: $Executable"
 }
+$PortableNotice = Join-Path $ProjectDir "build\bin\THIRD_PARTY_NOTICES.txt"
+Copy-Item -LiteralPath $NoticeSource -Destination $PortableNotice -Force
+if ((Get-FileHash -Algorithm SHA256 $NoticeSource).Hash -ne (Get-FileHash -Algorithm SHA256 $PortableNotice).Hash) {
+    throw "Portable third-party notice copy does not match the release notice"
+}
 
 Write-Host "Windows app: $Executable"
+Write-Host "Windows portable notice: $PortableNotice"
 $Installer = Get-ChildItem -Path (Join-Path $ProjectDir "build\bin") -Filter "*installer.exe" -File | Select-Object -First 1
 if ($Installer) {
     Write-Host "Windows installer: $($Installer.FullName)"

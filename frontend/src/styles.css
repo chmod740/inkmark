@@ -648,6 +648,26 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .about-heading { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
 .about-heading img { width: 68px; height: 68px; border-radius: 14px; box-shadow: 0 4px 12px rgba(4, 20, 22, .18); }
 .about-heading h2 { margin-bottom: 5px; }
+.about-license-entry { display: grid; gap: 5px; }
+.about-license-entry small { color: var(--muted); line-height: 1.45; }
+.about-license-link { width: fit-content; margin: 0; padding: 0; color: #176c72; border: 0; background: transparent; cursor: pointer; font: inherit; text-align: start; text-decoration: underline; text-underline-offset: 2px; }
+.about-license-link:hover { color: #0c5055; }
+.about-license-link:focus-visible { border-radius: 2px; outline: 2px solid #2b777b; outline-offset: 3px; }
+.about-licenses-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(780px, calc(100vw - 48px));
+  height: min(700px, calc(100vh - 48px));
+  padding: 0;
+  overflow: hidden;
+}
+.about-licenses-heading { padding: 22px 24px 17px; border-bottom: 1px solid var(--border); }
+.about-licenses-heading h2 { margin: 0 0 8px; }
+.about-licenses-heading p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.about-licenses-status { align-self: start; margin: 24px; }
+.third-party-notices { min-width: 0; min-height: 0; margin: 20px 24px; padding: 14px 16px; resize: none; overflow: auto; color: var(--ink); border: 1px solid var(--border); border-radius: 5px; outline: 0; background: var(--paper-soft); font: 12px/1.55 "SFMono-Regular", Menlo, Consolas, monospace; tab-size: 4; }
+.third-party-notices:focus { border-color: #49878a; box-shadow: 0 0 0 2px rgba(43,119,123,.14); }
+.about-licenses-dialog > .dialog-actions { min-height: 68px; margin: 0; padding: 14px 24px 17px; background: var(--paper); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; padding-top: 15px; border-top: 1px solid var(--border); }
 .webdav-dialog > .dialog-actions { min-height: 68px; margin: 0; padding: 14px 24px 17px; background: var(--paper); }
 .unsaved-dialog { width: min(560px, calc(100vw - 48px)); }
@@ -841,6 +861,11 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 
 @media (max-width: 720px) {
   .modal-backdrop { padding: 12px; }
+  .about-licenses-dialog { width: calc(100vw - 24px); height: calc(100vh - 24px); }
+  .about-licenses-heading { padding: 17px 16px 13px; }
+  .about-licenses-heading h2 { font-size: 19px; }
+  .third-party-notices { margin: 14px 16px; padding: 12px; }
+  .about-licenses-dialog > .dialog-actions { min-height: 62px; padding: 11px 16px 14px; }
   .webdav-dialog { width: calc(100vw - 24px); height: calc(100vh - 24px); }
   .webdav-dialog-header { padding: 17px 16px 13px; }
   .webdav-dialog-header h2 { font-size: 19px; }

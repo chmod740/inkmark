@@ -227,6 +227,7 @@ Section
     SetOutPath $INSTDIR
 
     !insertmacro wails.files
+    File /oname=THIRD_PARTY_NOTICES.txt "..\..\..\THIRD_PARTY_NOTICES.txt"
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
@@ -271,6 +272,7 @@ Section "uninstall"
     # must never be recursively deleted, and settings live outside $INSTDIR.
     Delete "$INSTDIR\${PRODUCT_EXECUTABLE}"
     Delete "$INSTDIR\appicon.ico"
+    Delete "$INSTDIR\THIRD_PARTY_NOTICES.txt"
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"

@@ -6,10 +6,17 @@ project_dir="$(cd "$script_dir/.." && pwd)"
 cd "$project_dir"
 
 app_path="$project_dir/build/bin/inkmark.app"
+notice_source="$project_dir/THIRD_PARTY_NOTICES.txt"
+notice_in_app="$app_path/Contents/Resources/THIRD_PARTY_NOTICES.txt"
 if [[ ! -d "$app_path" ]]; then
   echo "Missing macOS application: $app_path" >&2
   exit 1
 fi
+if [[ ! -s "$notice_source" || ! -f "$notice_in_app" ]] || ! cmp -s "$notice_source" "$notice_in_app"; then
+  echo "The macOS application is missing the current third-party notice" >&2
+  exit 1
+fi
+codesign --verify --deep --strict "$app_path"
 
 architectures="$(lipo -archs "$app_path/Contents/MacOS/inkmark")"
 if [[ "$architectures" != *"arm64"* || "$architectures" != *"x86_64"* ]]; then
@@ -23,6 +30,7 @@ stage_dir="$(mktemp -d)"
 trap 'rm -rf -- "$stage_dir"' EXIT
 
 mkdir -p "$release_dir"
+install -m 0644 "$notice_source" "$release_dir/THIRD_PARTY_NOTICES.txt"
 dmg_path="$release_dir/InkMark-Markdown-$version-macos-universal.dmg"
 zip_path="$release_dir/InkMark-Markdown-$version-macos-universal.zip"
 pkg_path="$release_dir/InkMark-Markdown-$version-macos-universal.pkg"
@@ -50,6 +58,7 @@ ditto -c -k --sequesterRsrc --keepParent "$stage_dir/InkMark Markdown.app" "$zip
 hdiutil verify "$dmg_path"
 
 checksum_files=()
+checksum_files+=("THIRD_PARTY_NOTICES.txt")
 for artifact in "$release_dir"/InkMark-Markdown-"$version"-*; do
   [[ -f "$artifact" ]] || continue
   case "$artifact" in

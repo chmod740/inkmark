@@ -75,6 +75,13 @@ test('about and update messages are complete in both languages', () => {
     'help.author',
     'help.sourceRepository',
     'help.repositoryUnavailable',
+    'help.thirdPartyLicenses',
+    'help.thirdPartyLicensesDescription',
+    'help.thirdPartyLicensesOpen',
+    'help.thirdPartyLicensesLoading',
+    'help.thirdPartyLicensesUnavailable',
+    'help.thirdPartyLicensesContent',
+    'help.thirdPartyLicensesBack',
     'help.updateStatus',
     'help.checkUpdate',
     'help.downloadUpdate',
@@ -99,6 +106,8 @@ test('about and update messages are complete in both languages', () => {
   )
   assert.equal(translate('zh-CN', 'help.downloadAndInstall'), '下载并安装新版本')
   assert.equal(translate('en', 'help.downloadAndInstall'), 'Download and Install New Version')
+  assert.match(translate('zh-CN', 'help.thirdPartyLicensesDescription'), /仅适用于各自的第三方组件/)
+  assert.match(translate('en', 'help.thirdPartyLicensesDescription'), /apply only to their respective third-party components/)
 })
 
 test('WebDAV connection, remote save, conflict, and disconnect messages are complete', () => {
@@ -215,12 +224,15 @@ test('saved WebDAV connection management explains system credential storage in b
 
 test('about dialog wires application metadata and native update menu actions', async () => {
   const appSource = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
-  for (const bridgeMethod of ['GetAppInfo', 'CheckForUpdates', 'OpenUpdatePage', 'OpenSourceRepository']) {
+  for (const bridgeMethod of ['GetAppInfo', 'GetThirdPartyNotices', 'CheckForUpdates', 'OpenUpdatePage', 'OpenSourceRepository']) {
     assert.ok(appSource.includes(bridgeMethod), `${bridgeMethod} must be wired into App.vue`)
   }
   assert.ok(appSource.includes("action === 'check-update'"))
   assert.ok(!appSource.includes("action === 'upgrade'"))
   assert.ok(appSource.includes('aria-live="polite"'))
+  assert.match(appSource, /class="third-party-notices"[\s\S]*readonly/)
+  assert.ok(appSource.includes("aboutView === 'third-party'"))
+  assert.ok(appSource.includes('@click="showAboutOverview"'))
 })
 
 test('welcome documents are complete, localised README files', () => {

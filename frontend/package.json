@@ -18,6 +18,7 @@
     "test:webdav": "node --experimental-strip-types --test ../scripts/test-webdav-ui.mjs",
     "test:image": "node --experimental-strip-types --test ../scripts/test-image-resources.mjs",
     "test:saved-webdav": "node --experimental-strip-types --test ../scripts/test-saved-webdav-ui.mjs",
+    "test:notices": "node --test ../scripts/test-third-party-notices.mjs",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {

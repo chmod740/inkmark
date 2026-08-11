@@ -66,6 +66,10 @@ export function GetLanguageSettings() {
   return window['go']['main']['App']['GetLanguageSettings']();
 }
 
+export function GetThirdPartyNotices() {
+  return window['go']['main']['App']['GetThirdPartyNotices']();
+}
+
 export function ImportLocalImageData(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['ImportLocalImageData'](arg1, arg2, arg3, arg4);
 }
