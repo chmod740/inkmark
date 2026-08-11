@@ -73,8 +73,6 @@ test('about and update messages are complete in both languages', () => {
   const keys = [
     'help.version',
     'help.author',
-    'help.sourceRepository',
-    'help.repositoryUnavailable',
     'help.thirdPartyLicenses',
     'help.thirdPartyLicensesDescription',
     'help.thirdPartyLicensesOpen',
@@ -266,9 +264,12 @@ test('about dialog wires application metadata and native update menu actions', a
     readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8'),
     readFile(new URL('../frontend/src/styles.css', import.meta.url), 'utf8'),
   ])
-  for (const bridgeMethod of ['GetAppInfo', 'GetThirdPartyNotices', 'CheckForUpdates', 'OpenUpdatePage', 'OpenSourceRepository']) {
+  for (const bridgeMethod of ['GetAppInfo', 'GetThirdPartyNotices', 'CheckForUpdates', 'OpenUpdatePage']) {
     assert.ok(appSource.includes(bridgeMethod), `${bridgeMethod} must be wired into App.vue`)
   }
+  assert.ok(!appSource.includes('OpenSourceRepository'))
+  assert.ok(!appSource.includes("action === 'source-code'"))
+  assert.ok(!appSource.includes("t('help.sourceRepository')"))
   assert.ok(appSource.includes("action === 'check-update'"))
   assert.ok(!appSource.includes("action === 'upgrade'"))
   assert.ok(appSource.includes('aria-live="polite"'))

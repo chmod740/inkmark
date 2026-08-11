@@ -294,12 +294,15 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .workspace-tree { min-width: 0; min-height: 0; padding: 5px 4px 14px; overflow: auto; }
 .workspace-tree:focus-visible { outline: 2px solid #29787b; outline-offset: -2px; }
 .workspace-tree-row {
-  display: flex;
+  display: grid;
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
+  grid-template-columns: 14px 14px minmax(0, 1fr);
   width: 100%;
   min-width: 0;
   min-height: 28px;
   align-items: center;
-  gap: 5px;
+  column-gap: 5px;
   padding-block: 3px;
   padding-inline-end: 7px;
   overflow: hidden;
@@ -314,9 +317,26 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .workspace-tree-row:focus-visible { outline: 2px solid #29787b; outline-offset: -2px; }
 .workspace-tree-row.is-active { color: #fff; border-color: #18565a; background: linear-gradient(#397b7e, #216166); }
 .workspace-tree-row:disabled { opacity: .62; }
-.workspace-disclosure { width: 11px; flex: 0 0 11px; color: #68746f; font-size: 17px; line-height: 1; text-align: center; }
+.workspace-disclosure {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  color: #68746f;
+}
+.workspace-disclosure.is-collapsed::before,
+.workspace-disclosure.is-expanded::before {
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  content: "";
+  transform-origin: center;
+}
+.workspace-disclosure.is-collapsed::before { transform: rotate(-45deg); }
+.workspace-disclosure.is-expanded::before { transform: rotate(45deg); }
 .workspace-tree-row.is-active .workspace-disclosure { color: #e5f0ed; }
-.workspace-entry-icon { position: relative; width: 14px; height: 14px; flex: 0 0 14px; }
+.workspace-entry-icon { position: relative; width: 14px; height: 14px; }
 .workspace-entry-icon.directory {
   height: 10px;
   border: 1px solid #7b725c;
@@ -364,12 +384,11 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   background: #f8e69b;
   content: "";
 }
-.workspace-entry-name { min-width: 0; flex: 1; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-entry-truncated { flex: 0 0 auto; font-weight: 700; }
+.workspace-entry-name { min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-entry-truncated { font-weight: 700; }
 .workspace-row-loading {
   width: 11px;
   height: 11px;
-  flex: 0 0 auto;
   border: 1px solid #6c7974;
   border-right-color: transparent;
   border-radius: 50%;

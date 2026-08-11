@@ -253,13 +253,12 @@ func TestFormatMenuContainsLocalizedImageImport(t *testing.T) {
 	}
 }
 
-func TestHelpMenuContainsUpdateAndRepositoryActions(t *testing.T) {
+func TestHelpMenuContainsUpdateAndAboutActionsWithoutRepository(t *testing.T) {
 	applicationMenu := NewApp().applicationMenuFor("windows", "en")
 	helpMenu := findTopLevelMenu(t, applicationMenu, "Help")
 	want := map[string]bool{
 		"Rendering Test Page": false,
 		"Check for Updates…":  false,
-		"Source Repository":   false,
 		"About InkMark":       false,
 	}
 	for _, item := range helpMenu.Items {
@@ -277,17 +276,19 @@ func TestHelpMenuContainsUpdateAndRepositoryActions(t *testing.T) {
 		platform  string
 		locale    string
 		helpLabel string
-		forbidden string
+		forbidden []string
 	}{
-		{platform: "darwin", locale: "zh-CN", helpLabel: "帮助", forbidden: "升级墨笺…"},
-		{platform: "darwin", locale: "en", helpLabel: "Help", forbidden: "Upgrade InkMark…"},
-		{platform: "windows", locale: "zh-CN", helpLabel: "帮助", forbidden: "升级墨笺…"},
-		{platform: "windows", locale: "en", helpLabel: "Help", forbidden: "Upgrade InkMark…"},
+		{platform: "darwin", locale: "zh-CN", helpLabel: "帮助", forbidden: []string{"升级墨笺…", "源码仓库"}},
+		{platform: "darwin", locale: "en", helpLabel: "Help", forbidden: []string{"Upgrade InkMark…", "Source Repository"}},
+		{platform: "windows", locale: "zh-CN", helpLabel: "帮助", forbidden: []string{"升级墨笺…", "源码仓库"}},
+		{platform: "windows", locale: "en", helpLabel: "Help", forbidden: []string{"Upgrade InkMark…", "Source Repository"}},
 	} {
 		help := findTopLevelMenu(t, NewApp().applicationMenuFor(test.platform, test.locale), test.helpLabel)
 		for _, item := range help.Items {
-			if item.Label == test.forbidden {
-				t.Errorf("%s/%s Help menu must not expose %q before an update is found", test.platform, test.locale, test.forbidden)
+			for _, forbidden := range test.forbidden {
+				if item.Label == forbidden {
+					t.Errorf("%s/%s Help menu must not expose %q", test.platform, test.locale, forbidden)
+				}
 			}
 		}
 	}

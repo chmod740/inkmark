@@ -319,6 +319,20 @@ test('sidebar file actions are keyboard accessible, modal-isolated, and include 
   assert.doesNotMatch(app, /class="button danger"\s+data-dialog-initial/)
 })
 
+test('sidebar rows use fixed icon columns and font-independent disclosure chevrons', async () => {
+  const [sidebar, styles] = await Promise.all([
+    readFile(new URL('../frontend/src/DirectorySidebar.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../frontend/src/styles.css', import.meta.url), 'utf8'),
+  ])
+  assert.match(sidebar, /class="workspace-disclosure"[\s\S]*'is-expanded':[\s\S]*'is-collapsed'/)
+  assert.doesNotMatch(sidebar, /\{\{[\s\S]*row\.expanded[\s\S]*[⌄›][\s\S]*\}\}/)
+  assert.match(styles, /\.workspace-tree-row \{[\s\S]*?display: grid;[\s\S]*?grid-template-columns: 14px 14px minmax\(0, 1fr\);/)
+  assert.match(styles, /\.workspace-disclosure \{[\s\S]*?width: 14px;[\s\S]*?height: 14px;[\s\S]*?place-items: center;/)
+  assert.match(styles, /\.workspace-disclosure\.is-collapsed::before[\s\S]*?\.workspace-disclosure\.is-expanded::before[\s\S]*?border-right: 1\.5px solid currentColor;[\s\S]*?border-bottom: 1\.5px solid currentColor;/)
+  assert.match(styles, /\.workspace-disclosure\.is-collapsed::before \{ transform: rotate\(-45deg\); \}/)
+  assert.match(styles, /\.workspace-disclosure\.is-expanded::before \{ transform: rotate\(45deg\); \}/)
+})
+
 test('current document identity is rebased on rename and detached before any possibly partial delete', async () => {
   const app = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
   assert.match(app, /rebaseWorkspacePath\(currentWorkspacePath\.value, sourcePath, destinationPath\)/)

@@ -145,7 +145,6 @@ import {
   OpenRecentDirectory,
   OpenRecentFile,
   OpenRecentWebDAV,
-  OpenSourceRepository,
   OpenUpdatePage,
   OpenWebDAVFile,
   OpenWorkspaceFile,
@@ -251,7 +250,6 @@ type PendingWorkspaceOpenRequest =
 interface ApplicationInfoData {
   version: string
   author: string
-  repositoryURL: string
 }
 
 interface UpdateInfoData {
@@ -331,7 +329,7 @@ const thirdPartyNotices = ref('')
 const thirdPartyNoticesState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
 const unsavedTransition = ref<DocumentTransition | null>(null)
 const resolvingUnsavedPrompt = ref(false)
-const applicationInfo = ref<ApplicationInfoData>({ version: '', author: '', repositoryURL: '' })
+const applicationInfo = ref<ApplicationInfoData>({ version: '', author: '' })
 const updateInfo = ref<UpdateInfoData | null>(null)
 const updateState = ref<UpdateState>('idle')
 const updateDownload = ref<UpdateDownloadData | null>(null)
@@ -2780,7 +2778,6 @@ async function loadApplicationInfo() {
     applicationInfo.value = {
       version: info?.version?.trim() || '',
       author: info?.author?.trim() || '',
-      repositoryURL: info?.repositoryURL?.trim() || '',
     }
   } catch (error) {
     console.error('Unable to load application information', error)
@@ -2854,15 +2851,6 @@ async function checkForUpdates(showDialog = true) {
     updateInfo.value = null
     updateError.value = errorMessage(error)
     updateState.value = 'error'
-  }
-}
-
-async function openSourceRepository() {
-  if (!applicationInfo.value.repositoryURL) return
-  try {
-    await OpenSourceRepository()
-  } catch (error) {
-    showError(error)
   }
 }
 
@@ -3094,7 +3082,6 @@ function handleMenuAction(action: string) {
   else if (action === 'show-shortcuts') activeDialog.value = 'shortcuts'
   else if (action === 'about') showAboutDialog()
   else if (action === 'check-update') void checkForUpdates()
-  else if (action === 'source-code') void openSourceRepository()
   else if (action === 'show-welcome') void showWelcome()
   else if (action === 'show-render-test') void showRenderingTest()
   else if (action === 'hide') Hide()
@@ -4787,16 +4774,6 @@ onBeforeUnmount(() => {
             <dd>{{ aboutVersion }}</dd>
             <dt>{{ t('help.author') }}</dt>
             <dd>{{ aboutAuthor }}</dd>
-            <dt>{{ t('help.sourceRepository') }}</dt>
-            <dd>
-              <a
-                v-if="applicationInfo.repositoryURL"
-                href="#"
-                :title="t('help.openRepository')"
-                @click.prevent="openSourceRepository"
-              >{{ applicationInfo.repositoryURL }}</a>
-              <span v-else>{{ t('help.repositoryUnavailable') }}</span>
-            </dd>
             <dt>{{ t('help.thirdPartyLicenses') }}</dt>
             <dd class="about-license-entry">
               <button
