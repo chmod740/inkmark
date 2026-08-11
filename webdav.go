@@ -58,20 +58,22 @@ func (config WebDAVConfig) MarshalJSON() ([]byte, error) {
 type WebDAVErrorKind string
 
 const (
-	WebDAVErrorInvalidInput   WebDAVErrorKind = "invalid_input"
-	WebDAVErrorAuthentication WebDAVErrorKind = "authentication"
-	WebDAVErrorPermission     WebDAVErrorKind = "permission"
-	WebDAVErrorNotFound       WebDAVErrorKind = "not_found"
-	WebDAVErrorConflict       WebDAVErrorKind = "conflict"
-	WebDAVErrorLocked         WebDAVErrorKind = "locked"
-	WebDAVErrorUnsupported    WebDAVErrorKind = "unsupported"
-	WebDAVErrorTooLarge       WebDAVErrorKind = "too_large"
-	WebDAVErrorRateLimited    WebDAVErrorKind = "rate_limited"
-	WebDAVErrorTimeout        WebDAVErrorKind = "timeout"
-	WebDAVErrorCanceled       WebDAVErrorKind = "canceled"
-	WebDAVErrorNetwork        WebDAVErrorKind = "network"
-	WebDAVErrorServer         WebDAVErrorKind = "server"
-	WebDAVErrorProtocol       WebDAVErrorKind = "protocol"
+	WebDAVErrorInvalidInput    WebDAVErrorKind = "invalid_input"
+	WebDAVErrorAuthentication  WebDAVErrorKind = "authentication"
+	WebDAVErrorPermission      WebDAVErrorKind = "permission"
+	WebDAVErrorNotFound        WebDAVErrorKind = "not_found"
+	WebDAVErrorConflict        WebDAVErrorKind = "conflict"
+	WebDAVErrorLocked          WebDAVErrorKind = "locked"
+	WebDAVErrorUnsupported     WebDAVErrorKind = "unsupported"
+	WebDAVErrorTooLarge        WebDAVErrorKind = "too_large"
+	WebDAVErrorRateLimited     WebDAVErrorKind = "rate_limited"
+	WebDAVErrorTimeout         WebDAVErrorKind = "timeout"
+	WebDAVErrorCanceled        WebDAVErrorKind = "canceled"
+	WebDAVErrorNetwork         WebDAVErrorKind = "network"
+	WebDAVErrorServer          WebDAVErrorKind = "server"
+	WebDAVErrorProtocol        WebDAVErrorKind = "protocol"
+	WebDAVErrorCredentialStore WebDAVErrorKind = "credential_store"
+	WebDAVErrorLocalStorage    WebDAVErrorKind = "local_storage"
 )
 
 type WebDAVError struct {

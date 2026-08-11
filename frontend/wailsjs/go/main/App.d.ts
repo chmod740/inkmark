@@ -20,15 +20,27 @@ export function CloseWorkspace(arg1:string):Promise<void>;
 
 export function ConfirmQuit():Promise<void>;
 
+export function ConnectSavedWebDAV(arg1:string):Promise<main.Workspace>;
+
 export function ConnectWebDAV(arg1:main.WebDAVConfig):Promise<main.Workspace>;
 
+export function DeleteSavedWebDAVConnection(arg1:string):Promise<void>;
+
 export function DownloadUpdate(arg1:string):Promise<main.UpdateDownload>;
+
+export function FetchPublicImage(arg1:string):Promise<main.ImageAssetData>;
 
 export function GetAppInfo():Promise<main.AppInfo>;
 
 export function GetLanguageSettings():Promise<main.LanguageState>;
 
+export function ImportLocalImageData(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.ImageAsset>;
+
+export function ImportWebDAVImageData(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.ImageAsset>;
+
 export function LaunchUpdateInstaller():Promise<void>;
+
+export function ListSavedWebDAVConnections():Promise<Array<main.SavedWebDAVConnection>>;
 
 export function ListWebDAVDirectory(arg1:string,arg2:string):Promise<main.WorkspaceDirectory>;
 
@@ -44,6 +56,8 @@ export function OpenRecentDirectory(arg1:string):Promise<main.Workspace>;
 
 export function OpenRecentFile(arg1:string):Promise<main.Document>;
 
+export function OpenRecentWebDAV(arg1:string):Promise<main.RecentWebDAVConnection>;
+
 export function OpenSourceRepository():Promise<void>;
 
 export function OpenUpdatePage():Promise<void>;
@@ -58,18 +72,28 @@ export function ReadWorkspaceDirectory(arg1:string,arg2:string):Promise<main.Wor
 
 export function RenderingTestDocument():Promise<main.Document>;
 
+export function ResolveLocalImage(arg1:string,arg2:string):Promise<main.ImageAssetData>;
+
+export function ResolveWebDAVImage(arg1:string,arg2:string,arg3:string):Promise<main.ImageAssetData>;
+
 export function SaveExportFile(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.SaveResult>;
 
 export function SaveFile(arg1:string,arg2:string):Promise<main.SaveResult>;
 
 export function SaveFileAs(arg1:string,arg2:string):Promise<main.SaveResult>;
 
+export function SaveWebDAVConnection(arg1:main.WebDAVConnectionInput):Promise<main.SavedWebDAVConnection>;
+
 export function SaveWebDAVFile(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.WebDAVSaveResult>;
+
+export function SelectImageFile():Promise<main.ImageAssetData>;
 
 export function SetLanguage(arg1:string,arg2:string):Promise<main.LanguageState>;
 
 export function SetWindowTitle(arg1:string,arg2:boolean):Promise<void>;
 
 export function UpdateMenuState(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:boolean):Promise<void>;
+
+export function ValidateImageData(arg1:string,arg2:string,arg3:string):Promise<main.ImageAssetData>;
 
 export function WelcomeDocument(arg1:string):Promise<main.Document>;

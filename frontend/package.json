@@ -1,7 +1,7 @@
 {
   "name": "inkmark-frontend",
   "private": true,
-  "version": "1.1.3",
+  "version": "1.2.0",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
@@ -16,18 +16,20 @@
     "test:update": "node --experimental-strip-types --test ../scripts/test-update-workflow.mjs",
     "test:workspace": "node --experimental-strip-types --test ../scripts/test-workspace-tree.mjs",
     "test:webdav": "node --experimental-strip-types --test ../scripts/test-webdav-ui.mjs",
+    "test:image": "node --experimental-strip-types --test ../scripts/test-image-resources.mjs",
+    "test:saved-webdav": "node --experimental-strip-types --test ../scripts/test-saved-webdav-ui.mjs",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@mdit/plugin-katex": "^1.0.2",
-    "dompurify": "^3.4.12",
+    "dompurify": "^3.4.13",
     "highlight.js": "^11.11.1",
     "html2canvas": "1.4.1",
     "jspdf": "4.2.1",
     "katex": "^0.18.1",
     "markdown-it": "^15.0.0",
     "markdown-it-task-lists": "^2.1.1",
-    "mermaid": "^11.16.0",
+    "mermaid": "^11.16.1",
     "vue": "^3.5.13"
   },
   "devDependencies": {

@@ -38,12 +38,24 @@ export function ConfirmQuit() {
   return window['go']['main']['App']['ConfirmQuit']();
 }
 
+export function ConnectSavedWebDAV(arg1) {
+  return window['go']['main']['App']['ConnectSavedWebDAV'](arg1);
+}
+
 export function ConnectWebDAV(arg1) {
   return window['go']['main']['App']['ConnectWebDAV'](arg1);
 }
 
+export function DeleteSavedWebDAVConnection(arg1) {
+  return window['go']['main']['App']['DeleteSavedWebDAVConnection'](arg1);
+}
+
 export function DownloadUpdate(arg1) {
   return window['go']['main']['App']['DownloadUpdate'](arg1);
+}
+
+export function FetchPublicImage(arg1) {
+  return window['go']['main']['App']['FetchPublicImage'](arg1);
 }
 
 export function GetAppInfo() {
@@ -54,8 +66,20 @@ export function GetLanguageSettings() {
   return window['go']['main']['App']['GetLanguageSettings']();
 }
 
+export function ImportLocalImageData(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ImportLocalImageData'](arg1, arg2, arg3, arg4);
+}
+
+export function ImportWebDAVImageData(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['ImportWebDAVImageData'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function LaunchUpdateInstaller() {
   return window['go']['main']['App']['LaunchUpdateInstaller']();
+}
+
+export function ListSavedWebDAVConnections() {
+  return window['go']['main']['App']['ListSavedWebDAVConnections']();
 }
 
 export function ListWebDAVDirectory(arg1, arg2) {
@@ -86,6 +110,10 @@ export function OpenRecentFile(arg1) {
   return window['go']['main']['App']['OpenRecentFile'](arg1);
 }
 
+export function OpenRecentWebDAV(arg1) {
+  return window['go']['main']['App']['OpenRecentWebDAV'](arg1);
+}
+
 export function OpenSourceRepository() {
   return window['go']['main']['App']['OpenSourceRepository']();
 }
@@ -114,6 +142,14 @@ export function RenderingTestDocument() {
   return window['go']['main']['App']['RenderingTestDocument']();
 }
 
+export function ResolveLocalImage(arg1, arg2) {
+  return window['go']['main']['App']['ResolveLocalImage'](arg1, arg2);
+}
+
+export function ResolveWebDAVImage(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResolveWebDAVImage'](arg1, arg2, arg3);
+}
+
 export function SaveExportFile(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveExportFile'](arg1, arg2, arg3, arg4);
 }
@@ -126,8 +162,16 @@ export function SaveFileAs(arg1, arg2) {
   return window['go']['main']['App']['SaveFileAs'](arg1, arg2);
 }
 
+export function SaveWebDAVConnection(arg1) {
+  return window['go']['main']['App']['SaveWebDAVConnection'](arg1);
+}
+
 export function SaveWebDAVFile(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveWebDAVFile'](arg1, arg2, arg3, arg4);
+}
+
+export function SelectImageFile() {
+  return window['go']['main']['App']['SelectImageFile']();
 }
 
 export function SetLanguage(arg1, arg2) {
@@ -140,6 +184,10 @@ export function SetWindowTitle(arg1, arg2) {
 
 export function UpdateMenuState(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['UpdateMenuState'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function ValidateImageData(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ValidateImageData'](arg1, arg2, arg3);
 }
 
 export function WelcomeDocument(arg1) {

@@ -91,6 +91,7 @@ type MenuState struct {
 
 type App struct {
 	mu                      sync.RWMutex
+	savedWebDAVMu           sync.Mutex
 	settingsWriteMu         sync.Mutex
 	menuRefreshMu           sync.Mutex
 	ctx                     context.Context
@@ -98,6 +99,8 @@ type App struct {
 	initialLoaded           bool
 	language                LanguageState
 	recentItems             []RecentItem
+	savedWebDAVConnections  []savedWebDAVConnectionState
+	webDAVCredentialStore   webDAVCredentialStore
 	pendingRecentDocuments  map[string]string
 	activeWorkspace         *workspaceCapability
 	webDAVWorkspaces        map[string]*webDAVCapability
@@ -125,14 +128,16 @@ func NewApp() *App {
 	settingsPath := defaultSettingsPath()
 	settings := loadSettingsState(settingsPath)
 	return &App{
-		initPath:             resolveDocumentArgument(os.Args[1:], workingDirectory),
-		language:             settings.LanguageState,
-		recentItems:          settings.RecentItems,
-		menuState:            MenuState{ViewMode: "split", Theme: "github", SyncScroll: true},
-		settingsPath:         settingsPath,
-		updateEndpoint:       latestReleaseAPIURL,
-		updateClient:         newUpdateHTTPClient(),
-		updateDownloadClient: newUpdateDownloadHTTPClient(),
+		initPath:               resolveDocumentArgument(os.Args[1:], workingDirectory),
+		language:               settings.LanguageState,
+		recentItems:            settings.RecentItems,
+		savedWebDAVConnections: settings.SavedWebDAVConnections,
+		webDAVCredentialStore:  systemWebDAVCredentialStore{},
+		menuState:              MenuState{ViewMode: "split", Theme: "github", SyncScroll: true},
+		settingsPath:           settingsPath,
+		updateEndpoint:         latestReleaseAPIURL,
+		updateClient:           newUpdateHTTPClient(),
+		updateDownloadClient:   newUpdateDownloadHTTPClient(),
 	}
 }
 

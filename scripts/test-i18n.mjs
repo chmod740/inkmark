@@ -106,11 +106,14 @@ test('WebDAV connection, remote save, conflict, and disconnect messages are comp
     'app.localMode',
     'app.webdavConnected',
     'menu.connectWebDAV',
+    'menu.openRecent',
+    'menu.clearRecent',
     'workspace.providerWebDAV',
     'webdav.title',
     'webdav.serverURL',
     'webdav.username',
     'webdav.password',
+    'webdav.passwordNotStored',
     'webdav.connect',
     'webdav.connecting',
     'webdav.connectedBadge',
@@ -145,10 +148,69 @@ test('WebDAV connection, remote save, conflict, and disconnect messages are comp
   }
   assert.equal(translate('zh-CN', 'app.localMode'), '本地模式')
   assert.equal(translate('en', 'app.webdavConnected'), 'WebDAV Connected')
+  assert.match(translate('zh-CN', 'webdav.passwordNotStored'), /完整服务器地址.*包括路径.*认证用户名和密码.*当前连接/)
+  assert.match(translate('en', 'webdav.passwordNotStored'), /complete server address.*including its path.*authentication usernames and passwords.*only.*(?:this|the current) connection/i)
   assert.match(
     translate('en', 'webdav.conflictMessage', { name: 'README.md' }),
     /README\.md.*modified by another client/,
   )
+})
+
+test('image import, rendering, and export messages are complete in both languages', () => {
+  const keys = [
+    'image.insert',
+    'image.title',
+    'image.modeLocal',
+    'image.modeData',
+    'image.modeWebDAV',
+    'image.modePublic',
+    'image.publicURLHint',
+    'image.fileHint',
+    'image.localHint',
+    'image.webDAVHint',
+    'image.dataHint',
+    'image.publicHint',
+    'image.processing',
+    'image.insertFailed',
+    'image.loadFailed',
+    'image.unsupportedSource',
+  ]
+  for (const locale of ['zh-CN', 'en']) {
+    for (const key of keys) assert.ok(translations[locale][key]?.trim(), `${locale}.${key} must exist`)
+  }
+  assert.match(translate('zh-CN', 'image.fileHint'), /PNG.*JPEG.*GIF.*WebP.*16 MiB/)
+  assert.match(translate('en', 'image.publicURLHint'), /HTTPS.*HTML exports preserve/i)
+})
+
+test('saved WebDAV connection management explains system credential storage in both languages', () => {
+  const keys = [
+    'webdav.savedConnections',
+    'webdav.newSavedConnection',
+    'webdav.noSavedConnections',
+    'webdav.savedUsername',
+    'webdav.savedCredentialsUnavailable',
+    'webdav.deleteConnectionTitle',
+    'webdav.deleteConnectionMessage',
+    'webdav.temporaryConnection',
+    'webdav.newConnectionTitle',
+    'webdav.editConnectionTitle',
+    'webdav.systemCredentialStore',
+    'webdav.passwordKeepPlaceholder',
+    'webdav.editPasswordHint',
+    'webdav.saveCredentialsSecurely',
+    'webdav.removeSavedCredentials',
+    'webdav.savedConnectFailed',
+    'webdav.endpointChangeNeedsPassword',
+    'webdav.credentialStoreUnavailable',
+    'webdav.localConnectionStorageUnavailable',
+  ]
+  for (const locale of ['zh-CN', 'en']) {
+    for (const key of keys) assert.ok(translations[locale][key]?.trim(), `${locale}.${key} must exist`)
+  }
+  assert.match(translate('zh-CN', 'webdav.systemCredentialStore'), /macOS 钥匙串.*Windows 凭据管理器.*不写入设置文件/)
+  assert.match(translate('en', 'webdav.systemCredentialStore'), /macOS Keychain.*Windows Credential Manager.*never.*settings file/i)
+  assert.match(translate('zh-CN', 'webdav.credentialStoreUnavailable'), /系统凭据库.*macOS 钥匙串.*Windows 凭据管理器/)
+  assert.match(translate('en', 'webdav.credentialStoreUnavailable'), /system credential store.*macOS Keychain.*Windows Credential Manager/i)
 })
 
 test('about dialog wires application metadata and native update menu actions', async () => {

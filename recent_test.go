@@ -38,6 +38,114 @@ func TestRecentItemsAreDeduplicatedPromotedAndBounded(t *testing.T) {
 	}
 }
 
+func TestRecentWebDAVEndpointsAreCanonicalSafeAndDeduplicated(t *testing.T) {
+	item, ok := makeRecentItem("webdav", "  https://EXAMPLE.com:443/netdisk/api/webdav  ")
+	if !ok {
+		t.Fatal("valid WebDAV endpoint was rejected")
+	}
+	if item.Kind != "webdav" || item.Path != "https://example.com/netdisk/api/webdav/" || item.Name != "example.com" || item.ID == "" {
+		t.Fatalf("unexpected canonical WebDAV recent item: %#v", item)
+	}
+	loopback, ok := makeRecentItem("webdav", "http://127.0.0.1:8080/webdav")
+	if !ok || loopback.Path != "http://127.0.0.1:8080/webdav/" {
+		t.Fatalf("supported loopback HTTP endpoint was rejected: %#v", loopback)
+	}
+
+	for _, unsafe := range []string{
+		"http://example.com/webdav/",
+		"ftp://example.com/webdav/",
+		"https://user:password@example.com/webdav/",
+		"https://example.com/webdav/?token=secret",
+		"https://example.com/webdav/#fragment",
+		"https://example.com/webdav/%2fescape/",
+		"https://example.com/webdav/../escape/",
+	} {
+		if recent, accepted := makeRecentItem("webdav", unsafe); accepted {
+			t.Errorf("unsafe WebDAV endpoint entered recent items: %q => %#v", unsafe, recent)
+		}
+	}
+
+	duplicate, ok := makeRecentItem("webdav", "https://example.COM/netdisk/api/webdav/")
+	if !ok {
+		t.Fatal("canonical duplicate endpoint was rejected")
+	}
+	items := prependRecentItem([]RecentItem{item}, duplicate)
+	if len(items) != 1 || items[0].ID != item.ID {
+		t.Fatalf("canonical WebDAV endpoint was not deduplicated: %#v", items)
+	}
+}
+
+func TestRecentWebDAVSharesGlobalMRUBound(t *testing.T) {
+	items := make([]RecentItem, 0, maxRecentItems)
+	for index := 0; index < maxRecentItems-1; index++ {
+		item, ok := makeRecentItem("file", filepath.Join(t.TempDir(), fmt.Sprintf("%02d.md", index)))
+		if !ok {
+			t.Fatal("failed to create local recent fixture")
+		}
+		items = prependRecentItem(items, item)
+	}
+	remote, ok := makeRecentItem("webdav", "https://example.com/dav/")
+	if !ok {
+		t.Fatal("failed to create WebDAV recent fixture")
+	}
+	items = prependRecentItem(items, remote)
+	extra, ok := makeRecentItem("directory", t.TempDir())
+	if !ok {
+		t.Fatal("failed to create directory recent fixture")
+	}
+	items = prependRecentItem(items, extra)
+	if len(items) != maxRecentItems || items[0].Kind != "directory" {
+		t.Fatalf("mixed recent items did not share the global bound: %#v", items)
+	}
+}
+
+func TestOpenRecentWebDAVUsesOpaqueIDAndReturnsNoCredentials(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	app := &App{
+		language:     LanguageState{Mode: "auto", Locale: "en"},
+		settingsPath: settingsPath,
+	}
+	app.recordRecentItem("webdav", "https://example.com/netdisk/api/webdav/")
+	item := app.recentItemsSnapshot()[0]
+
+	if _, err := app.OpenRecentWebDAV(item.Path); err == nil {
+		t.Fatal("an endpoint string must not be accepted as a recent capability")
+	}
+	connection, err := app.OpenRecentWebDAV(item.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if connection.Endpoint != item.Path || connection.Name != "example.com" {
+		t.Fatalf("unexpected recent WebDAV connection: %#v", connection)
+	}
+	payload, err := json.Marshal(connection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"username", "password", "token", "userinfo", "query", "fragment"} {
+		if bytes.Contains(bytes.ToLower(payload), []byte(forbidden)) {
+			t.Fatalf("recent WebDAV response exposed %q: %s", forbidden, payload)
+		}
+	}
+	promoted := app.recentItemsSnapshot()[0]
+	if promoted.ID != item.ID || promoted.Path != item.Path {
+		t.Fatalf("opening recent WebDAV did not preserve its opaque capability: %#v", promoted)
+	}
+}
+
+func TestLoadedWebDAVRecentItemsIgnoreForgedMetadataAndUnsafeURLs(t *testing.T) {
+	items := normalizeLoadedRecentItems([]RecentItem{
+		{ID: "attacker-controlled", Kind: "webdav", Path: "https://user:password@example.com/dav/?token=secret#fragment", Name: "forged"},
+		{ID: "also-forged", Kind: "webdav", Path: "https://EXAMPLE.com:443/dav", Name: "credential-shaped-name"},
+	})
+	if len(items) != 1 {
+		t.Fatalf("unexpected normalized WebDAV recent items: %#v", items)
+	}
+	if items[0].ID == "" || items[0].ID == "also-forged" || items[0].Path != "https://example.com/dav/" || items[0].Name != "example.com" {
+		t.Fatalf("loaded WebDAV metadata was trusted: %#v", items[0])
+	}
+}
+
 func TestUnifiedSettingsPreserveLanguageAndRecentItems(t *testing.T) {
 	settingsPath := filepath.Join(t.TempDir(), "InkMark", "settings.json")
 	filePath := filepath.Join(t.TempDir(), "missing is retained.md")

@@ -8,7 +8,7 @@ import taskLists from 'markdown-it-task-lists'
 import { katex as markdownKatex } from '@mdit/plugin-katex'
 import mermaid from 'mermaid'
 import DirectorySidebar from './DirectorySidebar.vue'
-import inkmarkIcon from './assets/inkmark-icon.svg'
+import inkmarkIcon from './assets/inkmark-icon.svg?no-inline'
 import {
   buildStandaloneHTML,
   bytesToBase64,
@@ -38,6 +38,41 @@ import {
   togglePreviewFirst,
   type BuiltInDocumentKind,
 } from './ui-state'
+import {
+  dispatchTextEditInput,
+  isTextEditControl,
+  resolveTextEditControl,
+} from './edit-actions'
+import {
+  ImageResolverGate,
+  ImageDecodeGate,
+  PreviewImageBudget,
+  PreviewImageResourceSet,
+  buildMarkdownImage,
+  classifyImageSource,
+  defaultImageAlt,
+  dataURIImageAsset,
+  exportImageSource,
+  forEachWithConcurrency,
+  imageDataURI,
+  imageResourceCacheKey,
+  maximumPreviewImages,
+  maximumConcurrentImageResolvers,
+  resolvePreparedImageAsset,
+  type ImageAsset,
+  type ImageAssetData,
+  type PendingImageAssetRequest,
+  type PreparedImageResource,
+} from './image-resources'
+import {
+  SavedWebDAVFormError,
+  buildSavedWebDAVConnectionInput,
+  clearedWebDAVConnectionForm,
+  normalizeSavedWebDAVConnections,
+  resolveRecentWebDAVOpen,
+  webDAVOriginChanged,
+  type SavedWebDAVConnection,
+} from './saved-webdav'
 import {
   getSystemLanguages,
   languageModeStorageKey,
@@ -76,9 +111,12 @@ import {
   CloseWebDAVDocument,
   CloseWorkspace,
   CloseWebDAVWorkspace,
+  ConnectSavedWebDAV,
   ConnectWebDAV,
   ConfirmQuit,
   DownloadUpdate,
+  DeleteSavedWebDAVConnection,
+  FetchPublicImage,
   GetAppInfo,
   GetLanguageSettings,
   LoadInitialDocument,
@@ -88,18 +126,27 @@ import {
   OverwriteWebDAVFile,
   OpenRecentDirectory,
   OpenRecentFile,
+  OpenRecentWebDAV,
   OpenSourceRepository,
   OpenUpdatePage,
   OpenWebDAVFile,
   OpenWorkspaceFile,
+  ImportLocalImageData,
+  ImportWebDAVImageData,
   ListWebDAVDirectory,
   ReadWorkspaceDirectory,
+  ResolveLocalImage,
+  ResolveWebDAVImage,
+  ValidateImageData,
   LaunchUpdateInstaller,
+  ListSavedWebDAVConnections,
   RenderingTestDocument as LoadRenderingTestDocument,
   SaveExportFile,
   SaveFile,
   SaveFileAs,
   SaveWebDAVFile,
+  SaveWebDAVConnection,
+  SelectImageFile,
   SetLanguage,
   SetWindowTitle,
   UpdateMenuState,
@@ -118,6 +165,10 @@ import {
 
 type Theme = 'github' | 'clean' | 'wechat' | 'dark'
 type ViewMode = 'edit' | 'split' | 'preview'
+type ImageInsertMode = 'local' | 'data' | 'webdav' | 'public'
+type WebDAVConnectionFormMode = 'connect' | 'new' | 'edit'
+type WebDAVDialogView = 'saved' | 'temporary' | 'new' | 'edit'
+type WebDAVConnectionOperation = 'idle' | 'connecting-saved' | 'saving' | 'deleting'
 
 interface DocumentData {
   path: string
@@ -143,8 +194,15 @@ interface WebDAVSaveResultData {
 
 interface RecentOpenEventData {
   id: string
-  kind: 'file' | 'directory' | 'folder'
+  kind: 'file' | 'directory' | 'folder' | 'webdav'
   name: string
+}
+
+interface RecentWebDAVConnectionData {
+  endpoint: string
+  name: string
+  savedConnectionId?: string
+  hasSavedCredentials?: boolean
 }
 
 type PendingWorkspaceOpenRequest =
@@ -196,6 +254,13 @@ interface ExportSnapshot {
   title: string
 }
 
+interface ImageRenderContext {
+  storageKind: 'local' | 'webdav' | 'builtin'
+  localDocumentPath: string
+  remoteWorkspaceId: string
+  remoteDocumentId: string
+}
+
 const source = ref('')
 const savedSource = ref('')
 const localDocumentPath = ref('')
@@ -217,9 +282,10 @@ const busy = ref(false)
 const editor = ref<HTMLTextAreaElement | null>(null)
 const preview = ref<HTMLElement | null>(null)
 const previewPane = ref<HTMLElement | null>(null)
+const appDialog = ref<HTMLElement | null>(null)
 const syncScroll = ref(true)
 const builtInDocument = ref<BuiltInDocumentKind | null>(null)
-const activeDialog = ref<'settings' | 'shortcuts' | 'about' | 'webdav' | null>(null)
+const activeDialog = ref<'settings' | 'shortcuts' | 'about' | 'webdav' | 'image' | null>(null)
 const unsavedTransition = ref<DocumentTransition | null>(null)
 const resolvingUnsavedPrompt = ref(false)
 const applicationInfo = ref<ApplicationInfoData>({ version: '', author: '', repositoryURL: '' })
@@ -241,6 +307,25 @@ const webDAVConnecting = ref(false)
 const webDAVConnectionError = ref('')
 const webDAVConflictOpen = ref(false)
 const webDAVConflictBusy = ref(false)
+const savedWebDAVConnections = ref<SavedWebDAVConnection[]>([])
+const savedWebDAVConnectionsLoading = ref(false)
+const savedWebDAVConnectionsError = ref('')
+const webDAVConnectionFormMode = ref<WebDAVConnectionFormMode>('connect')
+const webDAVDialogView = ref<WebDAVDialogView>('saved')
+const webDAVEditingConnectionID = ref('')
+const webDAVConnectionName = ref('')
+const webDAVStoreCredentials = ref(false)
+const webDAVRemoveCredentials = ref(false)
+const webDAVConnectionManagerBusy = ref(false)
+const webDAVConnectionOperation = ref<WebDAVConnectionOperation>('idle')
+const webDAVConnectingConnectionID = ref('')
+const webDAVDeleteCandidate = ref<SavedWebDAVConnection | null>(null)
+const imageInsertMode = ref<ImageInsertMode>('data')
+const selectedImage = ref<ImageAssetData | null>(null)
+const imageAltText = ref('')
+const publicImageURL = ref('')
+const imageInsertBusy = ref(false)
+const imageInsertError = ref('')
 
 let renderTimer: number | undefined
 let quitting = false
@@ -249,6 +334,7 @@ let updateDownloadCancelled = false
 let documentTransitionInProgress = false
 let pendingWorkspaceOpenRequest: PendingWorkspaceOpenRequest | null = null
 let workspaceRefreshQueued = false
+let savedConnectionsLoadGeneration = 0
 let drainingSystemDocuments = false
 const pendingSystemDocuments: DocumentData[] = []
 let resolveUnsavedDecision: ((decision: UnsavedDecision) => void) | null = null
@@ -256,9 +342,16 @@ let layoutResizeObserver: ResizeObserver | null = null
 let layoutReconcileFrame: number | null = null
 let editorScrollAnchors: ScrollAnchor[] = []
 let previewScrollAnchors: ScrollAnchor[] = []
+let lastFocusedElement: Element | null = null
+let dialogReturnFocus: HTMLElement | null = null
+let webDAVDeleteReturnFocus: HTMLElement | null = null
 const removeMenuListeners: Array<() => void> = []
 const scrollSync = new ScrollSyncController()
 const previewCommit = new LatestPreviewCommit()
+const imageResolverGate = new ImageResolverGate()
+const imageDecodeGate = new ImageDecodeGate()
+const pendingImageAssets = new Map<string, PendingImageAssetRequest>()
+let activePreviewImages = new PreviewImageResourceSet()
 type MermaidRenderResult = Awaited<ReturnType<typeof mermaid.render>>
 const mermaidRenderCache = new BoundedCache<string, MermaidRenderResult>(maximumMermaidCacheEntries)
 const updateDownloadSessions = new UpdateDownloadSessionGate()
@@ -305,6 +398,18 @@ markdown.core.ruler.push('inkmark-source-lines', (state) => {
     }
   })
 })
+// Markdown images are emitted without a src attribute. A browser may start
+// decoding or loading an image as soon as detached HTML is parsed, so the
+// original destination remains inert until preparePreviewImages validates it
+// through the local, WebDAV, Data URI, or public-HTTPS resolver.
+markdown.renderer.rules.image = (tokens, index) => {
+  const token = tokens[index]
+  const source = markdown.utils.escapeHtml(String(token.attrGet('src') || ''))
+  const alt = markdown.utils.escapeHtml(token.content || '')
+  const title = markdown.utils.escapeHtml(String(token.attrGet('title') || ''))
+  const titleAttribute = title ? ` data-inkmark-image-title="${title}"` : ''
+  return `<span class="inkmark-image-placeholder" data-inkmark-image-source="${source}" data-inkmark-image-alt="${alt}"${titleAttribute}></span>`
+}
 markdown.renderer.rules.math_inline = (tokens, index) =>
   `<span class="math-source" data-display-mode="inline">${markdown.utils.escapeHtml(tokens[index].content)}</span>`
 markdown.renderer.rules.math_block = (tokens, index) => {
@@ -409,7 +514,64 @@ const formatActions = computed(() => [
   { action: 'code', label: '</>', title: t('format.inlineCode') },
   { action: 'codeblock', label: '```', title: t('format.codeBlock') },
   { action: 'table', label: '▦', title: t('format.table') },
+  { action: 'image', label: '▧', title: t('image.insert') },
 ])
+
+const imageInsertModes = computed<Array<{ value: ImageInsertMode; label: string; disabled: boolean }>>(() => [
+  {
+    value: 'local',
+    label: t('image.modeLocal'),
+    disabled: documentStorageKind.value !== 'local' || !localDocumentPath.value,
+  },
+  { value: 'data', label: t('image.modeData'), disabled: false },
+  {
+    value: 'webdav',
+    label: t('image.modeWebDAV'),
+    disabled: documentStorageKind.value !== 'webdav' || !remoteWorkspaceId.value || !remoteDocumentId.value,
+  },
+  { value: 'public', label: t('image.modePublic'), disabled: false },
+])
+
+const canInsertImage = computed(() => {
+  if (imageInsertBusy.value) return false
+  if (imageInsertMode.value === 'public') return Boolean(publicImageURL.value.trim())
+  return Boolean(selectedImage.value?.dataBase64)
+})
+
+const editingSavedWebDAVConnection = computed(() => savedWebDAVConnections.value.find(
+  (connection) => connection.id === webDAVEditingConnectionID.value,
+) || null)
+const editingChangesWebDAVOrigin = computed(() => Boolean(
+  editingSavedWebDAVConnection.value?.hasCredentials
+  && webDAVOriginChanged(editingSavedWebDAVConnection.value.endpoint, webDAVBaseURL.value),
+))
+const webDAVDialogBusy = computed(() => webDAVConnecting.value
+  || webDAVConnectionManagerBusy.value)
+const webDAVDialogBusyMessage = computed(() => {
+  if (webDAVConnecting.value || webDAVConnectionOperation.value === 'connecting-saved') {
+    return t('webdav.connecting')
+  }
+  if (webDAVConnectionOperation.value === 'saving') return t('webdav.savingConnection')
+  if (webDAVConnectionOperation.value === 'deleting') return t('webdav.deletingConnection')
+  return t('webdav.processingConnection')
+})
+const webDAVEndpointInvalid = computed(() => webDAVConnectionError.value === t('webdav.endpointRequired')
+  || webDAVConnectionError.value === t('webdav.invalidURL'))
+const webDAVConnectingConnectionName = computed(() => savedWebDAVConnections.value.find(
+  (connection) => connection.id === webDAVConnectingConnectionID.value,
+)?.name || 'WebDAV')
+const canSubmitWebDAVForm = computed(() => {
+  if (webDAVDialogView.value === 'saved' || webDAVDialogBusy.value || !webDAVBaseURL.value.trim()) return false
+  if (webDAVConnectionFormMode.value !== 'connect' && !webDAVConnectionName.value.trim()) return false
+  if (
+    webDAVConnectionFormMode.value === 'edit'
+    && editingChangesWebDAVOrigin.value
+    && !webDAVPassword.value
+    && !webDAVRemoveCredentials.value
+  ) return false
+  if (webDAVPassword.value && !webDAVUsername.value.trim()) return false
+  return true
+})
 
 const exportLabels = computed<Record<ExportFormat, string>>(() => ({
   pdf: t('export.pdf'),
@@ -718,16 +880,110 @@ async function openDocument() {
 }
 
 function clearWebDAVConnectionForm(clearEndpoint = true) {
-  if (clearEndpoint) webDAVBaseURL.value = ''
-  webDAVUsername.value = ''
-  webDAVPassword.value = ''
-  showWebDAVPassword.value = false
-  webDAVConnectionError.value = ''
+  const cleared = clearedWebDAVConnectionForm(clearEndpoint ? '' : webDAVBaseURL.value)
+  webDAVBaseURL.value = cleared.endpoint
+  webDAVConnectionName.value = cleared.name
+  webDAVUsername.value = cleared.username
+  webDAVPassword.value = cleared.password
+  showWebDAVPassword.value = cleared.showPassword
+  webDAVConnectionFormMode.value = cleared.mode
+  webDAVEditingConnectionID.value = cleared.editingConnectionID
+  webDAVStoreCredentials.value = cleared.storeCredentials
+  webDAVRemoveCredentials.value = cleared.removeCredentials
+  webDAVConnectionError.value = cleared.error
+}
+
+function clearWebDAVConnectionManager() {
+  savedConnectionsLoadGeneration += 1
+  clearWebDAVConnectionForm()
+  webDAVDialogView.value = 'saved'
+  savedWebDAVConnections.value = []
+  savedWebDAVConnectionsLoading.value = false
+  savedWebDAVConnectionsError.value = ''
+  webDAVConnectionManagerBusy.value = false
+  webDAVConnectionOperation.value = 'idle'
+  webDAVConnectingConnectionID.value = ''
+  webDAVDeleteCandidate.value = null
+  webDAVDeleteReturnFocus = null
+}
+
+function clearImageInsertForm() {
+  selectedImage.value = null
+  imageAltText.value = ''
+  publicImageURL.value = ''
+  imageInsertError.value = ''
 }
 
 function dismissActiveDialog() {
-  if (activeDialog.value === 'webdav' && webDAVConnecting.value) return
+  if (activeDialog.value === 'webdav' && webDAVDialogBusy.value) return
+  if (activeDialog.value === 'webdav' && webDAVDeleteCandidate.value) {
+    cancelDeleteSavedWebDAVConnection()
+    return
+  }
+  if (activeDialog.value === 'image' && imageInsertBusy.value) return
   activeDialog.value = null
+}
+
+function activeDialogFocusScope() {
+  if (activeDialog.value === 'webdav' && webDAVDeleteCandidate.value) {
+    return appDialog.value?.querySelector<HTMLElement>('.saved-connection-delete') || appDialog.value
+  }
+  return appDialog.value
+}
+
+function activeDialogFocusableElements() {
+  const scope = activeDialogFocusScope()
+  if (!scope) return []
+  return Array.from(scope.querySelectorAll<HTMLElement>([
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    'a[href]',
+    '[contenteditable="true"]',
+    '[tabindex]:not([tabindex="-1"])',
+  ].join(','))).filter((element) => element.getAttribute('aria-hidden') !== 'true'
+    && !element.matches(':disabled')
+    && !element.closest('[inert]'))
+}
+
+function focusActiveDialog() {
+  const scope = activeDialogFocusScope()
+  if (!scope) return
+  const preferred = scope.querySelector<HTMLElement>('[data-dialog-initial]:not([disabled])')
+  const target = preferred || activeDialogFocusableElements()[0] || scope
+  if (target === scope && !scope.hasAttribute('tabindex')) scope.tabIndex = -1
+  target.focus({ preventScroll: true })
+}
+
+function trapActiveDialogFocus(event: KeyboardEvent) {
+  if (event.key !== 'Tab' || !activeDialog.value) return false
+  const focusable = activeDialogFocusableElements()
+  if (!focusable.length) {
+    event.preventDefault()
+    focusActiveDialog()
+    return true
+  }
+  const currentIndex = focusable.indexOf(document.activeElement as HTMLElement)
+  const nextIndex = event.shiftKey
+    ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
+    : (currentIndex < 0 || currentIndex === focusable.length - 1 ? 0 : currentIndex + 1)
+  if (currentIndex < 0
+    || (!event.shiftKey && currentIndex === focusable.length - 1)
+    || (event.shiftKey && currentIndex === 0)) {
+    event.preventDefault()
+    focusable[nextIndex].focus()
+    return true
+  }
+  return false
+}
+
+function handleActiveDialogBackdrop() {
+  if (activeDialog.value === 'webdav' && webDAVDeleteCandidate.value) {
+    cancelDeleteSavedWebDAVConnection()
+    return
+  }
+  dismissActiveDialog()
 }
 
 function dismissWebDAVConflict() {
@@ -735,10 +991,350 @@ function dismissWebDAVConflict() {
   webDAVConflictOpen.value = false
 }
 
-function showWebDAVConnectionDialog() {
-  if (busy.value || webDAVConnecting.value) return
+function showWebDAVConnectionDialog(endpoint = '', errorMessage = '') {
+  if (busy.value || webDAVDialogBusy.value) return
   clearWebDAVConnectionForm()
+  webDAVDeleteCandidate.value = null
+  webDAVBaseURL.value = endpoint.trim()
+  webDAVConnectionError.value = errorMessage
+  webDAVDialogView.value = endpoint.trim() || errorMessage ? 'temporary' : 'saved'
   activeDialog.value = 'webdav'
+  void loadSavedWebDAVConnections()
+}
+
+async function loadSavedWebDAVConnections() {
+  const generation = ++savedConnectionsLoadGeneration
+  savedWebDAVConnectionsLoading.value = true
+  savedWebDAVConnectionsError.value = ''
+  try {
+    const connections = normalizeSavedWebDAVConnections(await ListSavedWebDAVConnections())
+    if (generation !== savedConnectionsLoadGeneration || activeDialog.value !== 'webdav') return
+    savedWebDAVConnections.value = connections
+  } catch (error) {
+    if (generation !== savedConnectionsLoadGeneration || activeDialog.value !== 'webdav') return
+    savedWebDAVConnectionsError.value = localizedErrorMessage(error)
+  } finally {
+    if (generation === savedConnectionsLoadGeneration) savedWebDAVConnectionsLoading.value = false
+  }
+}
+
+function showSavedWebDAVConnections() {
+  clearWebDAVConnectionForm()
+  webDAVDeleteCandidate.value = null
+  webDAVDialogView.value = 'saved'
+}
+
+function showTemporaryWebDAVForm(endpoint = '', username = '', errorMessage = '') {
+  clearWebDAVConnectionForm()
+  webDAVDeleteCandidate.value = null
+  webDAVConnectionFormMode.value = 'connect'
+  webDAVDialogView.value = 'temporary'
+  webDAVBaseURL.value = endpoint.trim()
+  webDAVUsername.value = username.trim()
+  webDAVConnectionError.value = errorMessage
+}
+
+function showNewSavedWebDAVForm() {
+  if (webDAVDialogBusy.value) return
+  clearWebDAVConnectionForm()
+  webDAVDeleteCandidate.value = null
+  webDAVConnectionFormMode.value = 'new'
+  webDAVDialogView.value = 'new'
+}
+
+function showEditSavedWebDAVForm(connection: SavedWebDAVConnection) {
+  if (webDAVDialogBusy.value) return
+  clearWebDAVConnectionForm()
+  webDAVDeleteCandidate.value = null
+  webDAVConnectionFormMode.value = 'edit'
+  webDAVDialogView.value = 'edit'
+  webDAVEditingConnectionID.value = connection.id
+  webDAVConnectionName.value = connection.name
+  webDAVBaseURL.value = connection.endpoint
+  webDAVUsername.value = connection.username
+}
+
+function cancelSavedWebDAVForm() {
+  if (webDAVDialogBusy.value) return
+  showSavedWebDAVConnections()
+}
+
+function showImageDialog() {
+  if (busy.value || imageInsertBusy.value) return
+  clearImageInsertForm()
+  if (documentStorageKind.value === 'webdav' && remoteWorkspaceId.value && remoteDocumentId.value) {
+    imageInsertMode.value = 'webdav'
+  } else if (documentStorageKind.value === 'local' && localDocumentPath.value) {
+    imageInsertMode.value = 'local'
+  } else {
+    imageInsertMode.value = 'data'
+  }
+  activeDialog.value = 'image'
+}
+
+function currentImageRenderContext(): ImageRenderContext {
+  return {
+    storageKind: documentStorageKind.value,
+    localDocumentPath: localDocumentPath.value,
+    remoteWorkspaceId: remoteWorkspaceId.value,
+    remoteDocumentId: remoteDocumentId.value,
+  }
+}
+
+function sameImageRenderContext(left: ImageRenderContext, right: ImageRenderContext) {
+  return left.storageKind === right.storageKind
+    && left.localDocumentPath === right.localDocumentPath
+    && left.remoteWorkspaceId === right.remoteWorkspaceId
+    && left.remoteDocumentId === right.remoteDocumentId
+}
+
+async function selectImageForInsertion() {
+  if (imageInsertBusy.value || imageInsertMode.value === 'public') return
+  try {
+    imageInsertBusy.value = true
+    imageInsertError.value = ''
+    const asset = await SelectImageFile() as ImageAssetData
+    if (!asset?.dataBase64) return
+    imageDataURI(asset.mimeType, asset.dataBase64)
+    selectedImage.value = asset
+    if (!imageAltText.value.trim()) imageAltText.value = defaultImageAlt(asset.name)
+  } catch (error) {
+    imageInsertError.value = localizedErrorMessage(error)
+  } finally {
+    imageInsertBusy.value = false
+  }
+}
+
+function insertMarkdownImage(markdownURL: string, fallbackName = '') {
+  const target = editor.value
+  if (!target) throw new Error(t('error.previewUnavailable'))
+  const start = target.selectionStart
+  const end = target.selectionEnd
+  const alt = imageAltText.value.trim() || defaultImageAlt(fallbackName) || t('image.defaultAlt')
+  const markdownImage = buildMarkdownImage(alt, markdownURL)
+  target.setRangeText(markdownImage, start, end, 'end')
+  source.value = target.value
+  nextTick(() => {
+    target.focus()
+    target.setSelectionRange(start + markdownImage.length, start + markdownImage.length)
+  })
+}
+
+async function insertSelectedImage() {
+  if (!canInsertImage.value) return
+  const context = currentImageRenderContext()
+  try {
+    imageInsertBusy.value = true
+    busy.value = true
+    imageInsertError.value = ''
+    let markdownURL = ''
+    let fallbackName = ''
+    if (imageInsertMode.value === 'public') {
+      const parsed = new URL(publicImageURL.value.trim())
+      if (classifyImageSource(parsed.href, 'builtin') !== 'public-https') {
+        throw new Error(t('image.publicHTTPSRequired'))
+      }
+      markdownURL = parsed.href
+      fallbackName = parsed.pathname.split('/').pop() || ''
+    } else {
+      const asset = selectedImage.value
+      if (!asset?.dataBase64) return
+      fallbackName = asset.name
+      if (imageInsertMode.value === 'data') {
+        markdownURL = imageDataURI(asset.mimeType, asset.dataBase64)
+      } else {
+        let imported: ImageAsset
+        if (imageInsertMode.value === 'local') {
+          if (context.storageKind !== 'local' || !context.localDocumentPath) {
+            throw new Error(t('image.saveDocumentFirst'))
+          }
+          imported = await ImportLocalImageData(
+            context.localDocumentPath,
+            asset.name,
+            asset.mimeType,
+            asset.dataBase64,
+          ) as ImageAsset
+        } else {
+          if (context.storageKind !== 'webdav' || !context.remoteWorkspaceId || !context.remoteDocumentId) {
+            throw new Error(t('image.openWebDAVDocumentFirst'))
+          }
+          imported = await ImportWebDAVImageData(
+            context.remoteWorkspaceId,
+            context.remoteDocumentId,
+            asset.name,
+            asset.mimeType,
+            asset.dataBase64,
+          ) as ImageAsset
+        }
+        markdownURL = imported?.markdownURL?.trim() || ''
+        fallbackName = imported?.name || fallbackName
+        if (!markdownURL) throw new Error(t('image.invalidResponse'))
+      }
+    }
+    if (!sameImageRenderContext(context, currentImageRenderContext())) {
+      throw new Error(t('image.documentChanged'))
+    }
+    insertMarkdownImage(markdownURL, fallbackName)
+    activeDialog.value = null
+    renderState.value = t('image.inserted')
+  } catch (error) {
+    imageInsertError.value = localizedErrorMessage(error)
+    renderState.value = t('image.insertFailed', { message: imageInsertError.value })
+  } finally {
+    busy.value = false
+    imageInsertBusy.value = false
+  }
+}
+
+async function openRecentWebDAV(id: string) {
+  if (busy.value || webDAVConnecting.value) return
+  let endpoint = ''
+  let fallbackError = ''
+  try {
+    busy.value = true
+    const connection = await OpenRecentWebDAV(id) as RecentWebDAVConnectionData
+    endpoint = connection?.endpoint?.trim() || ''
+    if (!endpoint) throw new Error(t('webdav.invalidResponse'))
+    const recentResult = await resolveRecentWebDAVOpen(connection, async (connectionID) => {
+      const openedWorkspace = await ConnectSavedWebDAV(connectionID)
+      if (!setWorkspace(openedWorkspace)) throw new Error(t('webdav.invalidResponse'))
+    })
+    if (recentResult.kind === 'connected') {
+      renderState.value = t('webdav.connected', { name: workspace.value?.name || connection.name || 'WebDAV' })
+      return
+    }
+    if (recentResult.error) {
+      fallbackError = t('webdav.savedConnectFailed', { message: localizedErrorMessage(recentResult.error) })
+    }
+  } catch (error) {
+    showError(error)
+  } finally {
+    busy.value = false
+  }
+  if (endpoint) showWebDAVConnectionDialog(endpoint, fallbackError)
+}
+
+async function connectSavedWebDAV(connection: SavedWebDAVConnection) {
+  if (busy.value || webDAVDialogBusy.value) return
+  try {
+    busy.value = true
+    webDAVConnectionManagerBusy.value = true
+    webDAVConnectionOperation.value = 'connecting-saved'
+    webDAVConnectingConnectionID.value = connection.id
+    webDAVConnectionError.value = ''
+    savedWebDAVConnectionsError.value = ''
+    renderState.value = t('webdav.connectingSaved', { name: connection.name })
+    const openedWorkspace = await ConnectSavedWebDAV(connection.id)
+    if (!setWorkspace(openedWorkspace)) throw new Error(t('webdav.invalidResponse'))
+    renderState.value = t('webdav.connected', { name: workspace.value?.name || connection.name })
+    activeDialog.value = null
+  } catch (error) {
+    const message = localizedErrorMessage(error)
+    showTemporaryWebDAVForm(connection.endpoint, connection.username, t('webdav.savedConnectFailed', { message }))
+    renderState.value = t('webdav.connectionFailed', { message })
+  } finally {
+    webDAVPassword.value = ''
+    webDAVConnectingConnectionID.value = ''
+    webDAVConnectionOperation.value = 'idle'
+    webDAVConnectionManagerBusy.value = false
+    busy.value = false
+  }
+}
+
+function savedWebDAVFormErrorMessage(error: unknown) {
+  if (error instanceof SavedWebDAVFormError) {
+    if (error.code === 'name_required') return t('webdav.connectionNameRequired')
+    if (error.code === 'endpoint_required') return t('webdav.endpointRequired')
+    if (error.code === 'origin_requires_password') return t('webdav.endpointChangeNeedsPassword')
+    return t('webdav.usernameChangeNeedsPassword')
+  }
+  return localizedErrorMessage(error)
+}
+
+async function saveWebDAVConnection() {
+  if (busy.value || webDAVDialogBusy.value || webDAVConnectionFormMode.value === 'connect') return
+  const existing = editingSavedWebDAVConnection.value
+  try {
+    const input = buildSavedWebDAVConnectionInput({
+      mode: webDAVConnectionFormMode.value,
+      id: webDAVEditingConnectionID.value,
+      name: webDAVConnectionName.value,
+      endpoint: webDAVBaseURL.value,
+      username: webDAVUsername.value,
+      password: webDAVPassword.value,
+      storeCredentials: webDAVStoreCredentials.value,
+      removeCredentials: webDAVRemoveCredentials.value,
+      existing,
+    })
+    busy.value = true
+    webDAVConnectionManagerBusy.value = true
+    webDAVConnectionOperation.value = 'saving'
+    webDAVConnectionError.value = ''
+    await SaveWebDAVConnection(input)
+    webDAVPassword.value = ''
+    renderState.value = t(webDAVConnectionFormMode.value === 'new'
+      ? 'webdav.connectionSaved'
+      : 'webdav.connectionUpdated')
+    showSavedWebDAVConnections()
+    await loadSavedWebDAVConnections()
+  } catch (error) {
+    webDAVConnectionError.value = savedWebDAVFormErrorMessage(error)
+  } finally {
+    webDAVPassword.value = ''
+    webDAVConnectionOperation.value = 'idle'
+    webDAVConnectionManagerBusy.value = false
+    busy.value = false
+  }
+}
+
+function requestDeleteSavedWebDAVConnection(connection: SavedWebDAVConnection) {
+  if (webDAVDialogBusy.value) return
+  savedWebDAVConnectionsError.value = ''
+  webDAVDeleteReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  webDAVDeleteCandidate.value = connection
+  void nextTick(() => focusActiveDialog())
+}
+
+function cancelDeleteSavedWebDAVConnection() {
+  if (webDAVConnectionManagerBusy.value) return
+  const returnFocus = webDAVDeleteReturnFocus
+  webDAVDeleteReturnFocus = null
+  webDAVDeleteCandidate.value = null
+  savedWebDAVConnectionsError.value = ''
+  void nextTick(() => {
+    if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true })
+    else focusActiveDialog()
+  })
+}
+
+async function confirmDeleteSavedWebDAVConnection() {
+  const candidate = webDAVDeleteCandidate.value
+  if (!candidate || busy.value || webDAVDialogBusy.value) return
+  try {
+    busy.value = true
+    webDAVConnectionManagerBusy.value = true
+    webDAVConnectionOperation.value = 'deleting'
+    savedWebDAVConnectionsError.value = ''
+    await DeleteSavedWebDAVConnection(candidate.id)
+    webDAVDeleteCandidate.value = null
+    webDAVDeleteReturnFocus = null
+    if (webDAVEditingConnectionID.value === candidate.id) showSavedWebDAVConnections()
+    renderState.value = t('webdav.connectionDeleted', { name: candidate.name })
+    await loadSavedWebDAVConnections()
+  } catch (error) {
+    savedWebDAVConnectionsError.value = localizedErrorMessage(error)
+  } finally {
+    webDAVConnectionOperation.value = 'idle'
+    webDAVConnectionManagerBusy.value = false
+    busy.value = false
+    if (!webDAVDeleteCandidate.value) void nextTick(() => focusActiveDialog())
+  }
+}
+
+function submitWebDAVDialog() {
+  if (webDAVDialogView.value === 'saved') return
+  if (webDAVConnectionFormMode.value === 'connect') void connectWebDAV()
+  else void saveWebDAVConnection()
 }
 
 async function connectWebDAV() {
@@ -883,6 +1479,10 @@ async function openRecentItem(value: unknown) {
   const candidate = value as Partial<RecentOpenEventData>
   if (!candidate.id || !candidate.kind) return
 
+  if (candidate.kind === 'webdav') {
+    await openRecentWebDAV(candidate.id)
+    return
+  }
   if (candidate.kind === 'directory' || candidate.kind === 'folder') {
     await openRecentDirectory(candidate.id)
     return
@@ -1083,7 +1683,7 @@ async function exportDocument(format: ExportFormat) {
       const documentHTML = buildStandaloneHTML({
         title: snapshot.title,
         theme: snapshot.theme,
-        articleHTML: target.innerHTML,
+        articleHTML: exportArticleHTML(target, format),
         embeddedStyles: collectEmbeddedStyles(),
         language: locale.value,
         wordCompatible: format === 'doc',
@@ -1161,7 +1761,7 @@ async function capturePreviewCanvas(
     const summary = details.querySelector<HTMLElement>('summary')
     if (summary) summary.style.display = 'block'
   })
-  replaceRemoteImagesForOfflineCapture(clone)
+  materializeExportImages(clone, 'capture')
   stage.append(clone)
   document.body.append(stage)
 
@@ -1293,18 +1893,6 @@ function normalizeModernColorsForCanvas(clonedDocument: Document) {
       const value = element.getAttribute(attribute)
       if (value && /color\(/i.test(value)) element.setAttribute(attribute, normalize(value))
     }
-  })
-}
-
-function replaceRemoteImagesForOfflineCapture(root: HTMLElement) {
-  root.querySelectorAll<HTMLImageElement>('img[src]').forEach((image) => {
-    const src = image.getAttribute('src') || ''
-    if (!/^(?:https?:)?\/\//i.test(src)) return
-    const placeholder = document.createElement('div')
-    placeholder.className = 'external-image-placeholder'
-    placeholder.textContent = t('export.externalImagePlaceholder', { source: image.alt || src })
-    placeholder.style.cssText = 'margin:16px 0;padding:18px;border:1px dashed #9aa4a0;border-radius:6px;color:#68716d;background:#f5f7f5;text-align:center'
-    image.replaceWith(placeholder)
   })
 }
 
@@ -1588,32 +2176,62 @@ async function toggleFullscreen() {
 }
 
 async function runEditAction(action: string) {
-  const target = editor.value
+  const activeElement = document.activeElement
+  const focusLeftDocument = !activeElement
+    || activeElement === document.body
+    || activeElement === document.documentElement
+  const modalRoot = document.querySelector<HTMLElement>('[aria-modal="true"]')
+  const target = resolveTextEditControl(
+    activeElement,
+    focusLeftDocument ? lastFocusedElement : null,
+    modalRoot ? null : editor.value,
+  )
   if (!target) return
-  beginScroll('editor')
+  if (modalRoot && !modalRoot.contains(target)) return
+  const sourceEditorTarget = target === editor.value
+  if (sourceEditorTarget) beginScroll('editor')
   target.focus()
+  const targetIsAvailable = () => isTextEditControl(target)
+    && (!modalRoot || (modalRoot.isConnected && modalRoot.contains(target)))
+  const targetStillOwnsEditIntent = () => {
+    const current = document.activeElement
+    const focusAtDocumentBoundary = !current
+      || current === document.body
+      || current === document.documentElement
+    return targetIsAvailable()
+      && (current === target || (focusAtDocumentBoundary && lastFocusedElement === target))
+  }
   try {
     if (action === 'select-all') {
       target.setSelectionRange(0, target.value.length)
     } else if (action === 'copy' || action === 'cut') {
-      const start = target.selectionStart
-      const end = target.selectionEnd
+      const start = target.selectionStart ?? 0
+      const end = target.selectionEnd ?? start
+      if (end <= start) return
       await navigator.clipboard.writeText(target.value.slice(start, end))
-      if (action === 'cut' && end > start) {
+      if (action === 'cut' && targetStillOwnsEditIntent()) {
         target.setRangeText('', start, end, 'end')
-        source.value = target.value
+        dispatchTextEditInput(target, 'deleteByCut')
       }
     } else if (action === 'paste') {
       const text = await navigator.clipboard.readText()
-      target.setRangeText(text, target.selectionStart, target.selectionEnd, 'end')
-      source.value = target.value
+      if (!targetStillOwnsEditIntent()) return
+      const start = target.selectionStart ?? 0
+      const end = target.selectionEnd ?? start
+      target.setRangeText(text, start, end, 'end')
+      const inputData = target instanceof HTMLInputElement && target.type === 'password' ? null : text
+      dispatchTextEditInput(target, 'insertFromPaste', inputData)
     } else if (action === 'undo' || action === 'redo') {
       document.execCommand(action)
-      source.value = target.value
+      dispatchTextEditInput(target, action === 'undo' ? 'historyUndo' : 'historyRedo')
     }
   } catch {
     renderState.value = t('edit.clipboardFailed')
   }
+}
+
+function rememberFocusedElement(event: FocusEvent) {
+  if (event.target instanceof Element) lastFocusedElement = event.target
 }
 
 function updateNativeMenu() {
@@ -1677,6 +2295,10 @@ async function drainSystemDocuments() {
 }
 
 function handleMenuAction(action: string) {
+  if (activeDialog.value) {
+    if (['undo', 'redo', 'cut', 'copy', 'paste', 'select-all'].includes(action)) void runEditAction(action)
+    return
+  }
   if (action === 'open-folder') {
     void openDirectory()
     return
@@ -1685,6 +2307,7 @@ function handleMenuAction(action: string) {
   if (action === 'new') void newDocument()
   else if (action === 'open') void openDocument()
   else if (action === 'connect-webdav') showWebDAVConnectionDialog()
+  else if (action === 'insert-image') showImageDialog()
   else if (action === 'clear-recent') void clearRecentItems()
   else if (action === 'save') void saveDocument()
   else if (action === 'save-as') void saveDocumentAs()
@@ -1723,18 +2346,203 @@ function scheduleRender() {
   renderTimer = window.setTimeout(renderNow, 120)
 }
 
+async function preparePreviewImages(
+  root: HTMLElement,
+  sequence: number,
+  context: ImageRenderContext,
+  resources: PreviewImageResourceSet,
+) {
+  const allPlaceholders = Array.from(root.querySelectorAll<HTMLElement>(
+    '.inkmark-image-placeholder[data-inkmark-image-source]',
+  ))
+  const placeholders = allPlaceholders.slice(0, maximumPreviewImages)
+  allPlaceholders.slice(maximumPreviewImages).forEach((placeholder) => {
+    const source = placeholder.dataset.inkmarkImageAlt || placeholder.dataset.inkmarkImageSource || ''
+    placeholder.className = 'image-resource-error'
+    placeholder.setAttribute('role', 'img')
+    placeholder.removeAttribute('data-inkmark-image-source')
+    placeholder.textContent = t('image.loadFailed', { source })
+  })
+  const budget = new PreviewImageBudget()
+  await forEachWithConcurrency(placeholders, maximumConcurrentImageResolvers, async (placeholder, index) => {
+    if (!previewCommit.isCurrent(sequence)) return
+    const originalSource = placeholder.dataset.inkmarkImageSource?.trim() || ''
+    const alt = placeholder.dataset.inkmarkImageAlt || ''
+    const title = placeholder.dataset.inkmarkImageTitle || ''
+    const kind = classifyImageSource(originalSource, context.storageKind)
+    const resourceID = `inkmark-image-${sequence}-${index}`
+    try {
+      let cacheKey = ''
+      let loadImageAsset: () => Promise<ImageAssetData>
+      if (kind === 'data') {
+        const embedded = dataURIImageAsset(originalSource)
+        // The complete Data URI is already the resource identity. Keeping it
+        // as the Map key avoids a second large concatenated copy while making
+        // identical embedded images reusable across renders.
+        cacheKey = originalSource
+        loadImageAsset = () => ValidateImageData(
+          '',
+          embedded.mimeType,
+          embedded.dataBase64,
+        ) as Promise<ImageAssetData>
+      } else if (kind === 'local-relative' || kind === 'webdav-relative' || kind === 'public-https') {
+        const contextKey = kind === 'local-relative'
+          ? context.localDocumentPath
+          : kind === 'webdav-relative'
+            ? `${context.remoteWorkspaceId}\0${context.remoteDocumentId}`
+            : ''
+        cacheKey = imageResourceCacheKey(kind, contextKey, originalSource)
+        loadImageAsset = async () => {
+          if (kind === 'local-relative') {
+            if (!context.localDocumentPath) throw new Error(t('image.relativeUnavailable'))
+            return ResolveLocalImage(context.localDocumentPath, originalSource) as Promise<ImageAssetData>
+          } else if (kind === 'webdav-relative') {
+            if (!context.remoteWorkspaceId || !context.remoteDocumentId) {
+              throw new Error(t('image.relativeUnavailable'))
+            }
+            return ResolveWebDAVImage(
+              context.remoteWorkspaceId,
+              context.remoteDocumentId,
+              originalSource,
+            ) as Promise<ImageAssetData>
+          }
+          return FetchPublicImage(originalSource) as Promise<ImageAssetData>
+        }
+      } else {
+        throw new Error(t('image.unsupportedSource'))
+      }
+      budget.claimImage(cacheKey)
+      // Adopted work belongs to an earlier render's budget. Pessimistically
+      // reserve its maximum size in this render until its validated metadata
+      // arrives, so new downloads cannot run ahead of the 64 MiB limit.
+      const adoptedReservation = pendingImageAssets.has(cacheKey) && budget.beginResolve(cacheKey)
+      let resolved: ImageAssetData
+      try {
+        resolved = await resolvePreparedImageAsset(
+          activePreviewImages,
+          pendingImageAssets,
+          cacheKey,
+          sequence,
+          (revision) => previewCommit.isCurrent(revision),
+          (shouldRun) => imageResolverGate.run(async () => {
+            const reserved = budget.beginResolve(cacheKey)
+            try {
+              const asset = await loadImageAsset()
+              budget.finishResolve(cacheKey, asset)
+              return asset
+            } catch (error) {
+              if (reserved) budget.cancelResolve(cacheKey)
+              throw error
+            }
+          }, shouldRun),
+        )
+      } catch (error) {
+        if (adoptedReservation) budget.cancelResolve(cacheKey)
+        throw error
+      }
+      // Active or cross-generation pending resources did not necessarily use
+      // this generation's budget while loading, so account for them again in
+      // the generation that is about to commit.
+      if (adoptedReservation) budget.finishResolve(cacheKey, resolved)
+      else budget.reserveAsset(cacheKey, resolved)
+      const record: PreparedImageResource = resources.add(resourceID, cacheKey, kind, originalSource, resolved)
+      if (!previewCommit.isCurrent(sequence)) return
+      const image = document.createElement('img')
+      image.alt = alt
+      if (title) image.title = title
+      image.dataset.inkmarkImageId = resourceID
+      image.src = record.previewSource
+      await imageDecodeGate.run(
+        () => waitForImageDecode(image),
+        () => previewCommit.isCurrent(sequence),
+      )
+      if (!previewCommit.isCurrent(sequence)) return
+      placeholder.replaceWith(image)
+    } catch {
+      if (!previewCommit.isCurrent(sequence)) return
+      resources.discard(resourceID)
+      placeholder.className = 'image-resource-error'
+      placeholder.setAttribute('role', 'img')
+      placeholder.removeAttribute('data-inkmark-image-source')
+      if (kind === 'public-https') {
+        placeholder.dataset.inkmarkPublicImage = originalSource
+        placeholder.dataset.inkmarkImageAlt = alt
+      }
+      placeholder.textContent = t('image.loadFailed', { source: alt || originalSource })
+    }
+  })
+}
+
+async function waitForImageDecode(image: HTMLImageElement) {
+  if (image.complete && image.naturalWidth > 0) return
+  const completion = typeof image.decode === 'function'
+    ? image.decode()
+    : new Promise<void>((resolve, reject) => {
+        image.addEventListener('load', () => resolve(), { once: true })
+        image.addEventListener('error', () => reject(new Error('image decode failed')), { once: true })
+      })
+  let timeoutID = 0
+  try {
+    await Promise.race([
+      completion,
+      new Promise<never>((_resolve, reject) => {
+        timeoutID = window.setTimeout(() => reject(new Error('image decode timed out')), 8_000)
+      }),
+    ])
+  } finally {
+    window.clearTimeout(timeoutID)
+  }
+}
+
+function materializeExportImages(root: HTMLElement, format: 'html' | 'doc' | 'capture') {
+  root.querySelectorAll<HTMLImageElement>('img[data-inkmark-image-id]').forEach((image) => {
+    const resourceID = image.dataset.inkmarkImageId || ''
+    const record = activePreviewImages.records.get(resourceID)
+    if (record) image.src = exportImageSource(record, format)
+    delete image.dataset.inkmarkImageId
+  })
+  if (format === 'html') {
+    root.querySelectorAll<HTMLElement>('[data-inkmark-public-image]').forEach((placeholder) => {
+      const source = placeholder.dataset.inkmarkPublicImage || ''
+      if (classifyImageSource(source, 'builtin') !== 'public-https') return
+      const image = document.createElement('img')
+      image.src = source
+      image.alt = placeholder.dataset.inkmarkImageAlt || ''
+      placeholder.replaceWith(image)
+    })
+  }
+}
+
+function exportArticleHTML(target: HTMLElement, format: 'html' | 'doc') {
+  const clone = target.cloneNode(true) as HTMLElement
+  materializeExportImages(clone, format)
+  return clone.innerHTML
+}
+
 async function renderNow(sourceText = source.value, renderTheme = theme.value): Promise<boolean> {
   const target = preview.value
   if (!target) return false
   const sequence = previewCommit.begin()
+  const nextPreviewImages = new PreviewImageResourceSet()
+  const imageContext = currentImageRenderContext()
   renderState.value = t('status.rendering')
   try {
     const renderedHTML = markdown.render(sourceText)
     const cleanHTML = DOMPurify.sanitize(renderedHTML, {
       USE_PROFILES: { html: true },
       ADD_TAGS: ['details', 'summary', 'mark'],
-      ADD_ATTR: ['target', 'rel', 'checked', 'disabled', 'data-alert', 'data-display-mode', 'data-source-line'],
-      FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'svg'],
+      ADD_ATTR: [
+        'target', 'rel', 'checked', 'disabled', 'data-alert', 'data-display-mode', 'data-source-line',
+        'data-inkmark-image-source', 'data-inkmark-image-alt', 'data-inkmark-image-title',
+      ],
+      // No resource-bearing HTML reaches the detached staging DOM. Markdown
+      // image tokens use inert spans above and receive a validated Blob URL
+      // only after the native resolver accepts their bytes.
+      FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'svg', 'img', 'picture', 'source', 'video', 'audio', 'track'],
+      FORBID_ATTR: [
+        'src', 'srcset', 'poster', 'background', 'style',
+        'data-inkmark-public-image', 'data-inkmark-image-id',
+      ],
     })
     const committed = await previewCommit.stageAndCommit(sequence, async () => {
       const staging = target.cloneNode(false) as HTMLElement
@@ -1742,20 +2550,29 @@ async function renderNow(sourceText = source.value, renderTheme = theme.value): 
       decoratePreview(staging)
       renderMath(staging)
       highlightCode(staging)
-      await renderDiagrams(staging, sequence, renderTheme)
+      await Promise.all([
+        renderDiagrams(staging, sequence, renderTheme),
+        preparePreviewImages(staging, sequence, imageContext, nextPreviewImages),
+      ])
       return staging
     }, (staging) => {
       // All expensive and asynchronous work happens off-screen. Replacing the
       // children once keeps the old preview stable until the new one is ready.
       target.classList.remove('render-error')
       target.replaceChildren(...Array.from(staging.childNodes))
+      activePreviewImages.release()
+      activePreviewImages = nextPreviewImages
       refreshScrollAnchors()
       reconcileActiveScroll()
     })
-    if (!committed) return false
+    if (!committed) {
+      nextPreviewImages.release()
+      return false
+    }
     renderState.value = t('status.rendered')
     return true
   } catch (error) {
+    nextPreviewImages.release()
     if (!previewCommit.isCurrent(sequence)) return false
     target.textContent = t('error.markdownRenderFailed', { message: errorMessage(error) })
     target.classList.add('render-error')
@@ -1956,6 +2773,10 @@ function swapPaneOrder() {
 
 function runFormat(action: string) {
   if (busy.value) return
+  if (action === 'image') {
+    showImageDialog()
+    return
+  }
   const target = editor.value
   if (!target) return
   beginScroll('editor')
@@ -2143,7 +2964,8 @@ function syncFromPreview() {
 async function copyHTML() {
   if (busy.value) return
   try {
-    await navigator.clipboard.writeText(preview.value?.innerHTML || '')
+    const target = preview.value
+    await navigator.clipboard.writeText(target ? exportArticleHTML(target, 'html') : '')
     renderState.value = t('status.htmlCopied')
   } catch {
     renderState.value = t('status.copyFailed')
@@ -2151,7 +2973,6 @@ async function copyHTML() {
 }
 
 function onKeydown(event: KeyboardEvent) {
-  if (busy.value) return
   if (event.key === 'Escape' && unsavedTransition.value) {
     event.preventDefault()
     answerUnsavedPrompt('cancel')
@@ -2163,9 +2984,16 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
   if (event.key === 'Escape' && activeDialog.value) {
+    event.preventDefault()
+    if (activeDialog.value === 'webdav' && webDAVDeleteCandidate.value) {
+      cancelDeleteSavedWebDAVConnection()
+      return
+    }
     dismissActiveDialog()
     return
   }
+  if (trapActiveDialogFocus(event)) return
+  if (busy.value) return
   if (!(event.metaKey || event.ctrlKey)) return
   const key = event.key.toLowerCase()
   if (key === 'b') {
@@ -2209,6 +3037,8 @@ function localizedErrorMessage(error: unknown) {
     server: 'webdav.serverError',
     protocol: 'webdav.invalidResponse',
     invalid_input: 'webdav.invalidRequest',
+    credential_store: 'webdav.credentialStoreUnavailable',
+    local_storage: 'webdav.localConnectionStorageUnavailable',
   }
   return t(translations[match[1]] || 'webdav.operationFailed')
 }
@@ -2226,10 +3056,54 @@ watch(busy, (isBusy) => {
   if (!isBusy) void drainPendingWorkspaceOpen()
 })
 watch(activeDialog, (nextDialog, previousDialog) => {
-  if (previousDialog === 'webdav' && nextDialog !== 'webdav') clearWebDAVConnectionForm()
+  if (nextDialog && !previousDialog) {
+    const activeElement = document.activeElement
+    dialogReturnFocus = activeElement instanceof HTMLElement
+      && activeElement !== document.body
+      && activeElement !== document.documentElement
+      ? activeElement
+      : lastFocusedElement instanceof HTMLElement
+        ? lastFocusedElement
+        : null
+    void nextTick(() => focusActiveDialog())
+  }
+  if (previousDialog === 'webdav' && nextDialog !== 'webdav') {
+    clearWebDAVConnectionManager()
+    lastFocusedElement = null
+  }
+  if (previousDialog === 'image' && nextDialog !== 'image') clearImageInsertForm()
+  if (!nextDialog && previousDialog) {
+    const returnFocus = dialogReturnFocus
+    dialogReturnFocus = null
+    void nextTick(() => {
+      if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true })
+      else editor.value?.focus({ preventScroll: true })
+    })
+  }
 })
-watch([webDAVBaseURL, webDAVUsername, webDAVPassword], () => {
-  if (activeDialog.value === 'webdav' && !webDAVConnecting.value) webDAVConnectionError.value = ''
+watch(webDAVDialogView, () => {
+  if (activeDialog.value === 'webdav') void nextTick(() => focusActiveDialog())
+})
+watch(webDAVDialogBusy, (isBusy, wasBusy) => {
+  if (isBusy || !wasBusy || activeDialog.value !== 'webdav') return
+  void nextTick(() => {
+    const focused = document.activeElement
+    if (focused === appDialog.value || !appDialog.value?.contains(focused)) focusActiveDialog()
+  })
+})
+watch(webDAVRemoveCredentials, (removeCredentials) => {
+  if (!removeCredentials) return
+  webDAVPassword.value = ''
+  showWebDAVPassword.value = false
+})
+watch(webDAVStoreCredentials, (storeCredentials) => {
+  if (storeCredentials || webDAVConnectionFormMode.value !== 'new') return
+  webDAVUsername.value = ''
+  webDAVPassword.value = ''
+  showWebDAVPassword.value = false
+})
+watch([imageInsertMode, publicImageURL, imageAltText], () => {
+  if (activeDialog.value === 'image' && !imageInsertBusy.value) imageInsertError.value = ''
 })
 watch([fileName, dirty], () => { void SetWindowTitle(fileName.value, dirty.value) })
 
@@ -2238,6 +3112,7 @@ onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
   window.addEventListener('languagechange', handleSystemLanguageChange)
+  document.addEventListener('focusin', rememberFocusedElement, true)
   removeMenuListeners.push(
     EventsOn('inkmark:menu-action', handleMenuAction),
     EventsOn('inkmark:open-document', handleSystemDocument),
@@ -2263,11 +3138,14 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  clearWebDAVConnectionForm()
+  clearWebDAVConnectionManager()
+  clearImageInsertForm()
   window.clearTimeout(renderTimer)
   previewCommit.invalidate()
   if (updateState.value === 'downloading') void CancelUpdateDownload()
   mermaidRenderCache.clear()
+  pendingImageAssets.clear()
+  activePreviewImages.release()
   if (layoutReconcileFrame !== null) window.cancelAnimationFrame(layoutReconcileFrame)
   layoutReconcileFrame = null
   layoutResizeObserver?.disconnect()
@@ -2277,9 +3155,11 @@ onBeforeUnmount(() => {
     resolveUnsavedDecision = null
   }
   removeMenuListeners.splice(0).forEach((removeListener) => removeListener())
+  lastFocusedElement = null
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('beforeunload', onBeforeUnload)
   window.removeEventListener('languagechange', handleSystemLanguageChange)
+  document.removeEventListener('focusin', rememberFocusedElement, true)
 })
 </script>
 
@@ -2509,13 +3389,19 @@ onBeforeUnmount(() => {
       </section>
     </div>
 
-    <div v-if="activeDialog" class="modal-backdrop" @click.self="dismissActiveDialog">
+    <div v-if="activeDialog" class="modal-backdrop" @click.self="handleActiveDialogBackdrop">
       <section
+        ref="appDialog"
         class="app-dialog"
-        :class="{ 'webdav-dialog': activeDialog === 'webdav' }"
+        :class="{
+          'webdav-dialog': activeDialog === 'webdav',
+          'has-webdav-delete-confirmation': activeDialog === 'webdav' && Boolean(webDAVDeleteCandidate),
+          'image-dialog': activeDialog === 'image',
+        }"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="`dialog-${activeDialog}`"
+        :aria-describedby="activeDialog === 'webdav' ? 'dialog-webdav-description' : undefined"
       >
         <template v-if="activeDialog === 'settings'">
           <h2 id="dialog-settings">{{ t('settings.title') }}</h2>
@@ -2535,14 +3421,238 @@ onBeforeUnmount(() => {
           </div>
         </template>
         <template v-else-if="activeDialog === 'webdav'">
-          <h2 id="dialog-webdav">{{ t('webdav.title') }}</h2>
-          <p>{{ t('webdav.description') }}</p>
+          <header class="webdav-dialog-header" :inert="Boolean(webDAVDeleteCandidate)">
+            <div>
+              <h2 id="dialog-webdav">{{ t('webdav.title') }}</h2>
+              <p id="dialog-webdav-description">{{ t('webdav.description') }}</p>
+            </div>
+            <button
+              type="button"
+              class="dialog-close-button"
+              :aria-label="t('webdav.closeDialog')"
+              :disabled="webDAVDialogBusy"
+              @click="dismissActiveDialog"
+            >×</button>
+          </header>
+
+          <nav
+            class="webdav-dialog-tabs"
+            :aria-label="t('webdav.connectionMethod')"
+            :inert="Boolean(webDAVDeleteCandidate)"
+          >
+            <button
+              id="webdav-saved-tab"
+              type="button"
+              :aria-pressed="webDAVDialogView !== 'temporary'"
+              :class="{ active: webDAVDialogView !== 'temporary' }"
+              :disabled="webDAVDialogBusy || webDAVDialogView === 'new' || webDAVDialogView === 'edit'"
+              :data-dialog-initial="webDAVDialogView === 'saved' ? '' : null"
+              @click="showSavedWebDAVConnections"
+            >{{ t('webdav.savedTab') }}</button>
+            <button
+              id="webdav-temporary-tab"
+              type="button"
+              :aria-pressed="webDAVDialogView === 'temporary'"
+              :class="{ active: webDAVDialogView === 'temporary' }"
+              :disabled="webDAVDialogBusy || webDAVDialogView === 'new' || webDAVDialogView === 'edit'"
+              @click="showTemporaryWebDAVForm()"
+            >{{ t('webdav.temporaryTab') }}</button>
+          </nav>
+
+          <section
+            v-if="webDAVDialogView === 'saved'"
+            id="webdav-saved-panel"
+            class="saved-connections"
+            :class="{ 'has-delete-confirmation': webDAVDeleteCandidate }"
+            :aria-busy="savedWebDAVConnectionsLoading"
+          >
+            <div
+              class="saved-connections-content"
+              :inert="Boolean(webDAVDeleteCandidate)"
+              :aria-hidden="webDAVDeleteCandidate ? 'true' : undefined"
+            >
+              <header>
+              <div>
+                <strong>{{ t('webdav.savedConnections') }}</strong>
+                <span>{{ t('webdav.savedConnectionsHint') }}</span>
+              </div>
+              <button
+                type="button"
+                class="button primary"
+                :disabled="webDAVDialogBusy"
+                @click="showNewSavedWebDAVForm"
+              >{{ t('webdav.newSavedConnection') }}</button>
+            </header>
+            <div v-if="savedWebDAVConnectionsLoading" class="saved-connections-empty" role="status">
+              <strong>{{ t('webdav.loadingSavedConnections') }}</strong>
+            </div>
+            <div
+              v-else-if="!savedWebDAVConnections.length && !savedWebDAVConnectionsError"
+              class="saved-connections-empty"
+            >
+              <strong>{{ t('webdav.noSavedConnections') }}</strong>
+              <span>{{ t('webdav.noSavedConnectionsHint') }}</span>
+              <div class="saved-connections-empty-actions">
+                <button type="button" class="button primary" @click="showNewSavedWebDAVForm">
+                  {{ t('webdav.newSavedConnection') }}
+                </button>
+                <button type="button" class="button secondary" @click="showTemporaryWebDAVForm()">
+                  {{ t('webdav.temporaryTab') }}
+                </button>
+              </div>
+            </div>
+            <ul v-else-if="savedWebDAVConnections.length" class="saved-connection-list">
+              <li v-for="connection in savedWebDAVConnections" :key="connection.id">
+                <div class="saved-connection-details">
+                  <div class="saved-connection-title-row">
+                    <strong>{{ connection.name }}</strong>
+                    <span
+                      class="saved-connection-badge"
+                      :class="{
+                        available: connection.hasCredentials && connection.credentialsAvailable,
+                        warning: connection.hasCredentials && !connection.credentialsAvailable,
+                      }"
+                    >{{ connection.hasCredentials && connection.credentialsAvailable
+                      ? t('webdav.credentialsSavedBadge')
+                      : connection.hasCredentials
+                        ? t('webdav.credentialsRequiredBadge')
+                        : t('webdav.noCredentialsBadge') }}</span>
+                  </div>
+                  <span :title="connection.endpoint">{{ connection.endpoint }}</span>
+                  <small v-if="connection.username">{{ t('webdav.savedUsername', { username: connection.username }) }}</small>
+                  <small v-else-if="connection.usernamePresent">{{ t('webdav.savedUsernameUnavailable') }}</small>
+                  <small v-else>{{ t('webdav.savedAnonymous') }}</small>
+                  <small v-if="connection.hasCredentials && !connection.credentialsAvailable" class="saved-credential-warning">
+                    {{ t('webdav.savedCredentialsUnavailable') }}
+                  </small>
+                </div>
+                <div class="saved-connection-actions" :aria-label="t('webdav.connectionActions', { name: connection.name })">
+                  <button
+                    type="button"
+                    class="button primary"
+                    :disabled="webDAVDialogBusy"
+                    :aria-label="t('webdav.connectNamed', { name: connection.name })"
+                    @click="connectSavedWebDAV(connection)"
+                  >{{ webDAVConnectingConnectionID === connection.id
+                    ? t('webdav.connecting')
+                    : t('webdav.connectSaved') }}</button>
+                  <button
+                    type="button"
+                    class="button secondary"
+                    :disabled="webDAVDialogBusy"
+                    :aria-label="t('webdav.editNamed', { name: connection.name })"
+                    @click="showEditSavedWebDAVForm(connection)"
+                  >{{ t('common.edit') }}</button>
+                  <button
+                    type="button"
+                    class="button danger subtle"
+                    :disabled="webDAVDialogBusy"
+                    :aria-label="t('webdav.deleteNamed', { name: connection.name })"
+                    @click="requestDeleteSavedWebDAVConnection(connection)"
+                  >{{ t('common.delete') }}</button>
+                </div>
+              </li>
+            </ul>
+
+            <p
+              v-if="webDAVConnectionOperation === 'connecting-saved'"
+              class="connection-status is-busy"
+              role="status"
+              aria-live="polite"
+            >{{ t('webdav.connectingSaved', { name: webDAVConnectingConnectionName }) }}</p>
+
+            <div
+              v-if="!savedWebDAVConnectionsLoading && savedWebDAVConnectionsError && !webDAVDeleteCandidate"
+              class="connection-status is-error saved-connections-error"
+              role="alert"
+            >
+              <span>{{ savedWebDAVConnectionsError }}</span>
+              <button type="button" class="button secondary" @click="loadSavedWebDAVConnections">
+                {{ t('webdav.retrySavedConnections') }}
+              </button>
+              </div>
+            </div>
+
+            <section
+              v-if="webDAVDeleteCandidate"
+              class="saved-connection-delete"
+              role="alertdialog"
+              aria-modal="true"
+              :aria-label="t('webdav.deleteConnectionTitle')"
+              :aria-describedby="savedWebDAVConnectionsError
+                ? 'webdav-delete-message webdav-delete-error'
+                : 'webdav-delete-message'"
+            >
+              <strong>{{ t('webdav.deleteConnectionTitle') }}</strong>
+              <p id="webdav-delete-message">{{ t('webdav.deleteConnectionMessage', { name: webDAVDeleteCandidate.name }) }}</p>
+              <code>{{ webDAVDeleteCandidate.endpoint }}</code>
+              <p
+                v-if="savedWebDAVConnectionsError"
+                id="webdav-delete-error"
+                class="connection-status is-error"
+                role="alert"
+              >{{ savedWebDAVConnectionsError }}</p>
+              <div>
+                <button
+                  type="button"
+                  class="button secondary"
+                  :disabled="webDAVConnectionManagerBusy"
+                  data-dialog-initial
+                  @click="cancelDeleteSavedWebDAVConnection"
+                >{{ t('webdav.keepSavedConnection') }}</button>
+                <button
+                  type="button"
+                  class="button danger"
+                  :disabled="webDAVConnectionManagerBusy"
+                  @click="confirmDeleteSavedWebDAVConnection"
+                >{{ webDAVConnectionOperation === 'deleting'
+                  ? t('webdav.deletingConnection')
+                  : t('webdav.deleteConnectionConfirm') }}</button>
+              </div>
+            </section>
+          </section>
+
           <form
+            v-else
             id="webdav-connection-form"
             class="connection-form"
             autocomplete="off"
-            @submit.prevent="connectWebDAV"
+            @submit.prevent="submitWebDAVDialog"
           >
+            <header class="connection-form-heading">
+              <button
+                v-if="webDAVDialogView === 'new' || webDAVDialogView === 'edit'"
+                type="button"
+                class="connection-back-button"
+                :disabled="webDAVDialogBusy"
+                @click="cancelSavedWebDAVForm"
+              >← {{ t('webdav.backToSaved') }}</button>
+              <div>
+                <strong>{{ webDAVConnectionFormMode === 'connect'
+                  ? t('webdav.temporaryConnection')
+                  : webDAVConnectionFormMode === 'new'
+                    ? t('webdav.newConnectionTitle')
+                    : t('webdav.editConnectionTitle') }}</strong>
+                <span>{{ webDAVConnectionFormMode === 'connect'
+                  ? t('webdav.temporaryConnectionHint')
+                  : t('webdav.systemCredentialStore') }}</span>
+              </div>
+            </header>
+            <div v-if="webDAVConnectionFormMode !== 'connect'" class="connection-field">
+              <label for="webdav-connection-name">{{ t('webdav.connectionName') }}</label>
+              <input
+                id="webdav-connection-name"
+                v-model="webDAVConnectionName"
+                type="text"
+                autocomplete="off"
+                :placeholder="t('webdav.connectionNamePlaceholder')"
+                :disabled="webDAVDialogBusy"
+                :autofocus="webDAVDialogView === 'new' || webDAVDialogView === 'edit'"
+                required
+                data-dialog-initial
+                @input="webDAVConnectionError = ''"
+              />
+            </div>
             <div class="connection-field">
               <label for="webdav-server-url">{{ t('webdav.serverURL') }}</label>
               <input
@@ -2553,52 +3663,177 @@ onBeforeUnmount(() => {
                 spellcheck="false"
                 autocomplete="off"
                 :placeholder="t('webdav.serverURLPlaceholder')"
-                :aria-invalid="Boolean(webDAVConnectionError)"
-                :disabled="webDAVConnecting"
+                :aria-invalid="webDAVEndpointInvalid"
+                :disabled="webDAVDialogBusy"
+                :autofocus="webDAVDialogView === 'temporary'"
+                required
+                :data-dialog-initial="webDAVDialogView === 'temporary' ? '' : null"
+                @input="webDAVConnectionError = ''"
+              />
+              <p
+                v-if="webDAVConnectionFormMode === 'edit'
+                  && editingChangesWebDAVOrigin
+                  && !webDAVPassword
+                  && !webDAVRemoveCredentials"
+                class="connection-field-hint is-warning"
+              >{{ t('webdav.endpointChangeNeedsPassword') }}</p>
+            </div>
+            <label v-if="webDAVConnectionFormMode === 'new'" class="connection-checkbox credential-choice">
+              <input v-model="webDAVStoreCredentials" type="checkbox" :disabled="webDAVDialogBusy" @change="webDAVConnectionError = ''" />
+              <span>
+                <strong>{{ t('webdav.saveCredentialsSecurely') }}</strong>
+                <small>{{ t('webdav.systemCredentialStore') }}</small>
+              </span>
+            </label>
+            <div class="connection-credentials-grid">
+              <div class="connection-field">
+                <label for="webdav-username">{{ t('webdav.username') }}</label>
+                <input
+                  id="webdav-username"
+                  v-model="webDAVUsername"
+                  type="text"
+                  autocomplete="off"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  :placeholder="t('webdav.usernamePlaceholder')"
+                  :disabled="webDAVDialogBusy
+                    || (webDAVConnectionFormMode === 'edit' && webDAVRemoveCredentials)
+                    || (webDAVConnectionFormMode === 'new' && !webDAVStoreCredentials)"
+                  @input="webDAVConnectionError = ''"
+                />
+              </div>
+              <div class="connection-field">
+                <label for="webdav-password">{{ t('webdav.password') }}</label>
+                <div class="connection-password-control">
+                  <input
+                    id="webdav-password"
+                    v-model="webDAVPassword"
+                    :type="showWebDAVPassword ? 'text' : 'password'"
+                    autocomplete="off"
+                    :placeholder="webDAVConnectionFormMode === 'edit'
+                      ? t('webdav.passwordKeepPlaceholder')
+                      : t('webdav.passwordPlaceholder')"
+                    :disabled="webDAVDialogBusy
+                      || (webDAVConnectionFormMode === 'edit' && webDAVRemoveCredentials)
+                      || (webDAVConnectionFormMode === 'new' && !webDAVStoreCredentials)"
+                    @input="webDAVConnectionError = ''"
+                  />
+                  <button
+                    type="button"
+                    class="connection-password-toggle"
+                    :disabled="webDAVDialogBusy
+                      || (webDAVConnectionFormMode === 'edit' && webDAVRemoveCredentials)
+                      || (webDAVConnectionFormMode === 'new' && !webDAVStoreCredentials)"
+                    :aria-label="showWebDAVPassword ? t('webdav.hidePassword') : t('webdav.showPassword')"
+                    :aria-pressed="showWebDAVPassword"
+                    aria-controls="webdav-password"
+                    @click="showWebDAVPassword = !showWebDAVPassword"
+                  >{{ showWebDAVPassword ? t('webdav.hidePassword') : t('webdav.showPassword') }}</button>
+                </div>
+              </div>
+            </div>
+            <p class="connection-field-hint">{{ webDAVConnectionFormMode === 'connect'
+              ? t('webdav.passwordNotStored')
+              : webDAVConnectionFormMode === 'edit'
+                ? t('webdav.editPasswordHint')
+                : webDAVStoreCredentials
+                  ? t('webdav.credentialsWillBeStored')
+                  : t('webdav.connectionWithoutCredentials') }}</p>
+            <label
+              v-if="webDAVConnectionFormMode === 'edit' && editingSavedWebDAVConnection?.hasCredentials"
+              class="connection-checkbox danger-option"
+            >
+              <input v-model="webDAVRemoveCredentials" type="checkbox" :disabled="webDAVDialogBusy" @change="webDAVConnectionError = ''" />
+              <span>{{ t('webdav.removeSavedCredentials') }}</span>
+            </label>
+            <p
+              v-if="webDAVDialogBusy || webDAVConnectionError"
+              class="connection-status"
+              :class="{ 'is-busy': webDAVDialogBusy, 'is-error': Boolean(webDAVConnectionError) }"
+              :role="webDAVConnectionError ? 'alert' : 'status'"
+              aria-live="polite"
+            >{{ webDAVDialogBusy ? webDAVDialogBusyMessage : webDAVConnectionError }}</p>
+          </form>
+        </template>
+        <template v-else-if="activeDialog === 'image'">
+          <h2 id="dialog-image">{{ t('image.title') }}</h2>
+          <p>{{ t('image.description') }}</p>
+          <form
+            id="image-insert-form"
+            class="image-insert-form"
+            @submit.prevent="insertSelectedImage"
+          >
+            <fieldset class="image-mode-options" :disabled="imageInsertBusy">
+              <legend>{{ t('image.storageMode') }}</legend>
+              <label v-for="mode in imageInsertModes" :key="mode.value">
+                <input
+                  v-model="imageInsertMode"
+                  type="radio"
+                  name="image-storage-mode"
+                  :value="mode.value"
+                  :disabled="mode.disabled"
+                />
+                <span>{{ mode.label }}</span>
+              </label>
+            </fieldset>
+
+            <div class="connection-field">
+              <label for="image-alt-text">{{ t('image.altText') }}</label>
+              <input
+                id="image-alt-text"
+                v-model="imageAltText"
+                type="text"
+                :disabled="imageInsertBusy"
+                :placeholder="t('image.altPlaceholder')"
+              />
+            </div>
+
+            <div v-if="imageInsertMode === 'public'" class="connection-field">
+              <label for="public-image-url">{{ t('image.publicURL') }}</label>
+              <input
+                id="public-image-url"
+                v-model="publicImageURL"
+                type="url"
+                inputmode="url"
+                spellcheck="false"
+                autocomplete="off"
+                :disabled="imageInsertBusy"
+                :placeholder="t('image.publicURLPlaceholder')"
                 autofocus
               />
+              <p class="connection-field-hint">{{ t('image.publicURLHint') }}</p>
             </div>
-            <div class="connection-field">
-              <label for="webdav-username">{{ t('webdav.username') }}</label>
-              <input
-                id="webdav-username"
-                v-model="webDAVUsername"
-                type="text"
-                autocomplete="off"
-                autocapitalize="none"
-                spellcheck="false"
-                :placeholder="t('webdav.usernamePlaceholder')"
-                :disabled="webDAVConnecting"
-              />
-            </div>
-            <div class="connection-field">
-              <label for="webdav-password">{{ t('webdav.password') }}</label>
-              <div class="connection-password-control">
-                <input
-                  id="webdav-password"
-                  v-model="webDAVPassword"
-                  :type="showWebDAVPassword ? 'text' : 'password'"
-                  autocomplete="off"
-                  :placeholder="t('webdav.passwordPlaceholder')"
-                  :disabled="webDAVConnecting"
-                />
-                <button
-                  type="button"
-                  class="connection-password-toggle"
-                  :disabled="webDAVConnecting"
-                  :aria-label="showWebDAVPassword ? t('webdav.hidePassword') : t('webdav.showPassword')"
-                  @click="showWebDAVPassword = !showWebDAVPassword"
-                >{{ showWebDAVPassword ? t('webdav.hidePassword') : t('webdav.showPassword') }}</button>
+
+            <div v-else class="image-file-picker">
+              <button
+                type="button"
+                class="button secondary"
+                :disabled="imageInsertBusy"
+                @click="selectImageForInsertion"
+              >{{ selectedImage ? t('image.chooseAnother') : t('image.chooseFile') }}</button>
+              <div v-if="selectedImage" class="selected-image-summary">
+                <strong>{{ selectedImage.name }}</strong>
+                <span>{{ selectedImage.width }} × {{ selectedImage.height }}</span>
+                <span>{{ t('image.fileSize', { size: Math.max(1, Math.ceil(selectedImage.size / 1024)) }) }}</span>
               </div>
-              <p class="connection-field-hint">{{ t('webdav.passwordNotStored') }}</p>
+              <p class="connection-field-hint">{{ t('image.fileHint') }}</p>
             </div>
+
+            <p class="image-mode-hint">
+              {{ imageInsertMode === 'local'
+                ? t('image.localHint')
+                : imageInsertMode === 'webdav'
+                  ? t('image.webDAVHint')
+                  : imageInsertMode === 'data'
+                    ? t('image.dataHint')
+                    : t('image.publicHint') }}
+            </p>
             <p
-              v-if="webDAVConnecting || webDAVConnectionError"
-              class="connection-status"
-              :class="{ 'is-busy': webDAVConnecting, 'is-error': Boolean(webDAVConnectionError) }"
+              v-if="imageInsertError"
+              class="connection-status is-error"
               role="status"
               aria-live="polite"
-            >{{ webDAVConnecting ? t('webdav.connecting') : webDAVConnectionError }}</p>
+            >{{ imageInsertError }}</p>
           </form>
         </template>
         <template v-else-if="activeDialog === 'shortcuts'">
@@ -2660,20 +3895,50 @@ onBeforeUnmount(() => {
             </template>
           </dl>
         </template>
-        <footer class="dialog-actions">
+        <footer
+          class="dialog-actions"
+          :inert="activeDialog === 'webdav' && Boolean(webDAVDeleteCandidate)"
+        >
           <template v-if="activeDialog === 'webdav'">
+            <button
+              v-if="webDAVDialogView === 'saved'"
+              type="button"
+              class="button primary"
+              :disabled="webDAVDialogBusy"
+              @click="dismissActiveDialog"
+            >{{ t('common.close') }}</button>
+            <button
+              v-else
+              type="button"
+              class="button secondary"
+              :disabled="webDAVDialogBusy"
+              @click="webDAVDialogView === 'temporary' ? dismissActiveDialog() : cancelSavedWebDAVForm()"
+            >{{ t('common.cancel') }}</button>
+            <button
+              v-if="webDAVDialogView !== 'saved'"
+              type="submit"
+              form="webdav-connection-form"
+              class="button primary"
+              :disabled="!canSubmitWebDAVForm"
+            >{{ webDAVDialogBusy
+                ? webDAVDialogBusyMessage
+                : webDAVConnectionFormMode === 'connect'
+                  ? t('webdav.connect')
+                  : t('webdav.saveConnection') }}</button>
+          </template>
+          <template v-else-if="activeDialog === 'image'">
             <button
               type="button"
               class="button secondary"
-              :disabled="webDAVConnecting"
+              :disabled="imageInsertBusy"
               @click="dismissActiveDialog"
             >{{ t('common.cancel') }}</button>
             <button
               type="submit"
-              form="webdav-connection-form"
+              form="image-insert-form"
               class="button primary"
-              :disabled="webDAVConnecting || !webDAVBaseURL.trim()"
-            >{{ webDAVConnecting ? t('webdav.connecting') : t('webdav.connect') }}</button>
+              :disabled="!canInsertImage"
+            >{{ imageInsertBusy ? t('image.processing') : t('image.insert') }}</button>
           </template>
           <template v-else>
             <button

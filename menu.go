@@ -70,6 +70,7 @@ var nativeMenuText = map[string]localizedMenuText{
 	"ordered-list":       {zh: "有序列表", en: "Numbered List"},
 	"task-list":          {zh: "任务列表", en: "Task List"},
 	"link":               {zh: "链接", en: "Link"},
+	"insert-image":       {zh: "插入图片…", en: "Insert Image…"},
 	"inline-code":        {zh: "行内代码", en: "Inline Code"},
 	"code-block":         {zh: "代码块", en: "Code Block"},
 	"table":              {zh: "表格", en: "Table"},
@@ -200,6 +201,7 @@ func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu 
 	formatMenu.AddText(label("task-list"), nil, a.menuAction("format-task"))
 	formatMenu.AddSeparator()
 	formatMenu.AddText(label("link"), keys.CmdOrCtrl("k"), a.menuAction("format-link"))
+	formatMenu.AddText(label("insert-image"), nil, a.menuAction("insert-image"))
 	formatMenu.AddText(label("inline-code"), nil, a.menuAction("format-code"))
 	formatMenu.AddText(label("code-block"), nil, a.menuAction("format-codeblock"))
 	formatMenu.AddText(label("table"), nil, a.menuAction("format-table"))
@@ -265,6 +267,12 @@ func recentMenuLabel(item RecentItem) string {
 		return strings.Join(strings.Fields(value), " ")
 	}
 	name := cleanLabel(item.Name)
+	if item.Kind == "webdav" {
+		if name != "" {
+			return "WebDAV — " + name
+		}
+		return "WebDAV"
+	}
 	if name == "" {
 		name = cleanLabel(filepath.Base(item.Path))
 	}

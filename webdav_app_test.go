@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -122,6 +123,75 @@ func TestWebDAVAppBridgeWorkspaceDocumentsConflictsAndIsolation(t *testing.T) {
 	}
 	if _, err := app.SaveWebDAVFile(workspace.ID, document.RemoteDocumentID, "# closed", afterSecondConnection.ETag); !IsWebDAVErrorKind(err, WebDAVErrorInvalidInput) {
 		t.Fatalf("closed capability remained usable: %v", err)
+	}
+}
+
+func TestSuccessfulWebDAVConnectionRecordsOnlySafeRecentEndpoint(t *testing.T) {
+	server, _ := newWebDAVBridgeServer(t)
+	defer server.Close()
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	app := &App{
+		language:     LanguageState{Mode: "auto", Locale: "en"},
+		settingsPath: settingsPath,
+	}
+	defer app.shutdown(nil)
+	config := WebDAVConfig{
+		Endpoint: server.URL + "/netdisk/api/webdav/",
+		Username: webDAVTestUsername,
+		Password: webDAVTestPassword,
+	}
+	first, err := app.ConnectWebDAV(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recent := app.recentItemsSnapshot()
+	if len(recent) != 1 || recent[0].Kind != "webdav" || recent[0].Path != config.Endpoint || recent[0].Name == "" {
+		t.Fatalf("successful WebDAV connection was not recorded safely: %#v", recent)
+	}
+	firstRecentID := recent[0].ID
+	if _, err := app.ConnectWebDAV(config); err != nil {
+		t.Fatal(err)
+	}
+	recent = app.recentItemsSnapshot()
+	if len(recent) != 1 || recent[0].ID != firstRecentID {
+		t.Fatalf("repeated WebDAV connection was not deduplicated: %#v", recent)
+	}
+	if first.ID == "" {
+		t.Fatal("first workspace capability was invalid")
+	}
+
+	payload, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{webDAVTestUsername, webDAVTestPassword, "username", "password", "token", "userinfo", "query", "fragment"} {
+		if strings.Contains(strings.ToLower(string(payload)), strings.ToLower(secret)) {
+			t.Fatalf("persisted WebDAV recent item leaked %q: %s", secret, payload)
+		}
+	}
+	loaded := loadSettingsState(settingsPath)
+	if len(loaded.RecentItems) != 1 || loaded.RecentItems[0].Path != config.Endpoint || loaded.RecentItems[0].ID == firstRecentID {
+		t.Fatalf("persisted WebDAV recent item was not safely restored: %#v", loaded.RecentItems)
+	}
+}
+
+func TestFailedWebDAVConnectionDoesNotEnterRecentItems(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		http.Error(writer, "authentication required", http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	app := &App{settingsPath: filepath.Join(t.TempDir(), "settings.json")}
+	if _, err := app.ConnectWebDAV(WebDAVConfig{Endpoint: server.URL + "/webdav/"}); err == nil {
+		t.Fatal("connection failure was not reported")
+	}
+	if requests.Load() == 0 {
+		t.Fatal("connection test server was not contacted")
+	}
+	if recent := app.recentItemsSnapshot(); len(recent) != 0 {
+		t.Fatalf("failed WebDAV connection polluted recent items: %#v", recent)
 	}
 }
 

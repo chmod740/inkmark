@@ -149,6 +149,28 @@ func TestNativeMenuTranslationsAreComplete(t *testing.T) {
 	}
 }
 
+func TestFormatMenuContainsLocalizedImageImport(t *testing.T) {
+	for _, test := range []struct {
+		platform string
+		locale   string
+		format   string
+		image    string
+	}{
+		{platform: "darwin", locale: "zh-CN", format: "格式", image: "插入图片…"},
+		{platform: "darwin", locale: "en", format: "Format", image: "Insert Image…"},
+		{platform: "windows", locale: "zh-CN", format: "格式", image: "插入图片…"},
+		{platform: "windows", locale: "en", format: "Format", image: "Insert Image…"},
+	} {
+		t.Run(test.platform+"/"+test.locale, func(t *testing.T) {
+			formatMenu := findTopLevelMenu(t, NewApp().applicationMenuFor(test.platform, test.locale), test.format)
+			item := findMenuItem(t, formatMenu, test.image)
+			if item.Click == nil || item.Disabled {
+				t.Fatalf("image import item must be enabled with a callback: %#v", item)
+			}
+		})
+	}
+}
+
 func TestHelpMenuContainsUpdateAndRepositoryActions(t *testing.T) {
 	applicationMenu := NewApp().applicationMenuFor("windows", "en")
 	helpMenu := findTopLevelMenu(t, applicationMenu, "Help")
@@ -265,6 +287,52 @@ func TestRecentMenuLabelSanitizesControlCharacters(t *testing.T) {
 	item := RecentItem{Kind: "file", Path: filepath.Join("/tmp", "project", "bad.md"), Name: "bad\r\n\tname.md"}
 	if got := recentMenuLabel(item); got != "bad name.md — project" {
 		t.Fatalf("unexpected sanitized label: %q", got)
+	}
+}
+
+func TestRecentWebDAVMenuLabelUsesOnlySafeHost(t *testing.T) {
+	item, ok := makeRecentItem("webdav", "https://EXAMPLE.com:443/netdisk/api/webdav/")
+	if !ok {
+		t.Fatal("failed to create WebDAV recent menu fixture")
+	}
+	if got := recentMenuLabel(item); got != "WebDAV — example.com" {
+		t.Fatalf("unexpected WebDAV recent menu label: %q", got)
+	}
+	if item.Kind != "webdav" {
+		t.Fatalf("recent menu callback would emit an unexpected kind: %#v", item)
+	}
+}
+
+func TestRecentWebDAVAppearsInNativeRecentMenus(t *testing.T) {
+	app := &App{language: LanguageState{Mode: "auto", Locale: "en"}}
+	item, ok := makeRecentItem("webdav", "https://example.com/private/dav/")
+	if !ok {
+		t.Fatal("failed to create WebDAV recent menu fixture")
+	}
+	app.recentItems = []RecentItem{item}
+
+	for _, test := range []struct {
+		platform string
+		locale   string
+		file     string
+		recent   string
+	}{
+		{platform: "darwin", locale: "zh-CN", file: "文件", recent: "最近"},
+		{platform: "darwin", locale: "en", file: "File", recent: "Recent"},
+		{platform: "windows", locale: "zh-CN", file: "文件", recent: "最近"},
+		{platform: "windows", locale: "en", file: "File", recent: "Recent"},
+	} {
+		t.Run(test.platform+"/"+test.locale, func(t *testing.T) {
+			fileMenu := findTopLevelMenu(t, app.applicationMenuFor(test.platform, test.locale), test.file)
+			recentMenu := findMenuItem(t, fileMenu, test.recent)
+			if recentMenu.SubMenu == nil {
+				t.Fatal("Recent must be a submenu")
+			}
+			connection := findMenuItem(t, recentMenu.SubMenu, "WebDAV — example.com")
+			if connection.Click == nil || connection.Disabled {
+				t.Fatalf("WebDAV recent item must be enabled with a callback: %#v", connection)
+			}
+		})
 	}
 }
 

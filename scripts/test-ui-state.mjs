@@ -111,7 +111,7 @@ test('app wires pane swapping, built-in navigation, and collision-safe header CS
   assert.match(app, /@input="beginScroll\('editor'\)"/)
   assert.match(app, /function runFormat\(action: string\) \{[\s\S]*?beginScroll\('editor'\)[\s\S]*?target\.setRangeText/)
   assert.match(app, /async function runEditAction\(action: string\) \{[\s\S]*?beginScroll\('editor'\)[\s\S]*?target\.setRangeText/)
-  assert.match(app, /await renderDiagrams\(staging[\s\S]*target\.replaceChildren[\s\S]*refreshScrollAnchors\(\)[\s\S]*reconcileActiveScroll\(\)/)
+  assert.match(app, /await Promise\.all\(\[[\s\S]*renderDiagrams\(staging[\s\S]*preparePreviewImages\(staging[\s\S]*target\.replaceChildren[\s\S]*refreshScrollAnchors\(\)[\s\S]*reconcileActiveScroll\(\)/)
   assert.match(styles, /\.preview-first \.preview-panel \{ order: -1; \}/)
   assert.match(styles, /\.document-title-row \{[^}]*width: fit-content;[^}]*max-width: 100%;/s)
   assert.match(styles, /\.document-identity h1 \{[^}]*flex: 0 1 auto;[^}]*min-width: 0;/s)

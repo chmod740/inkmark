@@ -63,6 +63,10 @@ func exposeWebDAVBridgeError(err error) error {
 }
 
 func (a *App) ConnectWebDAV(config WebDAVConfig) (bridgeWorkspace Workspace, err error) {
+	return a.connectWebDAV(config, "")
+}
+
+func (a *App) connectWebDAV(config WebDAVConfig, savedConnectionID string) (bridgeWorkspace Workspace, err error) {
 	defer func() { err = exposeWebDAVBridgeError(err) }()
 	a.mu.RLock()
 	atCapacity := len(a.webDAVWorkspaces) >= maxWebDAVWorkspaceCapabilities
@@ -119,6 +123,10 @@ func (a *App) ConnectWebDAV(config WebDAVConfig) (bridgeWorkspace Workspace, err
 	}
 	a.webDAVWorkspaces[workspaceID] = capability
 	a.mu.Unlock()
+	// Store only the client's already-validated endpoint. recordRecentItem
+	// accepts HTTPS WebDAV URLs (plus the client's supported loopback-only HTTP
+	// development case) and rejects credentials, query strings and fragments.
+	a.recordRecentWebDAV(client.baseURL.String(), savedConnectionID)
 	return workspace, nil
 }
 

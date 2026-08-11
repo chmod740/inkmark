@@ -36,12 +36,12 @@ func TestCheckForUpdatesUsesGitHubReleaseData(t *testing.T) {
 		}
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{
-			"tag_name":"v1.2.0",
-			"html_url":"https://github.com/chmod740/inkmark/releases/tag/v1.2.0",
+			"tag_name":"v9.9.9",
+			"html_url":"https://github.com/chmod740/inkmark/releases/tag/v9.9.9",
 			"published_at":"2026-08-04T12:00:00Z",
 			"assets":[
-				{"name":"InkMark-1.2.0-Windows-x64-Setup.exe","browser_download_url":"https://github.com/chmod740/inkmark/releases/download/v1.2.0/InkMark-1.2.0-Windows-x64-Setup.exe"},
-				{"name":"InkMark-1.2.0-macOS-arm64.dmg","browser_download_url":"https://github.com/chmod740/inkmark/releases/download/v1.2.0/InkMark-1.2.0-macOS-arm64.dmg"}
+				{"name":"InkMark-9.9.9-Windows-x64-Setup.exe","browser_download_url":"https://github.com/chmod740/inkmark/releases/download/v9.9.9/InkMark-9.9.9-Windows-x64-Setup.exe"},
+				{"name":"InkMark-9.9.9-macOS-arm64.dmg","browser_download_url":"https://github.com/chmod740/inkmark/releases/download/v9.9.9/InkMark-9.9.9-macOS-arm64.dmg"}
 			]
 		}`))
 	}))
@@ -53,7 +53,7 @@ func TestCheckForUpdatesUsesGitHubReleaseData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !info.UpdateAvailable || info.CurrentVersion != appVersion || info.LatestVersion != "1.2.0" {
+	if !info.UpdateAvailable || info.CurrentVersion != appVersion || info.LatestVersion != "9.9.9" {
 		t.Fatalf("unexpected update info: %#v", info)
 	}
 	if runtime.GOOS == "darwin" && !strings.HasSuffix(info.DownloadURL, "macOS-arm64.dmg") {
