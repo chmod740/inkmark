@@ -94,7 +94,8 @@ test('App renders into a detached root and atomically swaps only completed conte
   const app = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
 
   assert.match(app, /previewCommit\.stageAndCommit\(sequence, async \(\) => \{[\s\S]*target\.cloneNode\(false\)[\s\S]*staging\.innerHTML = cleanHTML/)
-  assert.match(app, /decoratePreview\(staging\)[\s\S]*renderMath\(staging\)[\s\S]*highlightCode\(staging\)[\s\S]*await renderDiagrams\(staging/)
+  assert.match(app, /decoratePreview\(staging\)[\s\S]*renderMath\(staging\)[\s\S]*highlightCode\(staging\)/)
+  assert.match(app, /await Promise\.all\(\[[\s\S]*renderDiagrams\(staging[\s\S]*preparePreviewImages\(staging/)
   assert.match(app, /target\.replaceChildren\([\s\S]*refreshScrollAnchors\(\)[\s\S]*reconcileActiveScroll\(\)/)
   assert.doesNotMatch(app, /target\.innerHTML\s*=\s*cleanHTML/)
   assert.match(app, /mermaidRenderCache\.get\(cacheKey\)/)

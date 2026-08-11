@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import {
   flattenWorkspaceTree,
+  isActiveWorkspaceFile,
   loadedWorkspaceDirectoryKeys,
+  localWorkspaceRelativePath,
   normalizeWorkspace,
   normalizeWorkspaceDirectory,
   normalizeWorkspaceEntries,
@@ -55,11 +58,32 @@ test('workspace normalization rejects incomplete roots and keeps truncation stat
     truncated: true,
   }), {
     id: 'workspace-id',
+    provider: 'local',
     path: '/tmp/docs',
     name: 'docs',
     entries: [markdown('README.md', 'README.md')],
     truncated: true,
   })
+  assert.deepEqual(normalizeWorkspace({
+    id: 'webdav-id',
+    provider: 'webdav',
+    path: 'https://example.test/dav/',
+    name: 'Remote Notes',
+    entries: [],
+  }), {
+    id: 'webdav-id',
+    provider: 'webdav',
+    path: 'https://example.test/dav/',
+    name: 'Remote Notes',
+    entries: [],
+    truncated: false,
+  })
+  assert.equal(normalizeWorkspace({
+    id: 'unknown-id',
+    provider: 'ftp',
+    path: '/tmp/docs',
+    name: 'docs',
+  }), null)
   assert.deepEqual(normalizeWorkspaceDirectory([markdown('README.md', 'README.md')]), {
     entries: [markdown('README.md', 'README.md')],
     truncated: false,
@@ -104,6 +128,27 @@ test('workspace path helpers are separator-safe and case-aware on Windows', () =
   assert.equal(sameWorkspaceFile('C:\\Docs\\README.md', 'c:/docs/readme.md'), true)
   assert.equal(sameWorkspaceFile('/Docs/README.md', '/docs/readme.md'), false)
   assert.equal(sameWorkspaceFile('', ''), false)
+  assert.equal(localWorkspaceRelativePath('/Users/test/Notes', '/Users/test/Notes/guides/readme.md'), 'guides/readme.md')
+  assert.equal(localWorkspaceRelativePath('/Users/test/Notes', '/Users/test/Other/readme.md'), '')
+  assert.equal(localWorkspaceRelativePath('C:\\Users\\Test\\Notes', 'c:\\users\\test\\notes\\Guide.md'), 'Guide.md')
+  assert.equal(localWorkspaceRelativePath('/', '/README.md'), 'README.md')
+})
+
+test('active workspace files require the same provider, workspace, and relative path', () => {
+  assert.equal(isActiveWorkspaceFile('webdav', 'remote-1', 'guides\\README.md', 'webdav', 'remote-1', './guides/README.md'), true)
+  assert.equal(isActiveWorkspaceFile('local', 'local-1', 'guides/README.md', 'webdav', 'local-1', 'guides/README.md'), false)
+  assert.equal(isActiveWorkspaceFile(undefined, 'local-1', 'README.md', 'local', 'local-1', 'README.md'), true)
+  assert.equal(isActiveWorkspaceFile('webdav', 'remote-1', 'README.md', 'webdav', 'remote-2', 'README.md'), false)
+  assert.equal(isActiveWorkspaceFile('webdav', 'remote-1', '', 'webdav', 'remote-1', ''), false)
+  assert.equal(isActiveWorkspaceFile('webdav', 'remote-1', 'README.md', 'webdav', 'remote-1', 'readme.md'), false)
+})
+
+test('app restores local sidebar identity for picker, recent, save, and save-as paths', async () => {
+  const app = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
+  assert.match(app, /const inferredLocalWorkspacePath = \([\s\S]*localWorkspaceRelativePath\(workspace\.value\.path, localDocumentPath\.value\)/)
+  assert.match(app, /documentWorkspaceId\.value = document\.workspaceId[\s\S]*inferredLocalWorkspacePath/)
+  assert.ok((app.match(/localWorkspaceRelativePath\(workspace\.value\.path, result\.path\)/g) || []).length >= 2)
+  assert.match(app, /:current-workspace-id="documentWorkspaceId"/)
 })
 
 test('refresh helpers order loaded folders parent-first and map the root for the backend', () => {

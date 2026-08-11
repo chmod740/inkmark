@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"net"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -17,10 +18,11 @@ const (
 // on each application launch so a native-menu action never exposes a path or
 // turns an old path string into an ambient file-read capability.
 type RecentItem struct {
-	ID   string `json:"-"`
-	Kind string `json:"kind"`
-	Path string `json:"path"`
-	Name string `json:"name"`
+	ID           string `json:"-"`
+	Kind         string `json:"kind"`
+	Path         string `json:"path"`
+	Name         string `json:"name"`
+	ConnectionID string `json:"connectionId,omitempty"`
 }
 
 type RecentMenuEvent struct {
@@ -29,11 +31,36 @@ type RecentMenuEvent struct {
 	Name string `json:"name"`
 }
 
+// RecentWebDAVConnection is deliberately limited to validated, non-secret
+// metadata. When HasSavedCredentials is true, the frontend can call
+// ConnectSavedWebDAV with SavedConnectionID without receiving the credentials.
+type RecentWebDAVConnection struct {
+	Endpoint            string `json:"endpoint"`
+	Name                string `json:"name"`
+	SavedConnectionID   string `json:"savedConnectionId,omitempty"`
+	HasSavedCredentials bool   `json:"hasSavedCredentials"`
+}
+
 func (a *App) recordRecentItem(kind string, itemPath string) {
 	item, ok := makeRecentItem(kind, itemPath)
 	if !ok {
 		return
 	}
+	a.recordPreparedRecentItem(item)
+}
+
+func (a *App) recordRecentWebDAV(endpoint string, connectionID string) {
+	item, ok := makeRecentItem("webdav", endpoint)
+	if !ok {
+		return
+	}
+	if connection, exists := a.savedWebDAVConnectionByID(connectionID); exists && connection.Endpoint == item.Path {
+		item.ConnectionID = connection.ID
+	}
+	a.recordPreparedRecentItem(item)
+}
+
+func (a *App) recordPreparedRecentItem(item RecentItem) {
 	a.settingsWriteMu.Lock()
 	a.mu.Lock()
 	a.recentItems = prependRecentItem(a.recentItems, item)
@@ -84,10 +111,21 @@ func (a *App) recentItemByID(id string, kind string) (RecentItem, error) {
 
 func makeRecentItem(kind string, itemPath string) (RecentItem, bool) {
 	kind = strings.ToLower(strings.TrimSpace(kind))
-	if kind != "file" && kind != "directory" {
+	if strings.TrimSpace(itemPath) == "" || strings.ContainsRune(itemPath, 0) {
 		return RecentItem{}, false
 	}
-	if strings.TrimSpace(itemPath) == "" || strings.ContainsRune(itemPath, 0) {
+	if kind == "webdav" {
+		endpoint, name, ok := normalizeRecentWebDAVEndpoint(itemPath)
+		if !ok {
+			return RecentItem{}, false
+		}
+		id, err := newOpaqueID()
+		if err != nil {
+			return RecentItem{}, false
+		}
+		return RecentItem{ID: id, Kind: kind, Path: endpoint, Name: name}, true
+	}
+	if kind != "file" && kind != "directory" {
 		return RecentItem{}, false
 	}
 	absolute, err := filepath.Abs(itemPath)
@@ -106,6 +144,34 @@ func makeRecentItem(kind string, itemPath string) (RecentItem, bool) {
 	return RecentItem{ID: id, Kind: kind, Path: absolute, Name: name}, true
 }
 
+func normalizeRecentWebDAVEndpoint(raw string) (string, string, bool) {
+	parsed, err := normalizeWebDAVBaseURL(raw)
+	if err != nil {
+		return "", "", false
+	}
+	// URL hosts are case-insensitive. Canonicalising them (and the default
+	// HTTPS port) makes MRU deduplication stable without changing the
+	// case-sensitive WebDAV collection path.
+	hostname := strings.ToLower(parsed.Hostname())
+	if hostname == "" {
+		return "", "", false
+	}
+	port := parsed.Port()
+	switch {
+	case port != "" && !((parsed.Scheme == "https" && port == "443") || (parsed.Scheme == "http" && port == "80")):
+		parsed.Host = net.JoinHostPort(hostname, port)
+	case strings.Contains(hostname, ":"):
+		parsed.Host = "[" + hostname + "]"
+	default:
+		parsed.Host = hostname
+	}
+	endpoint := parsed.String()
+	if endpoint == "" || len(endpoint) > maxWebDAVPathLength+512 {
+		return "", "", false
+	}
+	return endpoint, parsed.Host, true
+}
+
 func normalizeLoadedRecentItems(items []RecentItem) []RecentItem {
 	result := make([]RecentItem, 0, min(len(items), maxRecentItems))
 	for _, saved := range items {
@@ -114,11 +180,17 @@ func normalizeLoadedRecentItems(items []RecentItem) []RecentItem {
 		}
 		// Do not Stat here. Missing or disconnected paths should not make app
 		// startup depend on slow network shares or removable drives.
-		if !filepath.IsAbs(saved.Path) {
+		if saved.Kind != "webdav" && !filepath.IsAbs(saved.Path) {
 			continue
 		}
 		item, ok := makeRecentItem(saved.Kind, saved.Path)
-		if !ok || containsRecentPath(result, item) {
+		if !ok {
+			continue
+		}
+		if item.Kind == "webdav" && validPersistentOpaqueID(saved.ConnectionID) {
+			item.ConnectionID = saved.ConnectionID
+		}
+		if containsRecentPath(result, item) {
 			continue
 		}
 		result = append(result, item)
@@ -157,12 +229,70 @@ func containsRecentPath(items []RecentItem, candidate RecentItem) bool {
 }
 
 func sameRecentPath(left RecentItem, right RecentItem) bool {
+	if left.Kind == "webdav" || right.Kind == "webdav" {
+		if left.Kind != right.Kind {
+			return false
+		}
+		if left.ConnectionID != "" && right.ConnectionID != "" {
+			return left.ConnectionID == right.ConnectionID
+		}
+		if left.ConnectionID != "" || right.ConnectionID != "" {
+			return false
+		}
+		return left.Path == right.Path
+	}
 	leftPath := filepath.Clean(left.Path)
 	rightPath := filepath.Clean(right.Path)
 	if runtime.GOOS == "windows" {
 		return strings.EqualFold(leftPath, rightPath)
 	}
 	return leftPath == rightPath
+}
+
+// OpenRecentWebDAV resolves an opaque recent-menu capability without returning
+// authentication material or making a network request. If the recent entry is
+// bound to a saved connection, the frontend can connect it directly by ID.
+func (a *App) OpenRecentWebDAV(recentID string) (RecentWebDAVConnection, error) {
+	item, err := a.recentItemByID(recentID, "webdav")
+	if err != nil {
+		return RecentWebDAVConnection{}, err
+	}
+	endpoint, name, ok := normalizeRecentWebDAVEndpoint(item.Path)
+	if !ok {
+		a.removeRecentItemByID(item.ID)
+		return RecentWebDAVConnection{}, errors.New(invalidRecentItemErrorMessage)
+	}
+	item.Path = endpoint
+	item.Name = name
+	connection, saved := a.savedWebDAVConnectionForRecent(item)
+	if saved {
+		item.ConnectionID = connection.ID
+	} else {
+		item.ConnectionID = ""
+	}
+	a.recordPreparedRecentItem(item)
+	result := RecentWebDAVConnection{Endpoint: endpoint, Name: name}
+	if saved {
+		result.SavedConnectionID = connection.ID
+		result.HasSavedCredentials = connection.CredentialsSaved
+	}
+	return result, nil
+}
+
+func (a *App) savedWebDAVConnectionForRecent(item RecentItem) (savedWebDAVConnectionState, bool) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if item.ConnectionID != "" {
+		index := savedWebDAVConnectionIndex(a.savedWebDAVConnections, item.ConnectionID)
+		if index >= 0 && a.savedWebDAVConnections[index].Endpoint == item.Path {
+			return a.savedWebDAVConnections[index], true
+		}
+		return savedWebDAVConnectionState{}, false
+	}
+	// Empty IDs are legacy or explicitly unbound records. Never infer an
+	// account from an endpoint: two users can legitimately share one WebDAV
+	// address, and automatic credential selection could open the wrong data.
+	return savedWebDAVConnectionState{}, false
 }
 
 func (a *App) removeRecentItemByID(id string) {

@@ -94,9 +94,20 @@ test('uninstall removes only InkMark-owned files and never recursively deletes a
 
   assert.match(uninstall, /Delete "\$INSTDIR\\\$\{PRODUCT_EXECUTABLE\}"/)
   assert.match(uninstall, /Delete "\$INSTDIR\\appicon\.ico"/)
+  assert.match(uninstall, /Delete "\$INSTDIR\\THIRD_PARTY_NOTICES\.txt"/)
   assert.match(uninstall, /RMDir "\$INSTDIR"/)
   assert.doesNotMatch(uninstall, /RMDir\s+\/r/i)
   assert.doesNotMatch(uninstall, /\$AppData/i)
+})
+
+test('Windows distributions install and retain an accessible third-party notice', async () => {
+  const source = await readFile(projectUrl, 'utf8')
+  const buildScript = await readFile(buildScriptUrl, 'utf8')
+
+  assert.match(source, /File \/oname=THIRD_PARTY_NOTICES\.txt "\.\.\\\.\.\\\.\.\\THIRD_PARTY_NOTICES\.txt"/)
+  assert.match(buildScript, /build\\bin\\THIRD_PARTY_NOTICES\.txt/)
+  assert.match(buildScript, /Get-FileHash -Algorithm SHA256/)
+  assert.match(buildScript, /pnpm --dir frontend test:notices/)
 })
 
 test('Windows packaging remains per-user and runs installer regression tests', async () => {

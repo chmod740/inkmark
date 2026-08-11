@@ -55,12 +55,18 @@ var exportFormatsEnglish = map[string]exportFormatConfig{
 }
 
 type Document struct {
-	Path         string `json:"path"`
-	Name         string `json:"name"`
-	Content      string `json:"content"`
-	Welcome      bool   `json:"welcome"`
-	BuiltIn      string `json:"builtIn,omitempty"`
-	ActivationID string `json:"activationId,omitempty"`
+	Path             string `json:"path"`
+	Name             string `json:"name"`
+	Content          string `json:"content"`
+	Welcome          bool   `json:"welcome"`
+	BuiltIn          string `json:"builtIn,omitempty"`
+	ActivationID     string `json:"activationId,omitempty"`
+	StorageKind      string `json:"storageKind,omitempty"`
+	DisplayLocation  string `json:"displayLocation,omitempty"`
+	WorkspaceID      string `json:"workspaceId,omitempty"`
+	WorkspacePath    string `json:"workspacePath,omitempty"`
+	RemoteDocumentID string `json:"remoteDocumentId,omitempty"`
+	ETag             string `json:"etag,omitempty"`
 }
 
 //go:embed samples/markdown-rendering-test.md
@@ -85,6 +91,7 @@ type MenuState struct {
 
 type App struct {
 	mu                      sync.RWMutex
+	savedWebDAVMu           sync.Mutex
 	settingsWriteMu         sync.Mutex
 	menuRefreshMu           sync.Mutex
 	ctx                     context.Context
@@ -92,8 +99,11 @@ type App struct {
 	initialLoaded           bool
 	language                LanguageState
 	recentItems             []RecentItem
+	savedWebDAVConnections  []savedWebDAVConnectionState
+	webDAVCredentialStore   webDAVCredentialStore
 	pendingRecentDocuments  map[string]string
 	activeWorkspace         *workspaceCapability
+	webDAVWorkspaces        map[string]*webDAVCapability
 	menuState               MenuState
 	settingsPath            string
 	updateEndpoint          string
@@ -118,14 +128,16 @@ func NewApp() *App {
 	settingsPath := defaultSettingsPath()
 	settings := loadSettingsState(settingsPath)
 	return &App{
-		initPath:             resolveDocumentArgument(os.Args[1:], workingDirectory),
-		language:             settings.LanguageState,
-		recentItems:          settings.RecentItems,
-		menuState:            MenuState{ViewMode: "split", Theme: "github", SyncScroll: true},
-		settingsPath:         settingsPath,
-		updateEndpoint:       latestReleaseAPIURL,
-		updateClient:         newUpdateHTTPClient(),
-		updateDownloadClient: newUpdateDownloadHTTPClient(),
+		initPath:               resolveDocumentArgument(os.Args[1:], workingDirectory),
+		language:               settings.LanguageState,
+		recentItems:            settings.RecentItems,
+		savedWebDAVConnections: settings.SavedWebDAVConnections,
+		webDAVCredentialStore:  systemWebDAVCredentialStore{},
+		menuState:              MenuState{ViewMode: "split", Theme: "github", SyncScroll: true},
+		settingsPath:           settingsPath,
+		updateEndpoint:         latestReleaseAPIURL,
+		updateClient:           newUpdateHTTPClient(),
+		updateDownloadClient:   newUpdateDownloadHTTPClient(),
 	}
 }
 
@@ -139,6 +151,11 @@ func (a *App) shutdown(_ context.Context) {
 	a.mu.Lock()
 	workspace := a.activeWorkspace
 	a.activeWorkspace = nil
+	webDAVWorkspaces := make([]*webDAVCapability, 0, len(a.webDAVWorkspaces))
+	for _, capability := range a.webDAVWorkspaces {
+		webDAVWorkspaces = append(webDAVWorkspaces, capability)
+	}
+	a.webDAVWorkspaces = nil
 	a.pendingRecentDocuments = nil
 	a.ctx = nil
 	cancel := a.updateCancel
@@ -149,6 +166,9 @@ func (a *App) shutdown(_ context.Context) {
 	}
 	if workspace != nil {
 		_ = workspace.root.Close()
+	}
+	for _, capability := range webDAVWorkspaces {
+		capability.close()
 	}
 }
 
@@ -260,7 +280,9 @@ func (a *App) SaveFileAs(currentPath string, content string) (SaveResult, error)
 	defaultDirectory := ""
 	if currentPath != "" {
 		defaultName = filepath.Base(currentPath)
-		defaultDirectory = filepath.Dir(currentPath)
+		if directory := filepath.Dir(currentPath); directory != "." && directory != "" {
+			defaultDirectory = directory
+		}
 	}
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		Title:            dialogTitle,
@@ -404,7 +426,13 @@ func readDocumentFromFile(file *os.File, path string) (Document, error) {
 	if err != nil {
 		absolute = path
 	}
-	return Document{Path: absolute, Name: filepath.Base(absolute), Content: string(data)}, nil
+	return Document{
+		Path:            absolute,
+		Name:            filepath.Base(absolute),
+		Content:         string(data),
+		StorageKind:     "local",
+		DisplayLocation: absolute,
+	}, nil
 }
 
 func newOpaqueID() (string, error) {

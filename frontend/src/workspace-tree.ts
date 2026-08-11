@@ -1,4 +1,5 @@
 export type WorkspaceEntryKind = 'directory' | 'markdown'
+export type WorkspaceProvider = 'local' | 'webdav'
 
 export interface WorkspaceEntryData {
   name: string
@@ -9,6 +10,7 @@ export interface WorkspaceEntryData {
 
 export interface WorkspaceData {
   id: string
+  provider: WorkspaceProvider
   path: string
   name: string
   entries: WorkspaceEntryData[]
@@ -31,6 +33,14 @@ export interface WorkspaceTreeRow {
 export type WorkspaceChildren = Readonly<Record<string, readonly WorkspaceEntryData[]>>
 
 export const workspaceRootKey = ''
+
+export function normalizeWorkspaceProvider(value: unknown): WorkspaceProvider | null {
+  if (value === 'webdav') return 'webdav'
+  // Workspaces produced before provider support were always local. Preserve
+  // that payload contract while rejecting unknown provider names.
+  if (value === undefined || value === null || value === '' || value === 'local') return 'local'
+  return null
+}
 
 export function workspaceDirectoryKey(path: string): string {
   return path
@@ -107,11 +117,13 @@ export function normalizeWorkspace(value: unknown): WorkspaceData | null {
   if (!value || typeof value !== 'object') return null
   const record = value as Record<string, unknown>
   const id = typeof record.id === 'string' ? record.id.trim() : ''
+  const provider = normalizeWorkspaceProvider(record.provider)
   const path = typeof record.path === 'string' ? record.path : ''
   const name = typeof record.name === 'string' ? record.name.trim() : ''
-  if (!id || !path || !name) return null
+  if (!id || !provider || !path || !name) return null
   return {
     id,
+    provider,
     path,
     name,
     entries: normalizeWorkspaceEntries(record.entries),
@@ -178,3 +190,56 @@ export function sameWorkspaceFile(left: string, right: string): boolean {
   }
   return normalizedLeft === normalizedRight
 }
+
+/**
+ * Restores the relative identity used by the local workspace sidebar when a
+ * document was opened through the file picker or recent-items menu.
+ */
+export function localWorkspaceRelativePath(workspaceRoot: string, documentPath: string): string {
+  if (!workspaceRoot || !documentPath) return ''
+  const normalizeAbsolute = (value: string) => {
+    const normalized = value.replaceAll('\\', '/').replace(/\/+$/g, '')
+    return normalized || (value.startsWith('/') ? '/' : '')
+  }
+  const root = normalizeAbsolute(workspaceRoot)
+  const document = normalizeAbsolute(documentPath)
+  if (!root || !document) return ''
+
+  const windowsPath = /^[a-z]:(?:\/|$)/i.test(root) || root.startsWith('//')
+  const comparableRoot = windowsPath ? root.toLocaleLowerCase('en-US') : root
+  const comparableDocument = windowsPath ? document.toLocaleLowerCase('en-US') : document
+  const prefix = comparableRoot === '/' ? '/' : `${comparableRoot}/`
+  if (!comparableDocument.startsWith(prefix)) return ''
+
+  const relative = document.slice(root === '/' ? 1 : root.length + 1)
+  const segments = relative.split('/')
+  if (!relative || segments.some((segment) => !segment || segment === '.' || segment === '..')) return ''
+  return workspaceDirectoryKey(relative)
+}
+
+/**
+ * Compares the stable identity of a file shown by a workspace provider.
+ * Relative paths from different providers must never select each other, even
+ * when their display names and directory layouts happen to be identical.
+ */
+export function isActiveWorkspaceFile(
+  leftProvider: WorkspaceProvider | null | undefined,
+  leftWorkspaceId: string,
+  leftRelativePath: string,
+  rightProvider: WorkspaceProvider | null | undefined,
+  rightWorkspaceId: string,
+  rightRelativePath: string,
+): boolean {
+  const normalizedLeftProvider = normalizeWorkspaceProvider(leftProvider)
+  const normalizedRightProvider = normalizeWorkspaceProvider(rightProvider)
+  if (!normalizedLeftProvider || normalizedLeftProvider !== normalizedRightProvider) return false
+  if (!leftWorkspaceId || leftWorkspaceId !== rightWorkspaceId) return false
+
+  const leftPath = workspaceDirectoryKey(leftRelativePath)
+  const rightPath = workspaceDirectoryKey(rightRelativePath)
+  return Boolean(leftPath && rightPath && leftPath === rightPath)
+}
+
+// Kept as a descriptive alias for callers that compare two workspace-backed
+// document identities outside active-selection rendering.
+export const sameWorkspaceDocument = isActiveWorkspaceFile

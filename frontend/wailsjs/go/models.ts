@@ -23,6 +23,12 @@ export namespace main {
 	    welcome: boolean;
 	    builtIn?: string;
 	    activationId?: string;
+	    storageKind?: string;
+	    displayLocation?: string;
+	    workspaceId?: string;
+	    workspacePath?: string;
+	    remoteDocumentId?: string;
+	    etag?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new Document(source);
@@ -36,6 +42,60 @@ export namespace main {
 	        this.welcome = source["welcome"];
 	        this.builtIn = source["builtIn"];
 	        this.activationId = source["activationId"];
+	        this.storageKind = source["storageKind"];
+	        this.displayLocation = source["displayLocation"];
+	        this.workspaceId = source["workspaceId"];
+	        this.workspacePath = source["workspacePath"];
+	        this.remoteDocumentId = source["remoteDocumentId"];
+	        this.etag = source["etag"];
+	    }
+	}
+	export class ImageAsset {
+	    markdownURL: string;
+	    name: string;
+	    mimeType: string;
+	    size: number;
+	    width: number;
+	    height: number;
+	    sha256: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ImageAsset(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.markdownURL = source["markdownURL"];
+	        this.name = source["name"];
+	        this.mimeType = source["mimeType"];
+	        this.size = source["size"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.sha256 = source["sha256"];
+	    }
+	}
+	export class ImageAssetData {
+	    name: string;
+	    mimeType: string;
+	    dataBase64: string;
+	    size: number;
+	    width: number;
+	    height: number;
+	    sha256: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ImageAssetData(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.mimeType = source["mimeType"];
+	        this.dataBase64 = source["dataBase64"];
+	        this.size = source["size"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.sha256 = source["sha256"];
 	    }
 	}
 	export class LanguageState {
@@ -52,6 +112,24 @@ export namespace main {
 	        this.locale = source["locale"];
 	    }
 	}
+	export class RecentWebDAVConnection {
+	    endpoint: string;
+	    name: string;
+	    savedConnectionId?: string;
+	    hasSavedCredentials: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new RecentWebDAVConnection(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.endpoint = source["endpoint"];
+	        this.name = source["name"];
+	        this.savedConnectionId = source["savedConnectionId"];
+	        this.hasSavedCredentials = source["hasSavedCredentials"];
+	    }
+	}
 	export class SaveResult {
 	    path: string;
 	    name: string;
@@ -64,6 +142,30 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
 	        this.name = source["name"];
+	    }
+	}
+	export class SavedWebDAVConnection {
+	    id: string;
+	    name: string;
+	    endpoint: string;
+	    username: string;
+	    hasCredentials: boolean;
+	    credentialsAvailable: boolean;
+	    usernamePresent: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new SavedWebDAVConnection(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.endpoint = source["endpoint"];
+	        this.username = source["username"];
+	        this.hasCredentials = source["hasCredentials"];
+	        this.credentialsAvailable = source["credentialsAvailable"];
+	        this.usernamePresent = source["usernamePresent"];
 	    }
 	}
 	export class UpdateDownload {
@@ -122,6 +224,64 @@ export namespace main {
 	        this.installerKind = source["installerKind"];
 	    }
 	}
+	export class WebDAVConfig {
+	    endpoint: string;
+	    username: string;
+	    password: string;
+
+	    static createFrom(source: any = {}) {
+	        return new WebDAVConfig(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.endpoint = source["endpoint"];
+	        this.username = source["username"];
+	        this.password = source["password"];
+	    }
+	}
+	export class WebDAVConnectionInput {
+	    id: string;
+	    name: string;
+	    endpoint: string;
+	    username: string;
+	    password: string;
+	    replaceCredentials: boolean;
+	    removeCredentials: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new WebDAVConnectionInput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.endpoint = source["endpoint"];
+	        this.username = source["username"];
+	        this.password = source["password"];
+	        this.replaceCredentials = source["replaceCredentials"];
+	        this.removeCredentials = source["removeCredentials"];
+	    }
+	}
+	export class WebDAVSaveResult {
+	    path: string;
+	    name: string;
+	    etag: string;
+	    conflict: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new WebDAVSaveResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.name = source["name"];
+	        this.etag = source["etag"];
+	        this.conflict = source["conflict"];
+	    }
+	}
 	export class WorkspaceEntry {
 	    name: string;
 	    path: string;
@@ -142,6 +302,7 @@ export namespace main {
 	}
 	export class Workspace {
 	    id: string;
+	    provider: string;
 	    name: string;
 	    path: string;
 	    entries: WorkspaceEntry[];
@@ -154,6 +315,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.provider = source["provider"];
 	        this.name = source["name"];
 	        this.path = source["path"];
 	        this.entries = this.convertValues(source["entries"], WorkspaceEntry);

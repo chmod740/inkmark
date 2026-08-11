@@ -17,7 +17,8 @@ const maxSettingsSize = 256 << 10
 
 type settingsState struct {
 	LanguageState
-	RecentItems []RecentItem `json:"recentItems,omitempty"`
+	RecentItems            []RecentItem                 `json:"recentItems,omitempty"`
+	SavedWebDAVConnections []savedWebDAVConnectionState `json:"webdavConnections,omitempty"`
 }
 
 func currentPlatform() string {
@@ -76,6 +77,7 @@ func loadSettingsState(path string) settingsState {
 		saved.LanguageState.Locale = saved.LanguageState.Mode
 	}
 	saved.RecentItems = normalizeLoadedRecentItems(saved.RecentItems)
+	saved.SavedWebDAVConnections = normalizeLoadedSavedWebDAVConnections(saved.SavedWebDAVConnections)
 	return saved
 }
 
@@ -157,8 +159,9 @@ func (a *App) persistSettings() error {
 // settingsSnapshotLocked requires a.mu to be held for reading or writing.
 func (a *App) settingsSnapshotLocked() (settingsState, string) {
 	return settingsState{
-		LanguageState: a.language,
-		RecentItems:   append([]RecentItem(nil), a.recentItems...),
+		LanguageState:          a.language,
+		RecentItems:            append([]RecentItem(nil), a.recentItems...),
+		SavedWebDAVConnections: append([]savedWebDAVConnectionState(nil), a.savedWebDAVConnections...),
 	}, a.settingsPath
 }
 

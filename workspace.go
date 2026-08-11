@@ -34,6 +34,7 @@ type WorkspaceDirectory struct {
 
 type Workspace struct {
 	ID        string           `json:"id"`
+	Provider  string           `json:"provider"`
 	Name      string           `json:"name"`
 	Path      string           `json:"path"`
 	Entries   []WorkspaceEntry `json:"entries"`
@@ -119,6 +120,7 @@ func (a *App) activateWorkspace(directory string) (Workspace, error) {
 	}
 	workspace := Workspace{
 		ID:        capability.id,
+		Provider:  "local",
 		Name:      name,
 		Path:      capability.path,
 		Entries:   directoryData.Entries,
@@ -183,6 +185,8 @@ func (a *App) openWorkspaceFileLocked(workspaceID string, relativePath string) (
 	if err != nil {
 		return Document{}, err
 	}
+	document.WorkspaceID = capability.id
+	document.WorkspacePath = relativePath
 	if err := validateWorkspaceCapability(capability); err != nil {
 		return Document{}, err
 	}

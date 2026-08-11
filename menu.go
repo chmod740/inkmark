@@ -30,6 +30,7 @@ var nativeMenuText = map[string]localizedMenuText{
 	"new":                {zh: "新建", en: "New"},
 	"open":               {zh: "打开文件…", en: "Open File…"},
 	"open-folder":        {zh: "打开文件夹…", en: "Open Folder…"},
+	"connect-webdav":     {zh: "连接 WebDAV…", en: "Connect to WebDAV…"},
 	"recent":             {zh: "最近", en: "Recent"},
 	"no-recent":          {zh: "无最近项目", en: "No Recent Items"},
 	"clear-recent":       {zh: "清除最近项目", en: "Clear Recent Items"},
@@ -69,6 +70,7 @@ var nativeMenuText = map[string]localizedMenuText{
 	"ordered-list":       {zh: "有序列表", en: "Numbered List"},
 	"task-list":          {zh: "任务列表", en: "Task List"},
 	"link":               {zh: "链接", en: "Link"},
+	"insert-image":       {zh: "插入图片…", en: "Insert Image…"},
 	"inline-code":        {zh: "行内代码", en: "Inline Code"},
 	"code-block":         {zh: "代码块", en: "Code Block"},
 	"table":              {zh: "表格", en: "Table"},
@@ -120,6 +122,7 @@ func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu 
 	fileMenu.AddText(label("new"), keys.CmdOrCtrl("n"), a.menuAction("new"))
 	fileMenu.AddText(label("open"), keys.CmdOrCtrl("o"), a.menuAction("open"))
 	fileMenu.AddText(label("open-folder"), keys.Combo("o", keys.CmdOrCtrlKey, keys.ShiftKey), a.menuAction("open-folder"))
+	fileMenu.AddText(label("connect-webdav"), nil, a.menuAction("connect-webdav"))
 	recentMenu := fileMenu.AddSubmenu(label("recent"))
 	recentItems := a.recentItemsSnapshot()
 	if len(recentItems) == 0 {
@@ -198,6 +201,7 @@ func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu 
 	formatMenu.AddText(label("task-list"), nil, a.menuAction("format-task"))
 	formatMenu.AddSeparator()
 	formatMenu.AddText(label("link"), keys.CmdOrCtrl("k"), a.menuAction("format-link"))
+	formatMenu.AddText(label("insert-image"), nil, a.menuAction("insert-image"))
 	formatMenu.AddText(label("inline-code"), nil, a.menuAction("format-code"))
 	formatMenu.AddText(label("code-block"), nil, a.menuAction("format-codeblock"))
 	formatMenu.AddText(label("table"), nil, a.menuAction("format-table"))
@@ -263,6 +267,12 @@ func recentMenuLabel(item RecentItem) string {
 		return strings.Join(strings.Fields(value), " ")
 	}
 	name := cleanLabel(item.Name)
+	if item.Kind == "webdav" {
+		if name != "" {
+			return "WebDAV — " + name
+		}
+		return "WebDAV"
+	}
 	if name == "" {
 		name = cleanLabel(filepath.Base(item.Path))
 	}
