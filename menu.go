@@ -156,19 +156,32 @@ func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu 
 	}
 
 	editMenu := applicationMenu.AddSubmenu(label("edit"))
-	editMenu.AddText(label("undo"), keys.CmdOrCtrl("z"), a.menuAction("undo"))
+	addEditItem := func(labelKey string, accelerator *keys.Accelerator, action string) {
+		itemLabel := label(labelKey)
+		if platform == "windows" {
+			// WebView2 always handles text-editing shortcuts such as Ctrl+V.
+			// Registering the same keys as native Wails menu accelerators makes
+			// Windows execute both paths. Keep the shortcut visible in the menu,
+			// but leave the accelerator unregistered so the focused WebView
+			// control owns the keyboard action exactly once.
+			itemLabel += "\t" + keys.Stringify(accelerator, platform)
+			accelerator = nil
+		}
+		editMenu.AddText(itemLabel, accelerator, a.menuAction(action))
+	}
+	addEditItem("undo", keys.CmdOrCtrl("z"), "undo")
 	if platform == "darwin" {
-		editMenu.AddText(label("redo"), keys.Combo("z", keys.CmdOrCtrlKey, keys.ShiftKey), a.menuAction("redo"))
+		addEditItem("redo", keys.Combo("z", keys.CmdOrCtrlKey, keys.ShiftKey), "redo")
 	} else {
-		editMenu.AddText(label("redo"), keys.CmdOrCtrl("y"), a.menuAction("redo"))
+		addEditItem("redo", keys.CmdOrCtrl("y"), "redo")
 	}
 	editMenu.AddSeparator()
-	editMenu.AddText(label("cut"), keys.CmdOrCtrl("x"), a.menuAction("cut"))
-	editMenu.AddText(label("copy"), keys.CmdOrCtrl("c"), a.menuAction("copy"))
-	editMenu.AddText(label("paste"), keys.CmdOrCtrl("v"), a.menuAction("paste"))
+	addEditItem("cut", keys.CmdOrCtrl("x"), "cut")
+	addEditItem("copy", keys.CmdOrCtrl("c"), "copy")
+	addEditItem("paste", keys.CmdOrCtrl("v"), "paste")
 	editMenu.AddText(label("copy-html"), nil, a.menuAction("copy-html"))
 	editMenu.AddSeparator()
-	editMenu.AddText(label("select-all"), keys.CmdOrCtrl("a"), a.menuAction("select-all"))
+	addEditItem("select-all", keys.CmdOrCtrl("a"), "select-all")
 
 	viewMenu := applicationMenu.AddSubmenu(label("view"))
 	viewMenu.AddRadio(label("view-edit"), state.ViewMode == "edit", keys.CmdOrCtrl("1"), a.menuAction("view-edit"))

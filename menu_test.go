@@ -132,12 +132,94 @@ func TestPlatformSpecificMenuShortcuts(t *testing.T) {
 
 	windowsMenu := NewApp().applicationMenuFor("windows", "en")
 	windowsEdit := findTopLevelMenu(t, windowsMenu, "Edit")
-	if got := keys.Stringify(windowsEdit.Items[1].Accelerator, "windows"); got != "Ctrl+Y" {
-		t.Fatalf("unexpected Windows Redo shortcut: %s", got)
+	windowsRedo := findMenuItemByLabelPrefix(t, windowsEdit, "Redo")
+	if windowsRedo.Label != "Redo\tCtrl+Y" || windowsRedo.Accelerator != nil {
+		t.Fatalf("Windows Redo must show Ctrl+Y without registering a native accelerator: %#v", windowsRedo)
 	}
 	windowsFile := findTopLevelMenu(t, windowsMenu, "File")
 	if got := keys.Stringify(windowsFile.Items[len(windowsFile.Items)-1].Accelerator, "windows"); got != "Alt+F4" {
 		t.Fatalf("unexpected Windows Exit shortcut: %s", got)
+	}
+}
+
+func TestWindowsEditMenuUsesDisplayOnlyShortcutsAndCallbacksRemainAvailable(t *testing.T) {
+	type editMenuExpectation struct {
+		label       string
+		accelerator string
+	}
+	tests := []struct {
+		name      string
+		platform  string
+		locale    string
+		menuLabel string
+		want      map[string]editMenuExpectation
+	}{
+		{
+			name:      "macOS English",
+			platform:  "darwin",
+			locale:    "en",
+			menuLabel: "Edit",
+			want: map[string]editMenuExpectation{
+				"Undo":       {label: "Undo", accelerator: "Cmd+Z"},
+				"Redo":       {label: "Redo", accelerator: "Cmd+Shift+Z"},
+				"Cut":        {label: "Cut", accelerator: "Cmd+X"},
+				"Copy":       {label: "Copy", accelerator: "Cmd+C"},
+				"Paste":      {label: "Paste", accelerator: "Cmd+V"},
+				"Select All": {label: "Select All", accelerator: "Cmd+A"},
+			},
+		},
+		{
+			name:      "Windows English",
+			platform:  "windows",
+			locale:    "en",
+			menuLabel: "Edit",
+			want: map[string]editMenuExpectation{
+				"Undo":       {label: "Undo\tCtrl+Z"},
+				"Redo":       {label: "Redo\tCtrl+Y"},
+				"Cut":        {label: "Cut\tCtrl+X"},
+				"Copy":       {label: "Copy\tCtrl+C"},
+				"Paste":      {label: "Paste\tCtrl+V"},
+				"Select All": {label: "Select All\tCtrl+A"},
+			},
+		},
+		{
+			name:      "Windows Chinese",
+			platform:  "windows",
+			locale:    "zh-CN",
+			menuLabel: "编辑",
+			want: map[string]editMenuExpectation{
+				"撤销": {label: "撤销\tCtrl+Z"},
+				"重做": {label: "重做\tCtrl+Y"},
+				"剪切": {label: "剪切\tCtrl+X"},
+				"复制": {label: "复制\tCtrl+C"},
+				"粘贴": {label: "粘贴\tCtrl+V"},
+				"全选": {label: "全选\tCtrl+A"},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			editMenu := findTopLevelMenu(t, NewApp().applicationMenuFor(test.platform, test.locale), test.menuLabel)
+			for labelPrefix, want := range test.want {
+				item := findMenuItemByLabelPrefix(t, editMenu, labelPrefix)
+				if item.Label != want.label {
+					t.Errorf("%s label: expected %q, got %q", labelPrefix, want.label, item.Label)
+				}
+				if want.accelerator == "" {
+					if item.Accelerator != nil {
+						t.Errorf("%s must leave the Windows WebView shortcut unshadowed; got %q", labelPrefix, keys.Stringify(item.Accelerator, test.platform))
+					}
+				} else if item.Accelerator == nil {
+					t.Errorf("%s accelerator: expected %q, got none", labelPrefix, want.accelerator)
+				} else if got := keys.Stringify(item.Accelerator, test.platform); got != want.accelerator {
+					t.Errorf("%s accelerator: expected %q, got %q", labelPrefix, want.accelerator, got)
+				}
+				if item.Click == nil {
+					t.Errorf("%s must remain bound to its native menu callback", labelPrefix)
+				}
+			}
+		})
 	}
 }
 
@@ -344,6 +426,17 @@ func findMenuItem(t *testing.T, current *menu.Menu, label string) *menu.MenuItem
 		}
 	}
 	t.Fatalf("menu item %q not found", label)
+	return nil
+}
+
+func findMenuItemByLabelPrefix(t *testing.T, current *menu.Menu, labelPrefix string) *menu.MenuItem {
+	t.Helper()
+	for _, item := range current.Items {
+		if item.Label == labelPrefix || strings.HasPrefix(item.Label, labelPrefix+"\t") {
+			return item
+		}
+	}
+	t.Fatalf("menu item with label prefix %q not found", labelPrefix)
 	return nil
 }
 

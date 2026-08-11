@@ -10,6 +10,22 @@ import {
 
 const appURL = new URL('../frontend/src/App.vue', import.meta.url)
 
+function blockStartingAt(source, marker) {
+  const markerIndex = source.indexOf(marker)
+  assert.notEqual(markerIndex, -1, `missing source marker: ${marker}`)
+  const openingBrace = source.indexOf('{', markerIndex)
+  assert.notEqual(openingBrace, -1, `missing block after source marker: ${marker}`)
+  let depth = 0
+  for (let index = openingBrace; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1
+    else if (source[index] === '}') {
+      depth -= 1
+      if (depth === 0) return source.slice(markerIndex, index + 1)
+    }
+  }
+  assert.fail(`unterminated block after source marker: ${marker}`)
+}
+
 function textControl({
   tagName = 'INPUT',
   type = 'text',
@@ -81,6 +97,51 @@ test('credential cut and paste notifications bubble so Vue v-model receives the 
     assert.deepEqual(credentialField.events.map((event) => event.type), ['input', 'input'])
     assert.equal(credentialField.events.every((event) => event.bubbles), true)
   }
+})
+
+test('one modal paste targets the credential field without mutating the editor', () => {
+  const editor = textControl({ tagName: 'TEXTAREA', value: 'editor sentinel' })
+  editor.setSelectionRange(2, 8)
+  const credentialField = textControl({ type: 'url', value: 'https:///' })
+  credentialField.setSelectionRange(8, 9)
+  const body = { tagName: 'BODY', isConnected: true }
+  const modal = { contains: (candidate) => candidate === credentialField }
+
+  const target = resolveTextEditControl(body, credentialField, null)
+  assert.equal(target, credentialField)
+  assert.equal(modal.contains(target), true)
+  target.setRangeText('dav.example/', target.selectionStart, target.selectionEnd, 'end')
+  dispatchTextEditInput(target, 'insertFromPaste', 'dav.example/')
+
+  assert.equal(credentialField.value, 'https://dav.example/')
+  assert.equal(credentialField.events.length, 1)
+  assert.equal(editor.value, 'editor sentinel')
+  assert.deepEqual([editor.selectionStart, editor.selectionEnd], [2, 8])
+
+  const outsideTarget = resolveTextEditControl(body, editor, null)
+  assert.equal(modal.contains(outsideTarget), false)
+  assert.equal(editor.value, 'editor sentinel')
+  assert.equal(editor.events.length, 0)
+})
+
+test('WebView owns Windows edit shortcuts while a native menu click edits once', async () => {
+  const app = await readFile(appURL, 'utf8')
+  const onKeydown = blockStartingAt(app, 'function onKeydown')
+  const handleMenuAction = blockStartingAt(app, 'function handleMenuAction')
+  const modalMenuBranch = handleMenuAction.slice(0, handleMenuAction.indexOf("if (action === 'open-folder')"))
+  const runEditAction = blockStartingAt(app, 'async function runEditAction')
+  const pasteStart = runEditAction.indexOf("} else if (action === 'paste') {")
+  const pasteEnd = runEditAction.indexOf("} else if (action === 'undo' || action === 'redo')", pasteStart)
+  const pasteBranch = runEditAction.slice(pasteStart, pasteEnd)
+
+  assert.doesNotMatch(onKeydown, /runEditAction|nativeEditShortcutAction/)
+  assert.equal((handleMenuAction.match(/\['undo', 'redo', 'cut', 'copy', 'paste', 'select-all'\]\.includes\(action\)/g) || []).length, 2)
+  assert.equal((modalMenuBranch.match(/runEditAction\(action\)/g) || []).length, 1)
+  assert.match(modalMenuBranch, /runEditAction\(action\)[\s\S]*\breturn\b/)
+  assert.equal((handleMenuAction.match(/runEditAction\(action\)/g) || []).length, 2)
+  assert.equal((pasteBranch.match(/navigator\.clipboard\.readText\(\)/g) || []).length, 1)
+  assert.equal((pasteBranch.match(/target\.setRangeText\(/g) || []).length, 1)
+  assert.equal((pasteBranch.match(/dispatchTextEditInput\(/g) || []).length, 1)
 })
 
 test('WebDAV UI connects, browses, opens, saves, and closes through opaque capabilities', async () => {
