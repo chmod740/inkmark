@@ -853,7 +853,7 @@ func (client *WebDAVClient) webDAVDirectoryExists(ctx context.Context, relativeP
 		if !ok {
 			return false, &WebDAVError{Kind: WebDAVErrorProtocol, Operation: "stat image directory", Path: normalized, Err: errors.New("Depth-0 response did not include successful properties")}
 		}
-		if properties.ResourceType.Collection == nil {
+		if properties.ResourceType == nil || properties.ResourceType.Collection == nil {
 			return false, &WebDAVError{Kind: WebDAVErrorConflict, Operation: "stat image directory", Path: normalized, Err: errors.New("image asset path is not a collection")}
 		}
 		return true, nil

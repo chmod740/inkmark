@@ -2,16 +2,21 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"path"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
 	maxWebDAVWorkspaceCapabilities = 16
 	maxWebDAVDocumentCapabilities  = 64
+	maxPreparedWebDAVMutations     = 16
 )
 
 type WebDAVSaveResult struct {
@@ -26,12 +31,32 @@ type webDAVCapability struct {
 	id        string
 	client    *WebDAVClient
 	documents map[string]webDAVDocumentCapability
+	mutations map[string]preparedWebDAVMutation
 	closed    bool
 }
 
 type webDAVDocumentCapability struct {
 	path string
 	etag string
+}
+
+type preparedWebDAVMutation struct {
+	id        string
+	operation string
+	source    string
+	kind      string
+	lockPath  string
+	lockToken string
+	directory bool
+	revision  string
+	metadata  webDAVResourceMetadata
+	createdAt time.Time
+}
+
+type WebDAVMutationPreparation struct {
+	MutationID string         `json:"mutationId"`
+	Entry      WorkspaceEntry `json:"entry"`
+	ExpiresAt  string         `json:"expiresAt"`
 }
 
 type webDAVBridgeError struct {
@@ -101,6 +126,7 @@ func (a *App) connectWebDAV(config WebDAVConfig, savedConnectionID string) (brid
 		id:        workspaceID,
 		client:    client,
 		documents: make(map[string]webDAVDocumentCapability),
+		mutations: make(map[string]preparedWebDAVMutation),
 	}
 	directory := webDAVWorkspaceDirectory(root)
 	workspace := Workspace{
@@ -318,35 +344,115 @@ func (capability *webDAVCapability) close() {
 	}
 	capability.closed = true
 	client := capability.client
+	mutations := make([]preparedWebDAVMutation, 0, len(capability.mutations))
+	for _, mutation := range capability.mutations {
+		mutations = append(mutations, mutation)
+	}
 	capability.client = nil
 	capability.documents = nil
+	capability.mutations = nil
 	capability.mu.Unlock()
 	if client != nil {
+		for _, mutation := range mutations {
+			client.bestEffortUnlockTarget(mutation.lockPath, mutation.directory, mutation.lockToken)
+		}
 		client.Close()
 	}
 }
 
 func webDAVWorkspaceDirectory(directory WebDAVDirectory) WorkspaceDirectory {
-	entries := make([]WorkspaceEntry, 0, min(len(directory.Entries), maxWorkspaceDirectoryResults))
-	truncated := false
+	entries := make([]WorkspaceEntry, 0, len(directory.Entries))
 	for _, remoteEntry := range directory.Entries {
 		kind := "markdown"
 		if remoteEntry.Directory {
 			kind = "directory"
+		} else if isImageFilename(remoteEntry.Name) {
+			kind = "image"
 		} else if !isMarkdownFilename(remoteEntry.Name) {
 			continue
 		}
-		if len(entries) >= maxWorkspaceDirectoryResults {
-			truncated = true
-			break
-		}
 		entries = append(entries, WorkspaceEntry{
-			Name: remoteEntry.Name,
-			Path: remoteEntry.Path,
-			Kind: kind,
+			Name:     remoteEntry.Name,
+			Path:     remoteEntry.Path,
+			Kind:     kind,
+			Revision: webDAVWorkspaceRevision(remoteEntry, kind),
 		})
 	}
+	sort.Slice(entries, func(left, right int) bool {
+		return workspaceEntryLess(entries[left], entries[right])
+	})
+	truncated := len(entries) > maxWorkspaceDirectoryResults
+	if truncated {
+		entries = entries[:maxWorkspaceDirectoryResults]
+	}
 	return WorkspaceDirectory{Path: directory.Path, Entries: entries, Truncated: truncated}
+}
+
+func webDAVWorkspaceRevision(entry WebDAVEntry, kind string) string {
+	if kind == "directory" {
+		// Collections use the locked two-phase mutation flow because common DAV
+		// servers do not advertise a strong collection ETag.
+		return ""
+	}
+	if kind != "markdown" && kind != "image" {
+		return ""
+	}
+	etag, ok := strongWebDAVETag(entry.ETag)
+	if !ok {
+		return ""
+	}
+	return opaqueWebDAVRevision(entry.Path, kind, etag, entry.Modified, entry.Size, entry.ContentType)
+}
+
+func webDAVMetadataRevision(relativePath string, kind string, metadata webDAVResourceMetadata) string {
+	return webDAVWorkspaceRevision(WebDAVEntry{
+		Path:        relativePath,
+		Directory:   metadata.Directory,
+		Size:        metadata.Size,
+		Modified:    metadata.Modified,
+		ETag:        metadata.ETag,
+		ContentType: metadata.ContentType,
+	}, kind)
+}
+
+func strongWebDAVETag(raw string) (string, bool) {
+	etag := strings.TrimSpace(raw)
+	if len(etag) < 2 || etag[0] != '"' || etag[len(etag)-1] != '"' || strings.HasPrefix(strings.ToLower(etag), "w/") {
+		return "", false
+	}
+	for _, character := range etag {
+		if character < 0x20 || character == 0x7f {
+			return "", false
+		}
+	}
+	return etag, true
+}
+
+func opaqueWebDAVRevision(relativePath string, kind string, etag string, modified string, size int64, contentType string) string {
+	parts := []string{relativePath, kind, etag, strings.TrimSpace(modified), strconv.FormatInt(size, 10), strings.TrimSpace(contentType)}
+	var payload strings.Builder
+	for _, part := range parts {
+		payload.WriteString(strconv.Itoa(len(part)))
+		payload.WriteByte(':')
+		payload.WriteString(part)
+	}
+	digest := sha256.Sum256([]byte(payload.String()))
+	return fmt.Sprintf("dav-v1-%x", digest[:])
+}
+
+func rebaseWebDAVDescendantPath(candidate string, source string, destination string) (string, bool) {
+	if candidate == source {
+		return destination, true
+	}
+	prefix := source + "/"
+	if strings.HasPrefix(candidate, prefix) {
+		return destination + strings.TrimPrefix(candidate, source), true
+	}
+	return candidate, false
+}
+
+func webDAVPathAtOrBelow(candidate string, target string) bool {
+	return candidate == target || strings.HasPrefix(candidate, target+"/")
 }
 
 func webDAVWorkspaceLocation(client *WebDAVClient) string {

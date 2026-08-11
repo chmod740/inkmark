@@ -11,12 +11,15 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const (
 	maxWorkspaceDirectoryResults = 2000
+	maxWorkspaceEntrySnapshots   = 8192
+	maxWorkspaceDocuments        = 64
 )
 
 type WorkspaceEntry struct {
@@ -24,6 +27,7 @@ type WorkspaceEntry struct {
 	Path         string `json:"path"`
 	AbsolutePath string `json:"absolutePath"`
 	Kind         string `json:"kind"`
+	Revision     string `json:"revision,omitempty"`
 }
 
 type WorkspaceDirectory struct {
@@ -45,9 +49,32 @@ type Workspace struct {
 // Wails payload. The frontend receives an opaque ID and can only address
 // descendants by validated relative paths.
 type workspaceCapability struct {
-	id   string
+	id                          string
+	path                        string
+	root                        *os.Root
+	documents                   map[string]workspaceDocumentCapability
+	snapshotMu                  sync.Mutex
+	entrySnapshots              map[string]workspaceEntrySnapshot
+	entrySnapshotOrder          []string
+	testAfterSaveHandleVerified func()
+	testAfterCreate             func(string)
+	testBeforeDeleteQuarantine  func(string)
+	testAfterDeleteQuarantine   func(string)
+	testAfterRename             func(string, string)
+}
+
+type workspaceEntrySnapshot struct {
 	path string
-	root *os.Root
+	kind string
+	info fs.FileInfo
+}
+
+// workspaceDocumentCapability binds an editor buffer to the exact filesystem
+// object which was read. The WebView receives only the opaque map key; saves
+// derive their path and baseline identity from this trusted record.
+type workspaceDocumentCapability struct {
+	path string
+	info fs.FileInfo
 }
 
 func (a *App) OpenDirectory() (Workspace, error) {
@@ -90,7 +117,12 @@ func (a *App) activateWorkspace(directory string) (Workspace, error) {
 	if err != nil {
 		return Workspace{}, fmt.Errorf("打开文件夹失败: %w", err)
 	}
-	capability := &workspaceCapability{path: absolute, root: root}
+	capability := &workspaceCapability{
+		path:           absolute,
+		root:           root,
+		documents:      make(map[string]workspaceDocumentCapability),
+		entrySnapshots: make(map[string]workspaceEntrySnapshot),
+	}
 	capability.id, err = newOpaqueID()
 	if err != nil {
 		_ = root.Close()
@@ -141,9 +173,9 @@ func (a *App) ReadWorkspaceDirectory(workspaceID string, relativePath string) (W
 }
 
 func (a *App) OpenWorkspaceFile(workspaceID string, relativePath string) (Document, error) {
-	a.mu.RLock()
+	a.mu.Lock()
 	document, err := a.openWorkspaceFileLocked(workspaceID, relativePath)
-	a.mu.RUnlock()
+	a.mu.Unlock()
 	if err == nil {
 		a.recordRecentItem("file", document.Path)
 	}
@@ -165,32 +197,7 @@ func (a *App) openWorkspaceFileLocked(workspaceID string, relativePath string) (
 	if !isMarkdownFilename(relativePath) {
 		return Document{}, errors.New("工作区只能打开 Markdown 文件")
 	}
-	if err := rejectWorkspaceSymlinks(capability.root, relativePath); err != nil {
-		return Document{}, err
-	}
-	info, err := capability.root.Lstat(relativePath)
-	if err != nil {
-		return Document{}, fmt.Errorf("读取文件信息失败: %w", err)
-	}
-	if !info.Mode().IsRegular() {
-		return Document{}, errors.New("所选路径不是普通文件")
-	}
-	file, err := openRootReadOnlyNonBlocking(capability.root, relativePath)
-	if err != nil {
-		return Document{}, fmt.Errorf("打开文件失败: %w", err)
-	}
-	defer file.Close()
-	absolute := filepath.Join(capability.path, filepath.FromSlash(relativePath))
-	document, err := readDocumentFromFile(file, absolute)
-	if err != nil {
-		return Document{}, err
-	}
-	document.WorkspaceID = capability.id
-	document.WorkspacePath = relativePath
-	if err := validateWorkspaceCapability(capability); err != nil {
-		return Document{}, err
-	}
-	return document, nil
+	return openWorkspaceMarkdownPath(capability, relativePath)
 }
 
 func (a *App) OpenRecentFile(recentID string) (Document, error) {
@@ -215,6 +222,7 @@ func (a *App) CloseWorkspace(workspaceID string) {
 		return
 	}
 	a.activeWorkspace = nil
+	capability.documents = nil
 	a.mu.Unlock()
 	_ = capability.root.Close()
 }
@@ -317,6 +325,8 @@ func workspaceEntryFromDirEntry(capability *workspaceCapability, relativePath st
 		kind = "directory"
 	case entryInfo.Mode().IsRegular() && isMarkdownFilename(entry.Name()):
 		kind = "markdown"
+	case entryInfo.Mode().IsRegular() && isImageFilename(entry.Name()):
+		kind = "image"
 	default:
 		return WorkspaceEntry{}, false
 	}
@@ -329,12 +339,43 @@ func workspaceEntryFromDirEntry(capability *workspaceCapability, relativePath st
 		Path:         entryPath,
 		AbsolutePath: filepath.Join(capability.path, filepath.FromSlash(entryPath)),
 		Kind:         kind,
+		Revision:     capability.rememberWorkspaceEntry(entryPath, kind, entryInfo),
 	}, true
+}
+
+func (capability *workspaceCapability) rememberWorkspaceEntry(relativePath string, kind string, info fs.FileInfo) string {
+	if capability == nil || info == nil {
+		return ""
+	}
+	revision, err := newOpaqueID()
+	if err != nil {
+		return ""
+	}
+	capability.snapshotMu.Lock()
+	defer capability.snapshotMu.Unlock()
+	if capability.entrySnapshots == nil {
+		capability.entrySnapshots = make(map[string]workspaceEntrySnapshot)
+	}
+	capability.entrySnapshots[revision] = workspaceEntrySnapshot{path: relativePath, kind: kind, info: info}
+	capability.entrySnapshotOrder = append(capability.entrySnapshotOrder, revision)
+	for len(capability.entrySnapshotOrder) > maxWorkspaceEntrySnapshots {
+		oldest := capability.entrySnapshotOrder[0]
+		capability.entrySnapshotOrder = capability.entrySnapshotOrder[1:]
+		delete(capability.entrySnapshots, oldest)
+	}
+	return revision
+}
+
+func (capability *workspaceCapability) workspaceEntrySnapshot(revision string) (workspaceEntrySnapshot, bool) {
+	capability.snapshotMu.Lock()
+	defer capability.snapshotMu.Unlock()
+	snapshot, ok := capability.entrySnapshots[strings.TrimSpace(revision)]
+	return snapshot, ok
 }
 
 func workspaceEntryLess(left WorkspaceEntry, right WorkspaceEntry) bool {
 	if left.Kind != right.Kind {
-		return left.Kind == "directory"
+		return workspaceEntryKindRank(left.Kind) < workspaceEntryKindRank(right.Kind)
 	}
 	leftName := strings.ToLower(left.Name)
 	rightName := strings.ToLower(right.Name)
@@ -342,6 +383,19 @@ func workspaceEntryLess(left WorkspaceEntry, right WorkspaceEntry) bool {
 		return leftName < rightName
 	}
 	return left.Name < right.Name
+}
+
+func workspaceEntryKindRank(kind string) int {
+	switch kind {
+	case "directory":
+		return 0
+	case "markdown":
+		return 1
+	case "image":
+		return 2
+	default:
+		return 3
+	}
 }
 
 type workspaceEntryMaxHeap []WorkspaceEntry
@@ -397,4 +451,13 @@ func rejectWorkspaceSymlinks(root *os.Root, relativePath string) error {
 func isMarkdownFilename(name string) bool {
 	extension := strings.ToLower(filepath.Ext(name))
 	return extension == ".md" || extension == ".markdown"
+}
+
+func isImageFilename(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp":
+		return true
+	default:
+		return false
+	}
 }

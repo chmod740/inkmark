@@ -1,4 +1,4 @@
-export type WorkspaceEntryKind = 'directory' | 'markdown'
+export type WorkspaceEntryKind = 'directory' | 'markdown' | 'image'
 export type WorkspaceProvider = 'local' | 'webdav'
 
 export interface WorkspaceEntryData {
@@ -6,6 +6,7 @@ export interface WorkspaceEntryData {
   path: string
   absolutePath: string
   kind: WorkspaceEntryKind
+  revision: string
 }
 
 export interface WorkspaceData {
@@ -33,6 +34,11 @@ export interface WorkspaceTreeRow {
 export type WorkspaceChildren = Readonly<Record<string, readonly WorkspaceEntryData[]>>
 
 export const workspaceRootKey = ''
+const workspaceEntryKindRank: Readonly<Record<WorkspaceEntryKind, number>> = {
+  directory: 0,
+  markdown: 1,
+  image: 2,
+}
 
 export function normalizeWorkspaceProvider(value: unknown): WorkspaceProvider | null {
   if (value === 'webdav') return 'webdav'
@@ -103,12 +109,13 @@ export function normalizeWorkspaceEntries(value: unknown): WorkspaceEntryData[] 
     const name = typeof record.name === 'string' ? record.name.trim() : ''
     const path = typeof record.path === 'string' ? record.path : ''
     const absolutePath = typeof record.absolutePath === 'string' ? record.absolutePath : ''
-    if ((kind !== 'directory' && kind !== 'markdown') || !name || !path) return []
-    return [{ name, path, absolutePath, kind }]
+    const revision = typeof record.revision === 'string' ? record.revision : ''
+    if ((kind !== 'directory' && kind !== 'markdown' && kind !== 'image') || !name || !path) return []
+    return [{ name, path, absolutePath, kind, revision }]
   })
 
   return entries.sort((left, right) => {
-    if (left.kind !== right.kind) return left.kind === 'directory' ? -1 : 1
+    if (left.kind !== right.kind) return workspaceEntryKindRank[left.kind] - workspaceEntryKindRank[right.kind]
     return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' })
   })
 }
@@ -189,6 +196,55 @@ export function sameWorkspaceFile(left: string, right: string): boolean {
     return normalizedLeft.toLocaleLowerCase('en-US') === normalizedRight.toLocaleLowerCase('en-US')
   }
   return normalizedLeft === normalizedRight
+}
+
+export function workspaceJoinPath(parentPath: string, name: string): string {
+  const parent = workspaceDirectoryKey(parentPath)
+  const child = name.trim()
+  return workspaceDirectoryKey(parent ? `${parent}/${child}` : child)
+}
+
+export function workspacePathIsWithin(candidatePath: string, ancestorPath: string): boolean {
+  const candidate = workspaceDirectoryKey(candidatePath)
+  const ancestor = workspaceDirectoryKey(ancestorPath)
+  if (!candidate || !ancestor) return false
+  return candidate === ancestor || candidate.startsWith(`${ancestor}/`)
+}
+
+export function rebaseWorkspacePath(candidatePath: string, oldPath: string, newPath: string): string {
+  const candidate = workspaceDirectoryKey(candidatePath)
+  const previous = workspaceDirectoryKey(oldPath)
+  const replacement = workspaceDirectoryKey(newPath)
+  if (!workspacePathIsWithin(candidate, previous) || !replacement) return candidate
+  if (candidate === previous) return replacement
+  return `${replacement}/${candidate.slice(previous.length + 1)}`
+}
+
+export function workspaceParentPath(path: string): string {
+  return workspaceParentDirectoryKey(path)
+}
+
+export function localWorkspaceAbsolutePath(workspacePath: string, relativePath: string): string {
+  const relative = workspaceDirectoryKey(relativePath)
+  if (!workspacePath || !relative) return ''
+  const windowsStyle = workspacePath.includes('\\') && !workspacePath.includes('/')
+  const separator = windowsStyle ? '\\' : '/'
+  const root = workspacePath.replace(/[\\/]+$/g, '')
+  return `${root}${separator}${relative.replaceAll('/', separator)}`
+}
+
+export function isWorkspaceBackedLocalDocument(
+  workspace: WorkspaceData | null | undefined,
+  storageKind: string,
+  documentWorkspaceID: string,
+  relativePath: string,
+): boolean {
+  return Boolean(
+    workspace?.provider === 'local'
+    && storageKind === 'local'
+    && documentWorkspaceID === workspace.id
+    && workspaceDirectoryKey(relativePath),
+  )
 }
 
 /**

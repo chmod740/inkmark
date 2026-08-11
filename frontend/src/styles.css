@@ -292,6 +292,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   white-space: nowrap;
 }
 .workspace-tree { min-width: 0; min-height: 0; padding: 5px 4px 14px; overflow: auto; }
+.workspace-tree:focus-visible { outline: 2px solid #29787b; outline-offset: -2px; }
 .workspace-tree-row {
   display: flex;
   width: 100%;
@@ -347,6 +348,22 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   font: 700 7px/1 "SFMono-Regular", Consolas, monospace;
   text-align: center;
 }
+.workspace-entry-icon.image {
+  overflow: hidden;
+  border: 1px solid #71817c;
+  border-radius: 2px;
+  background: linear-gradient(155deg, #d9eef1 0 48%, #6fa19a 49% 68%, #d9bc78 69%);
+}
+.workspace-entry-icon.image::before {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #f8e69b;
+  content: "";
+}
 .workspace-entry-name { min-width: 0; flex: 1; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-entry-truncated { flex: 0 0 auto; font-weight: 700; }
 .workspace-row-loading {
@@ -363,6 +380,45 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @keyframes workspace-spin { to { transform: rotate(360deg); } }
 @keyframes connection-pulse { 50% { opacity: .42; } }
+
+.workspace-context-menu {
+  position: fixed;
+  z-index: 900;
+  display: grid;
+  width: max-content;
+  min-width: min(190px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  padding: 5px;
+  color: #263330;
+  border: 1px solid #8b9692;
+  border-radius: 6px;
+  background: #f7f8f6;
+  box-shadow: 0 10px 30px rgba(4,20,22,.28), inset 0 1px #fff;
+}
+.workspace-context-menu button {
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr);
+  min-height: 30px;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  color: inherit;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: default;
+  font: 12px/1.25 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  text-align: start;
+}
+.workspace-context-menu button:hover,
+.workspace-context-menu button:focus-visible { color: #fff; outline: 0; background: #26666a; }
+.workspace-context-menu button.danger { color: #9d332e; }
+.workspace-context-menu button.danger:hover,
+.workspace-context-menu button.danger:focus-visible { color: #fff; background: #9d403a; }
+.workspace-context-menu button > span { color: #53716d; font: 700 10px/1 "SFMono-Regular", Consolas, monospace; text-align: center; }
+.workspace-context-menu button:hover > span,
+.workspace-context-menu button:focus-visible > span { color: inherit; }
+.workspace-context-separator { height: 1px; margin: 4px 5px; background: #ccd2cf; }
 
 .editor-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-width: 0; min-height: 0; gap: 3px; padding: 3px; background: #858d8a; }
 .source-panel, .preview-panel { display: grid; grid-template-rows: 34px minmax(0, 1fr); min-width: 0; min-height: 0; border: 1px solid #66706c; background: var(--paper); box-shadow: inset 1px 1px #fff; }
@@ -403,6 +459,42 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 }
 .app-dialog h2 { margin: 0 0 18px; font: 700 22px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
 .app-dialog > p { color: var(--muted); line-height: 1.65; }
+.workspace-dialog { width: min(560px, calc(100vw - 48px)); }
+.workspace-entry-form { display: grid; gap: 8px; }
+.workspace-entry-form label { font-size: 12px; font-weight: 700; }
+.workspace-entry-form input {
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 10px;
+  color: var(--ink);
+  border: 1px solid #8c9995;
+  border-radius: 5px;
+  outline: 0;
+  background: var(--paper-soft);
+  font: 13px/1.3 "SFMono-Regular", Consolas, monospace;
+}
+.workspace-entry-form input:focus { border-color: #28777a; box-shadow: 0 0 0 2px rgba(40,119,122,.18); }
+.workspace-entry-parent, .workspace-preview-location { margin: 0; overflow-wrap: anywhere; color: var(--muted); font: 10px/1.5 "SFMono-Regular", Consolas, monospace; }
+.workspace-delete-message { margin-bottom: 10px; color: var(--ink) !important; font-size: 14px; }
+.workspace-lock-status { margin: -8px 0 16px; padding: 8px 10px; color: #225c5f !important; border: 1px solid #9bbdb8; border-radius: 5px; background: #edf8f5; font-size: 11px; line-height: 1.45 !important; }
+.workspace-preserve-message { padding: 9px 11px; color: #79550d !important; border: 1px solid #d7bd79; border-radius: 5px; background: #fff8df; font-size: 12px; }
+.workspace-operation-error { margin-top: 16px; }
+.workspace-mutation-retry { margin: 8px 0 0; color: #79550d !important; font-size: 12px; line-height: 1.5 !important; }
+.workspace-image-preview-dialog { width: min(860px, calc(100vw - 48px)); }
+.workspace-image-loading { display: grid; min-height: 220px; place-items: center; color: var(--muted); }
+.workspace-image-preview { display: grid; min-height: 0; margin: 14px 0 0; gap: 12px; }
+.workspace-image-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 270px);
+  margin: auto;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: repeating-conic-gradient(#e4e8e6 0 25%, #f7f8f6 0 50%) 50% / 18px 18px;
+  object-fit: contain;
+}
+.workspace-image-preview figcaption { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; color: var(--muted); font-size: 11px; }
+.workspace-image-preview figcaption strong { color: var(--ink); }
 .webdav-dialog {
   position: relative;
   display: grid;
@@ -787,9 +879,20 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 [data-color-scheme="dark"] .workspace-tree-row.is-active { border-color: #327a7e; background: linear-gradient(#28666b, #144c51); }
 [data-color-scheme="dark"] .workspace-disclosure { color: #91a39e; }
 [data-color-scheme="dark"] .workspace-entry-icon.markdown { border-color: #64726d; background: #243033; }
+[data-color-scheme="dark"] .workspace-entry-icon.image { border-color: #64726d; filter: brightness(.78) saturate(.8); }
 [data-color-scheme="dark"] .workspace-empty,
 [data-color-scheme="dark"] .workspace-truncated { color: #91a39e; }
 [data-color-scheme="dark"] .workspace-truncated { border-color: #344447; }
+[data-color-scheme="dark"] .workspace-context-menu { color: #dce6e2; border-color: #52615d; background: #1c2729; box-shadow: 0 10px 30px rgba(0,0,0,.5), inset 0 1px rgba(255,255,255,.05); }
+[data-color-scheme="dark"] .workspace-context-menu button:hover,
+[data-color-scheme="dark"] .workspace-context-menu button:focus-visible { background: #286a6e; }
+[data-color-scheme="dark"] .workspace-context-menu button.danger { color: #f0aaa5; }
+[data-color-scheme="dark"] .workspace-context-separator { background: #42504d; }
+[data-color-scheme="dark"] .workspace-entry-form input { border-color: #52615d; background: #131c1e; }
+[data-color-scheme="dark"] .workspace-lock-status { color: #9fd2ca !important; border-color: #3f6763; background: #172c2c; }
+[data-color-scheme="dark"] .workspace-preserve-message { color: #e6bd79 !important; border-color: #705d34; background: #302919; }
+[data-color-scheme="dark"] .workspace-mutation-retry { color: #e6bd79 !important; }
+[data-color-scheme="dark"] .workspace-image-preview img { border-color: #52615d; background: repeating-conic-gradient(#202a2c 0 25%, #141b1d 0 50%) 50% / 18px 18px; }
 [data-color-scheme="dark"] .panel-caption { color: #cfdbd7; border-color: #344447; background: linear-gradient(#253234, #1c2729); }
 [data-color-scheme="dark"] .panel-caption small { color: #8ca19c; }
 [data-color-scheme="dark"] .source-editor { color: #d5dfdc; background: #151d1f; }
@@ -882,4 +985,6 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   .saved-connection-delete > div { display: grid; grid-template-columns: 1fr 1fr; }
   .webdav-dialog > .dialog-actions { min-height: 62px; padding: 11px 16px 14px; }
   .webdav-dialog > .dialog-actions .button { flex: 1 1 0; }
+  .workspace-dialog { width: calc(100vw - 24px); max-height: calc(100vh - 24px); padding: 18px; }
+  .workspace-image-preview img { max-height: calc(100vh - 250px); }
 }

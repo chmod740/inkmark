@@ -191,6 +191,45 @@ test('image import, rendering, and export messages are complete in both language
   assert.match(translate('en', 'image.publicURLHint'), /HTTPS.*HTML exports preserve/i)
 })
 
+test('workspace image browsing and destructive file actions are fully localised', () => {
+  const keys = [
+    'workspace.rootActions',
+    'workspace.newMarkdown',
+    'workspace.newDirectory',
+    'workspace.rename',
+    'workspace.delete',
+    'workspace.previewImage',
+    'workspace.deleteFileMessage',
+    'workspace.deleteDirectoryMessage',
+    'workspace.deleteCurrentPreserved',
+    'workspace.operationFailed',
+    'workspace.entryExists',
+    'workspace.permissionDenied',
+    'workspace.webDAVMutationPreparing',
+    'workspace.webDAVMutationLockedUntil',
+    'workspace.webDAVMutationCancelFailed',
+    'workspace.webDAVMutationExpired',
+    'workspace.webDAVMutationUnsupported',
+    'workspace.webDAVMutationRetry',
+    'workspace.revisionExpired',
+  ]
+  for (const locale of ['zh-CN', 'en']) {
+    for (const key of keys) assert.ok(translations[locale][key]?.trim(), `${locale}.${key} must exist`)
+  }
+  assert.match(translate('zh-CN', 'workspace.rootActions'), /右键.*Markdown.*文件夹/)
+  assert.match(translate('en', 'workspace.rootActions'), /Right-click.*Markdown.*folder/i)
+  assert.match(
+    translate('zh-CN', 'workspace.deleteDirectoryMessage', { name: '资料' }),
+    /资料.*全部文件和子文件夹.*无法撤销/,
+  )
+  assert.match(
+    translate('en', 'workspace.deleteDirectoryMessage', { name: 'Notes' }),
+    /Notes.*every file and subfolder.*cannot be undone/i,
+  )
+  assert.match(translate('zh-CN', 'workspace.webDAVMutationExpired'), /刷新.*重试/)
+  assert.match(translate('en', 'workspace.webDAVMutationExpired'), /refresh.*try again/i)
+})
+
 test('saved WebDAV connection management explains system credential storage in both languages', () => {
   const keys = [
     'webdav.savedConnections',
