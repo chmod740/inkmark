@@ -25,7 +25,7 @@ InkMark is a Markdown editor for macOS and Windows with local and WebDAV documen
 - A localized welcome page on normal launch; Finder or Explorer file launches open the requested document directly
 - A built-in bilingual rendering test, available from Welcome and Help, covering tables, math, code, alerts, safe HTML, and ten Mermaid diagram types
 - One consistent icon for the app, file associations, desktop shortcuts, and in-app branding
-- An About page with version, author, source repository, and update status
+- An About page with version, author, and update status
 - GitHub Releases update checks with in-app download and checksum verification; after unsaved work is resolved, InkMark closes the old version and opens the system installer
 
 ## Markdown and Preview Support
@@ -79,7 +79,7 @@ Network access occurs only for user-requested actions:
 - Connecting to WebDAV, listing remote folders, opening or saving remote Markdown files, and uploading or reading private remote images
 - Previewing public HTTPS images or embedding them into PDF, PNG, and Word-compatible exports; HTML exports retain the original public address
 - Checking GitHub Releases for a new version
-- Downloading an update or opening the source repository on GitHub
+- Downloading an update from GitHub
 - Opening an external link in a document
 - Loading external resources referenced by an exported HTML file
 

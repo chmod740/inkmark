@@ -80,7 +80,6 @@ var nativeMenuText = map[string]localizedMenuText{
 	"render-test":        {zh: "综合渲染测试页", en: "Rendering Test Page"},
 	"keyboard-shortcuts": {zh: "键盘快捷键", en: "Keyboard Shortcuts"},
 	"check-update":       {zh: "检查更新…", en: "Check for Updates…"},
-	"source-code":        {zh: "源码仓库", en: "Source Repository"},
 }
 
 type currentLocaleProvider interface {
@@ -231,7 +230,6 @@ func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu 
 	helpMenu.AddText(label("keyboard-shortcuts"), nil, a.menuAction("show-shortcuts"))
 	helpMenu.AddSeparator()
 	helpMenu.AddText(label("check-update"), nil, a.menuAction("check-update"))
-	helpMenu.AddText(label("source-code"), nil, a.menuAction("source-code"))
 	if platform != "darwin" {
 		helpMenu.AddSeparator()
 		helpMenu.AddText(label("about"), nil, a.menuAction("about"))

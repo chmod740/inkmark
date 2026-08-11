@@ -299,9 +299,14 @@ function rowDisabled(row: WorkspaceTreeRow) {
         @keydown="handleTreeKeydown($event, row)"
         @contextmenu="openPointerContextMenu($event, row.entry)"
       >
-        <span class="workspace-disclosure" aria-hidden="true">
-          {{ row.entry.kind === 'directory' ? (row.expanded ? '⌄' : '›') : '' }}
-        </span>
+        <span
+          class="workspace-disclosure"
+          :class="{
+            'is-expanded': row.entry.kind === 'directory' && row.expanded,
+            'is-collapsed': row.entry.kind === 'directory' && !row.expanded,
+          }"
+          aria-hidden="true"
+        ></span>
         <span
           class="workspace-entry-icon"
           :class="row.entry.kind"
