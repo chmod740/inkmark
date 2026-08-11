@@ -816,6 +816,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 [data-color-scheme="dark"] .image-mode-options { border-color: #52615d; }
 [data-color-scheme="dark"] .image-mode-hint { background: #182123; }
 [data-color-scheme="dark"] .webdav-conflict-message { color: #e6c77f; border-color: #705d34; background: #302919; }
+[data-color-scheme="dark"] .third-party-notices { color: #d5dfdc; border-color: #52615d; background: #182123; }
 .theme-dark .preview-viewport { background: #0d1117; }
 .theme-dark .markdown-body { color: #c9d1d9; background: #0d1117; }
 .theme-dark .markdown-body h1, .theme-dark .markdown-body h2, .theme-dark .markdown-body h3, .theme-dark .markdown-body h4, .theme-dark .markdown-body h5 { color: #f0f6fc; }

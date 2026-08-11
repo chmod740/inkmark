@@ -223,7 +223,10 @@ test('saved WebDAV connection management explains system credential storage in b
 })
 
 test('about dialog wires application metadata and native update menu actions', async () => {
-  const appSource = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
+  const [appSource, styles] = await Promise.all([
+    readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../frontend/src/styles.css', import.meta.url), 'utf8'),
+  ])
   for (const bridgeMethod of ['GetAppInfo', 'GetThirdPartyNotices', 'CheckForUpdates', 'OpenUpdatePage', 'OpenSourceRepository']) {
     assert.ok(appSource.includes(bridgeMethod), `${bridgeMethod} must be wired into App.vue`)
   }
@@ -231,6 +234,7 @@ test('about dialog wires application metadata and native update menu actions', a
   assert.ok(!appSource.includes("action === 'upgrade'"))
   assert.ok(appSource.includes('aria-live="polite"'))
   assert.match(appSource, /class="third-party-notices"[\s\S]*readonly/)
+  assert.match(styles, /\[data-color-scheme="dark"\] \.third-party-notices \{ color: #d5dfdc; border-color: #52615d; background: #182123; \}/)
   assert.ok(appSource.includes("aboutView === 'third-party'"))
   assert.ok(appSource.includes('@click="showAboutOverview"'))
 })
