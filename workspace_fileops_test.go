@@ -39,7 +39,8 @@ func TestWorkspaceListsMarkdownImagesAndDirectoriesInStableKindOrder(t *testing.
 
 func TestWorkspaceFileOperationsAndImagePreview(t *testing.T) {
 	root := t.TempDir()
-	if err := os.Mkdir(filepath.Join(root, "legacy:name"), 0o755); err != nil {
+	legacyDirectory := workspaceLegacyDirectoryNameForTest()
+	if err := os.Mkdir(filepath.Join(root, legacyDirectory), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	pngPayload := makePNG(t, 6, 4)
@@ -98,13 +99,15 @@ func TestWorkspaceFileOperationsAndImagePreview(t *testing.T) {
 	if decodeErr != nil || !bytes.Equal(decoded, pngPayload) || preview.Width != 6 || preview.Height != 4 || preview.MIMEType != "image/png" {
 		t.Fatalf("workspace image preview changed payload: %#v, %v", preview, decodeErr)
 	}
-	if _, err := app.CreateWorkspaceMarkdownFile(workspace.ID, "legacy:name/portable.md"); err != nil {
+	legacyPortablePath := filepath.ToSlash(filepath.Join(legacyDirectory, "portable.md"))
+	legacyRenamedPath := filepath.ToSlash(filepath.Join(legacyDirectory, "renamed.md"))
+	if _, err := app.CreateWorkspaceMarkdownFile(workspace.ID, legacyPortablePath); err != nil {
 		t.Fatalf("safe target inside a legacy directory was rejected: %v", err)
 	}
-	if _, err := app.RenameWorkspaceEntry(workspace.ID, "legacy:name/portable.md", "legacy:name/renamed.md", "markdown", workspaceRevisionForTest(t, app, "legacy:name/portable.md")); err != nil {
+	if _, err := app.RenameWorkspaceEntry(workspace.ID, legacyPortablePath, legacyRenamedPath, "markdown", workspaceRevisionForTest(t, app, legacyPortablePath)); err != nil {
 		t.Fatalf("safe rename inside a legacy directory was rejected: %v", err)
 	}
-	if err := app.DeleteWorkspaceEntry(workspace.ID, "legacy:name/renamed.md", false, workspaceRevisionForTest(t, app, "legacy:name/renamed.md")); err != nil {
+	if err := app.DeleteWorkspaceEntry(workspace.ID, legacyRenamedPath, false, workspaceRevisionForTest(t, app, legacyRenamedPath)); err != nil {
 		t.Fatalf("deleting an existing entry inside a legacy directory was rejected: %v", err)
 	}
 	if _, err := app.CreateWorkspaceMarkdownFile(workspace.ID, "CON .md"); err == nil {
@@ -331,11 +334,27 @@ func TestWorkspaceDeleteReportsCapabilityInvalidationAfterMutation(t *testing.T)
 		}
 		hookErr = os.WriteFile(filepath.Join(root, "replacement.md"), []byte("replacement-sentinel"), 0o644)
 	}
-	if err := app.DeleteWorkspaceEntry(workspace.ID, "victim.md", false, workspaceRevisionForTest(t, app, "victim.md")); err == nil || !strings.Contains(err.Error(), "条目已删除") {
-		t.Fatalf("delete did not report post-mutation capability invalidation: %v", err)
+	operationErr := app.DeleteWorkspaceEntry(workspace.ID, "victim.md", false, workspaceRevisionForTest(t, app, "victim.md"))
+	if workspaceRootReplacementUnavailableForTest(hookErr) {
+		if operationErr != nil {
+			t.Fatalf("Windows workspace deletion failed after the open root rejected replacement: %v", operationErr)
+		}
+		if info, err := os.Stat(root); err != nil || !info.IsDir() {
+			t.Fatalf("Windows workspace root changed after replacement was rejected: %#v, %v", info, err)
+		}
+		if _, err := os.Lstat(movedRoot); !os.IsNotExist(err) {
+			t.Fatalf("Windows moved workspace unexpectedly exists: %v", err)
+		}
+		if _, err := os.Lstat(filepath.Join(root, "victim.md")); !os.IsNotExist(err) {
+			t.Fatalf("Windows deletion did not remove the confirmed entry: %v", err)
+		}
+		return
 	}
 	if hookErr != nil {
 		t.Fatal(hookErr)
+	}
+	if operationErr == nil || !strings.Contains(operationErr.Error(), "条目已删除") {
+		t.Fatalf("delete did not report post-mutation capability invalidation: %v", operationErr)
 	}
 	if _, err := os.Lstat(filepath.Join(movedRoot, "victim.md")); !os.IsNotExist(err) {
 		t.Fatalf("confirmed mutation did not delete the original entry: %v", err)
@@ -382,11 +401,27 @@ func TestWorkspaceCreateReportsCapabilityInvalidationWithoutTouchingReplacement(
 				}
 				hookErr = os.WriteFile(filepath.Join(root, "replacement-sentinel"), []byte("replacement"), 0o644)
 			}
-			if err := test.create(app, workspace.ID, test.path); err == nil || !strings.Contains(err.Error(), "已创建于原工作区") {
-				t.Fatalf("create did not report post-mutation capability invalidation: %v", err)
+			operationErr := test.create(app, workspace.ID, test.path)
+			if workspaceRootReplacementUnavailableForTest(hookErr) {
+				if operationErr != nil {
+					t.Fatalf("Windows workspace create failed after the open root rejected replacement: %v", operationErr)
+				}
+				if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(test.path))); err != nil {
+					t.Fatalf("Windows create did not retain the new entry in the open workspace: %v", err)
+				}
+				if _, err := os.Lstat(movedRoot); !os.IsNotExist(err) {
+					t.Fatalf("Windows moved workspace unexpectedly exists: %v", err)
+				}
+				if _, err := os.Lstat(filepath.Join(root, "replacement-sentinel")); !os.IsNotExist(err) {
+					t.Fatalf("Windows replacement sentinel unexpectedly exists: %v", err)
+				}
+				return
 			}
 			if hookErr != nil {
 				t.Fatal(hookErr)
+			}
+			if operationErr == nil || !strings.Contains(operationErr.Error(), "已创建于原工作区") {
+				t.Fatalf("create did not report post-mutation capability invalidation: %v", operationErr)
 			}
 			if _, err := os.Lstat(filepath.Join(movedRoot, filepath.FromSlash(test.path))); err != nil {
 				t.Fatalf("created object was not retained in the original workspace: %v", err)
@@ -424,11 +459,27 @@ func TestWorkspaceRenameRollsBackWhenCapabilityRootPathIsReplaced(t *testing.T) 
 		}
 		hookErr = os.WriteFile(filepath.Join(root, "replacement.md"), []byte("replacement-sentinel"), 0o644)
 	}
-	if _, err := app.RenameWorkspaceEntry(workspace.ID, "source.md", "renamed.md", "markdown", workspaceRevisionForTest(t, app, "source.md")); err == nil || !strings.Contains(err.Error(), "已恢复原名称") {
-		t.Fatalf("capability replacement did not produce a rolled-back error: %v", err)
+	_, operationErr := app.RenameWorkspaceEntry(workspace.ID, "source.md", "renamed.md", "markdown", workspaceRevisionForTest(t, app, "source.md"))
+	if workspaceRootReplacementUnavailableForTest(hookErr) {
+		if operationErr != nil {
+			t.Fatalf("Windows workspace rename failed after the open root rejected replacement: %v", operationErr)
+		}
+		if payload, err := os.ReadFile(filepath.Join(root, "renamed.md")); err != nil || string(payload) != "original" {
+			t.Fatalf("Windows rename changed the confirmed entry: %q, %v", payload, err)
+		}
+		if _, err := os.Lstat(filepath.Join(root, "source.md")); !os.IsNotExist(err) {
+			t.Fatalf("Windows rename left the source name behind: %v", err)
+		}
+		if _, err := os.Lstat(movedRoot); !os.IsNotExist(err) {
+			t.Fatalf("Windows moved workspace unexpectedly exists: %v", err)
+		}
+		return
 	}
 	if hookErr != nil {
 		t.Fatal(hookErr)
+	}
+	if operationErr == nil || !strings.Contains(operationErr.Error(), "已恢复原名称") {
+		t.Fatalf("capability replacement did not produce a rolled-back error: %v", operationErr)
 	}
 	if payload, err := os.ReadFile(filepath.Join(movedRoot, "source.md")); err != nil || string(payload) != "original" {
 		t.Fatalf("rename rollback did not restore the original source: %q, %v", payload, err)
