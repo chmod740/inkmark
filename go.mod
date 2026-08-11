@@ -36,6 +36,6 @@ require (
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/image v0.43.0
-	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/net v0.54.0
 	golang.org/x/text v0.38.0 // indirect
 )

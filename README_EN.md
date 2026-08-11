@@ -9,10 +9,10 @@ InkMark is a Markdown editor for macOS and Windows with local and WebDAV documen
 ## Highlights
 
 - Open, edit, save, and save-as for `.md` and `.markdown` files
-- Connect to an HTTPS WebDAV service from File → Connect to WebDAV, then browse, open, edit, and save Markdown files from the cloud directory sidebar
+- Connect to an HTTPS WebDAV service from File → Connect to WebDAV, then browse, create, open, edit, and save Markdown files from the cloud directory sidebar
 - Create, edit, connect, or delete reusable entries in the WebDAV connection window. Names and addresses live in app settings; usernames and passwords that you choose to save go only to macOS Keychain or Windows Credential Manager, never settings, Recent, or logs
 - WebDAV write-lock and ETag concurrency protection for remote saves, with explicit reload, cancel, and overwrite choices when another DAV-lock-aware client changes a file
-- Open a folder as a workspace, lazily expand or refresh subfolders, open their Markdown files, and keep the tree in sync after saving
+- Open a local folder or WebDAV directory as a workspace. The sidebar shows Markdown and supported images and opens images in a safe preview. Right-click the root or a folder to create content, or right-click an existing entry to rename or delete it; every file or folder deletion requires confirmation
 - Reopen or clear up to 10 recently used files, folders, or WebDAV connections from File → Recent; an entry connects directly when usable system credentials exist, otherwise it opens the connection window for authentication
 - Insert images from Format → Insert Image or the toolbar: copy into a local document assets folder, embed as a single-file Data URI, or upload into the active WebDAV document assets folder. Preview also supports public HTTPS image hosts
 - Debounced 120 ms live rendering; Markdown, math, highlighting, and diagrams are completed off-screen and committed once so continuous typing does not flash or jitter
@@ -61,7 +61,7 @@ The macOS and Windows packages are not currently signed with commercial distribu
 ## Quick Start
 
 1. Launch InkMark directly, or open a Markdown file with InkMark from Finder or Explorer.
-2. Use File → Open Folder for a local directory sidebar, or File → Connect to WebDAV for a cloud directory.
+2. Use File → Open Folder for a local directory sidebar, or File → Connect to WebDAV for a cloud directory. Right-click blank sidebar space or a folder to create a Markdown file or subfolder; right-click an existing entry to rename or delete it, and click an image entry to preview it.
 3. After a successful WebDAV connection, the normalized complete server address, including its path, is added to Recent. You may save a reusable connection in the operating system credential vault. Selecting it from Recent connects directly when usable credentials exist; otherwise only the address is prefilled and authentication is requested again.
    If the same service also exposes web or API writers that bypass DAV locks, the server must provide atomic conditional updates or a shared lock across every write path for cross-channel concurrency protection.
 4. Write Markdown in the editor and inspect the live result in the preview.
@@ -124,21 +124,21 @@ pnpm --dir frontend test:installer
 node scripts/verify-offline.mjs
 ```
 
-The suite covers local file I/O, WebDAV authentication and directory parsing, operating-system credential-vault connection management, path encoding, ETag conflicts, remote saves, local and WebDAV image import, all four image rendering modes, public-image network boundaries, capability-bound workspace access, lazy sidebar expansion, recent items, unsaved-document transitions and the native close guard, language settings, native menus, verified update downloads and installer orchestration, atomic preview commits, version comparison and Release responses, export structure, external-resource policy, scroll synchronization, bounded large-document anchors, and offline asset integrity. Live WebDAV tests run only when a test endpoint and credentials are injected at runtime, and they remove their randomly named temporary resources.
+The suite covers local file I/O, WebDAV authentication and directory parsing, operating-system credential-vault connection management, path encoding, ETag conflicts, remote saves, local and WebDAV workspace creation/rename/recursive deletion, safe image-entry preview, local and WebDAV image import, all four image rendering modes, public-image network boundaries, capability-bound workspace access, lazy sidebar expansion and context menus, recent items, unsaved-document transitions and the native close guard, language settings, native menus, verified update downloads and installer orchestration, atomic preview commits, version comparison and Release responses, export structure, external-resource policy, scroll synchronization, bounded large-document anchors, and offline asset integrity. Live WebDAV tests run only when a test endpoint and credentials are injected at runtime, and they remove their randomly named temporary resources.
 
 ## Project Layout
 
 - `app.go`: native dialogs, file I/O, and export saving
 - `close_guard.go`: save guard for native close requests on macOS and Windows
 - `app_state.go`: language preferences, single-instance handling, and OS file-open events
-- `workspace.go` and `recent.go`: capability-bound folders, Markdown enumeration, and recent items
-- `webdav.go` and `webdav_app.go`: HTTPS WebDAV protocol handling, remote capability sessions, directory browsing, and write-lock plus ETag-safe saves
+- `workspace.go` and `recent.go`: capability-bound local folders, Markdown and image enumeration, safe file operations, and recent items
+- `webdav.go` and `webdav_app.go`: HTTPS WebDAV protocol handling, remote capability sessions, directory and file operations, and write-lock plus ETag-safe saves
 - `webdav_connections.go`: reusable WebDAV metadata, operating-system credential vault access, and direct reconnect from Recent
 - `image_assets.go`: local and WebDAV image import, relative resource resolution, and restricted public HTTPS fetching
 - `update.go`, `update_download.go`, and `update_launch.go`: release checks, installer selection, verified downloads, and platform-installer orchestration
 - `menu.go`: native macOS and Windows menus
 - `frontend/src/App.vue`: editor, live preview, Settings, and About
-- `frontend/src/DirectorySidebar.vue` and `workspace-tree.ts`: folder sidebar and lazy tree state
+- `frontend/src/DirectorySidebar.vue` and `workspace-tree.ts`: folder sidebar, image entries, right-click file operations, and lazy tree state
 - `frontend/src/i18n.ts`: Chinese and English UI and welcome-page content
 - `frontend/src/ui-state.ts`: document status and pane-order preferences
 - `frontend/src/document-guard.ts`: safe transitions for documents with unsaved changes

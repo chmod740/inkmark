@@ -89,13 +89,20 @@ import {
   loadedWorkspaceDirectoryKeys,
   normalizeWorkspace,
   normalizeWorkspaceDirectory,
+  normalizeWorkspaceEntries,
   retainExistingWorkspaceDirectories,
   isActiveWorkspaceFile,
+  isWorkspaceBackedLocalDocument,
   localWorkspaceRelativePath,
+  localWorkspaceAbsolutePath,
+  rebaseWorkspacePath,
   sameWorkspaceFile,
   workspaceBackendDirectoryPath,
   workspaceDirectoryExists,
   workspaceDirectoryKey,
+  workspaceJoinPath,
+  workspaceParentPath,
+  workspacePathIsWithin,
   workspaceRootKey,
   type WorkspaceChildren,
   type WorkspaceData,
@@ -104,18 +111,28 @@ import {
 } from './workspace-tree'
 import {
   ActivateRecentDocument,
+  BeginWebDAVMutation,
   CancelUpdateDownload,
   CancelQuitRequest,
+  CancelWebDAVMutation,
   CheckForUpdates,
   ClearRecentItems,
+  CloseWorkspaceDocument,
   CloseWebDAVDocument,
   CloseWorkspace,
   CloseWebDAVWorkspace,
   ConnectSavedWebDAV,
   ConnectWebDAV,
   ConfirmQuit,
+  CommitWebDAVDelete,
+  CommitWebDAVRename,
+  CreateWebDAVDirectory,
+  CreateWebDAVMarkdownFile,
+  CreateWorkspaceDirectory,
+  CreateWorkspaceMarkdownFile,
   DownloadUpdate,
   DeleteSavedWebDAVConnection,
+  DeleteWorkspaceEntry,
   FetchPublicImage,
   GetAppInfo,
   GetLanguageSettings,
@@ -136,8 +153,11 @@ import {
   ImportWebDAVImageData,
   ListWebDAVDirectory,
   ReadWorkspaceDirectory,
+  ReadWebDAVWorkspaceImage,
+  ReadWorkspaceImage,
   ResolveLocalImage,
   ResolveWebDAVImage,
+  RenameWorkspaceEntry,
   ValidateImageData,
   LaunchUpdateInstaller,
   ListSavedWebDAVConnections,
@@ -145,6 +165,7 @@ import {
   SaveExportFile,
   SaveFile,
   SaveFileAs,
+  SaveWorkspaceMarkdownFile,
   SaveWebDAVFile,
   SaveWebDAVConnection,
   SelectImageFile,
@@ -171,6 +192,8 @@ type WebDAVConnectionFormMode = 'connect' | 'new' | 'edit'
 type WebDAVDialogView = 'saved' | 'temporary' | 'new' | 'edit'
 type WebDAVConnectionOperation = 'idle' | 'connecting-saved' | 'saving' | 'deleting'
 type AboutView = 'overview' | 'third-party'
+type WorkspaceDialogView = 'create-markdown' | 'create-directory' | 'rename' | 'delete' | 'image'
+type WorkspaceMutationOperation = 'rename' | 'delete'
 
 interface DocumentData {
   path: string
@@ -183,6 +206,7 @@ interface DocumentData {
   displayLocation?: string
   workspacePath?: string
   workspaceId?: string
+  localDocumentId?: string
   remoteDocumentId?: string
   etag?: string
 }
@@ -192,6 +216,19 @@ interface WebDAVSaveResultData {
   name: string
   etag: string
   conflict: boolean
+}
+
+interface WebDAVMutationData {
+  mutationId: string
+  entry: WorkspaceEntryData
+  expiresAt: string
+}
+
+interface ActiveWorkspaceMutation {
+  workspaceId: string
+  mutationId: string
+  operation: WorkspaceMutationOperation
+  expiresAt: string
 }
 
 interface RecentOpenEventData {
@@ -270,6 +307,7 @@ const documentLocation = ref('')
 const documentStorageKind = ref<'local' | 'webdav' | 'builtin'>('builtin')
 const documentWorkspaceId = ref('')
 const currentWorkspacePath = ref('')
+const localDocumentId = ref('')
 const remoteDocumentId = ref('')
 const remoteWorkspaceId = ref('')
 const remoteDocumentETag = ref('')
@@ -287,7 +325,7 @@ const previewPane = ref<HTMLElement | null>(null)
 const appDialog = ref<HTMLElement | null>(null)
 const syncScroll = ref(true)
 const builtInDocument = ref<BuiltInDocumentKind | null>(null)
-const activeDialog = ref<'settings' | 'shortcuts' | 'about' | 'webdav' | 'image' | null>(null)
+const activeDialog = ref<'settings' | 'shortcuts' | 'about' | 'webdav' | 'image' | 'workspace' | null>(null)
 const aboutView = ref<AboutView>('overview')
 const thirdPartyNotices = ref('')
 const thirdPartyNoticesState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
@@ -331,6 +369,24 @@ const imageAltText = ref('')
 const publicImageURL = ref('')
 const imageInsertBusy = ref(false)
 const imageInsertError = ref('')
+const workspaceDialogView = ref<WorkspaceDialogView>('create-markdown')
+const workspaceDialogEntry = ref<WorkspaceEntryData | null>(null)
+const workspaceDialogParentPath = ref('')
+const workspaceEntryName = ref('')
+const workspaceMutationBusy = ref(false)
+const workspaceMutationError = ref('')
+const workspaceMutationNeedsRestart = ref(false)
+const workspacePreviewImage = ref<ImageAssetData | null>(null)
+const workspacePreviewSource = ref('')
+const workspaceDeleteBufferPreserved = ref(false)
+const activeWorkspaceMutation = ref<ActiveWorkspaceMutation | null>(null)
+const workspaceMutationPreparing = ref(false)
+const workspaceMutationCancelling = ref(false)
+let workspacePreviewGeneration = 0
+let workspaceMutationBeginGeneration = 0
+let workspaceMutationCancelGeneration = 0
+let pendingWorkspaceMutationBegin: Promise<WorkspaceEntryData | null> | null = null
+let pendingWorkspaceMutationCancel: Promise<boolean> | null = null
 
 let renderTimer: number | undefined
 let quitting = false
@@ -357,6 +413,7 @@ const imageResolverGate = new ImageResolverGate()
 const imageDecodeGate = new ImageDecodeGate()
 const pendingImageAssets = new Map<string, PendingImageAssetRequest>()
 let activePreviewImages = new PreviewImageResourceSet()
+const workspacePreviewImages = new PreviewImageResourceSet()
 type MermaidRenderResult = Awaited<ReturnType<typeof mermaid.render>>
 const mermaidRenderCache = new BoundedCache<string, MermaidRenderResult>(maximumMermaidCacheEntries)
 const updateDownloadSessions = new UpdateDownloadSessionGate()
@@ -384,8 +441,55 @@ const workspaceLabels = computed(() => ({
   expandDirectory: t('workspace.expandDirectory'),
   collapseDirectory: t('workspace.collapseDirectory'),
   openFile: t('workspace.openFile'),
+  previewImage: t('workspace.previewImage'),
+  contextMenu: t('workspace.contextMenu'),
+  rootActions: t('workspace.rootActions'),
+  newMarkdown: t('workspace.newMarkdown'),
+  newDirectory: t('workspace.newDirectory'),
+  rename: t('workspace.rename'),
+  delete: t('workspace.delete'),
   providerWebDAV: t('workspace.providerWebDAV'),
 }))
+const workspaceDialogTitle = computed(() => {
+  if (workspaceDialogView.value === 'create-markdown') return t('workspace.newMarkdownTitle')
+  if (workspaceDialogView.value === 'create-directory') return t('workspace.newDirectoryTitle')
+  if (workspaceDialogView.value === 'rename') return t('workspace.renameTitle')
+  if (workspaceDialogView.value === 'delete') return t('workspace.deleteTitle')
+  return t('workspace.imagePreviewTitle')
+})
+const workspaceDeleteAffectsCurrentDocument = computed(() => Boolean(
+  workspace.value
+  && workspaceDialogEntry.value
+  && documentWorkspaceId.value === workspace.value.id
+  && workspacePathIsWithin(currentWorkspacePath.value, workspaceDialogEntry.value.path),
+))
+const workspaceDeleteDescription = computed(() => {
+  const entry = workspaceDialogEntry.value
+  if (!entry) return ''
+  const key = entry.kind === 'directory'
+    ? 'workspace.deleteDirectoryMessage'
+    : 'workspace.deleteFileMessage'
+  return t(key, { name: entry.name })
+})
+const workspaceDialogParentLabel = computed(() => {
+  const activeWorkspace = workspace.value
+  if (!activeWorkspace) return workspaceDialogParentPath.value || '/'
+  return workspaceDialogParentPath.value
+    ? `${activeWorkspace.name}/${workspaceDialogParentPath.value}`
+    : activeWorkspace.name
+})
+const workspaceMutationLockLabel = computed(() => {
+  const mutation = activeWorkspaceMutation.value
+  if (!mutation) return ''
+  const timestamp = Date.parse(mutation.expiresAt)
+  if (!Number.isFinite(timestamp)) return t('workspace.webDAVMutationLocked')
+  const expiresAt = new Intl.DateTimeFormat(locale.value, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(timestamp)
+  return t('workspace.webDAVMutationLockedUntil', { time: expiresAt })
+})
 
 const markdown = new MarkdownIt({
   html: true,
@@ -610,6 +714,8 @@ function readPreference<T extends string>(key: string, fallback: T): T {
 }
 
 function setDocument(document: DocumentData, status: TranslationKey = 'document.opened') {
+  const previousLocalWorkspaceId = documentStorageKind.value === 'local' ? documentWorkspaceId.value : ''
+  const previousLocalDocumentId = documentStorageKind.value === 'local' ? localDocumentId.value : ''
   const previousRemoteWorkspaceId = remoteWorkspaceId.value
   const previousRemoteDocumentId = remoteDocumentId.value
   webDAVConflictOpen.value = false
@@ -633,11 +739,14 @@ function setDocument(document: DocumentData, status: TranslationKey = 'document.
   documentLocation.value = document.displayLocation
     || (documentStorageKind.value === 'local' ? localDocumentPath.value : '')
   const inferredLocalWorkspacePath = (
-    documentStorageKind.value === 'local' && workspace.value?.provider === 'local'
+    documentStorageKind.value === 'local'
+      && Boolean(document.localDocumentId)
+      && workspace.value?.provider === 'local'
       ? localWorkspaceRelativePath(workspace.value.path, localDocumentPath.value)
       : ''
   )
   currentWorkspacePath.value = document.workspacePath || inferredLocalWorkspacePath
+  localDocumentId.value = documentStorageKind.value === 'local' ? document.localDocumentId || '' : ''
   remoteDocumentId.value = documentStorageKind.value === 'webdav' ? document.remoteDocumentId || '' : ''
   remoteWorkspaceId.value = documentStorageKind.value === 'webdav'
     ? document.workspaceId || (workspace.value?.provider === 'webdav' ? workspace.value.id : '')
@@ -647,6 +756,16 @@ function setDocument(document: DocumentData, status: TranslationKey = 'document.
     || remoteWorkspaceId.value
   remoteDocumentETag.value = documentStorageKind.value === 'webdav' ? document.etag || '' : ''
   renderState.value = t(status)
+  if (
+    previousLocalWorkspaceId
+    && previousLocalDocumentId
+    && (
+      previousLocalWorkspaceId !== documentWorkspaceId.value
+      || previousLocalDocumentId !== localDocumentId.value
+    )
+  ) {
+    void CloseWorkspaceDocument(previousLocalWorkspaceId, previousLocalDocumentId).catch(() => {})
+  }
   if (
     previousRemoteWorkspaceId
     && previousRemoteDocumentId
@@ -668,10 +787,40 @@ function setDocument(document: DocumentData, status: TranslationKey = 'document.
   })
 }
 
+function detachCurrentLocalWorkspaceDocument(workspaceId: string) {
+  if (
+    documentStorageKind.value !== 'local'
+    || documentWorkspaceId.value !== workspaceId
+    || !currentWorkspacePath.value
+  ) return false
+  const retainedSource = source.value
+  setDocument({
+    path: '',
+    name: t('document.untitledFilename'),
+    content: retainedSource,
+    welcome: false,
+  }, 'workspace.closedCurrentPreserved')
+  // Force Save As even when the retained editor happened to match the last
+  // saved bytes. The capability root is about to close, so its old absolute
+  // path must never become an implicit fallback save authority.
+  savedSource.value = `${retainedSource}\u0000`
+  return true
+}
+
 function setWorkspace(value: unknown) {
   const nextWorkspace = normalizeWorkspace(value)
   if (!nextWorkspace) return false
   const previousWorkspace = workspace.value
+  const workspaceChanged = Boolean(previousWorkspace && previousWorkspace.id !== nextWorkspace.id)
+  const detachedCurrentDocument = Boolean(
+    workspaceChanged
+    && previousWorkspace?.provider === 'local'
+    && detachCurrentLocalWorkspaceDocument(previousWorkspace.id),
+  )
+  const mutationCleanup = workspaceChanged
+    ? cancelActiveWorkspaceMutation()
+    : Promise.resolve(true)
+  if (workspaceChanged && activeDialog.value === 'workspace') activeDialog.value = null
   workspace.value = nextWorkspace
   if (nextWorkspace.provider === 'local' && documentStorageKind.value === 'local') {
     const relativeDocumentPath = localWorkspaceRelativePath(nextWorkspace.path, localDocumentPath.value)
@@ -685,14 +834,16 @@ function setWorkspace(value: unknown) {
   loadingWorkspaceDirectories.value = new Set()
   truncatedWorkspaceDirectories.value = new Set()
   workspaceRefreshQueued = false
-  renderState.value = t('workspace.opened', { name: nextWorkspace.name })
-  if (previousWorkspace && previousWorkspace.id !== nextWorkspace.id) {
+  renderState.value = detachedCurrentDocument
+    ? t('workspace.closedCurrentPreserved')
+    : t('workspace.opened', { name: nextWorkspace.name })
+  if (previousWorkspace && workspaceChanged) {
     if (previousWorkspace.provider === 'webdav') {
       if (remoteWorkspaceId.value !== previousWorkspace.id) {
-        void CloseWebDAVWorkspace(previousWorkspace.id).catch(() => {})
+        void mutationCleanup.finally(() => CloseWebDAVWorkspace(previousWorkspace.id).catch(() => {}))
       }
     } else {
-      void CloseWorkspace(previousWorkspace.id).catch(() => {})
+      void mutationCleanup.finally(() => CloseWorkspace(previousWorkspace.id).catch(() => {}))
     }
   }
   void nextTick(scheduleLayoutReconciliation)
@@ -701,6 +852,12 @@ function setWorkspace(value: unknown) {
 
 function closeWorkspace() {
   const activeWorkspace = workspace.value
+  const detachedCurrentDocument = Boolean(
+    activeWorkspace?.provider === 'local'
+    && detachCurrentLocalWorkspaceDocument(activeWorkspace.id),
+  )
+  const mutationCleanup = cancelActiveWorkspaceMutation()
+  if (activeDialog.value === 'workspace') activeDialog.value = null
   workspace.value = null
   workspaceChildren.value = {}
   expandedWorkspaceDirectories.value = new Set()
@@ -709,11 +866,12 @@ function closeWorkspace() {
   workspaceRefreshQueued = false
   if (activeWorkspace?.provider === 'webdav') {
     if (remoteWorkspaceId.value !== activeWorkspace.id) {
-      void CloseWebDAVWorkspace(activeWorkspace.id).catch(() => {})
+      void mutationCleanup.finally(() => CloseWebDAVWorkspace(activeWorkspace.id).catch(() => {}))
     }
   } else if (activeWorkspace?.id) {
-    void CloseWorkspace(activeWorkspace.id).catch(() => {})
+    void mutationCleanup.finally(() => CloseWorkspace(activeWorkspace.id).catch(() => {}))
   }
+  if (detachedCurrentDocument) renderState.value = t('workspace.closedCurrentPreserved')
   void nextTick(scheduleLayoutReconciliation)
 }
 
@@ -725,7 +883,12 @@ async function readActiveWorkspaceDirectory(activeWorkspace: WorkspaceData, rela
 }
 
 function workspaceOpenMustWait() {
-  return documentTransitionInProgress || Boolean(unsavedTransition.value) || workspaceRefreshing.value
+  return documentTransitionInProgress
+    || Boolean(unsavedTransition.value)
+    || workspaceRefreshing.value
+    || workspaceMutationPreparing.value
+    || workspaceMutationCancelling.value
+    || Boolean(activeWorkspaceMutation.value)
 }
 
 function deferWorkspaceOpen(request: PendingWorkspaceOpenRequest) {
@@ -873,10 +1036,31 @@ async function newDocument() {
   })
 }
 
+async function bindLocalDocumentToActiveWorkspace(document: DocumentData) {
+  const activeWorkspace = workspace.value
+  if (
+    !document?.name
+    || document.storageKind === 'webdav'
+    || document.builtIn
+    || !document.path
+    || activeWorkspace?.provider !== 'local'
+  ) return document
+  const relativePath = localWorkspaceRelativePath(activeWorkspace.path, document.path)
+  if (!relativePath) return document
+  const bound = await OpenWorkspaceFile(activeWorkspace.id, relativePath) as DocumentData
+  if (
+    !bound?.localDocumentId
+    || bound.workspaceId !== activeWorkspace.id
+    || workspaceDirectoryKey(bound.workspacePath || '') !== workspaceDirectoryKey(relativePath)
+  ) throw new Error(t('workspace.invalidResponse'))
+  return bound
+}
+
 async function openDocument() {
   await performDocumentTransition('open', async () => {
     try {
-      const document = await OpenFile() as DocumentData
+      const selected = await OpenFile() as DocumentData
+      const document = await bindLocalDocumentToActiveWorkspace(selected)
       if (document?.name) setDocument(document)
     } catch (error) {
       showError(error)
@@ -919,6 +1103,57 @@ function clearImageInsertForm() {
   imageInsertError.value = ''
 }
 
+function cancelActiveWorkspaceMutation({ reportFailure = true } = {}) {
+  workspaceMutationBeginGeneration += 1
+  if (pendingWorkspaceMutationCancel) return pendingWorkspaceMutationCancel
+  const task = (async () => {
+    const pendingBegin = pendingWorkspaceMutationBegin
+    let mutation = activeWorkspaceMutation.value
+    activeWorkspaceMutation.value = null
+    if (pendingBegin) await pendingBegin.catch(() => null)
+    if (!mutation && activeWorkspaceMutation.value) {
+      mutation = activeWorkspaceMutation.value
+      activeWorkspaceMutation.value = null
+    }
+    if (!mutation) {
+      void drainPendingWorkspaceOpen()
+      return true
+    }
+
+    const cancellation = ++workspaceMutationCancelGeneration
+    workspaceMutationCancelling.value = true
+    try {
+      await CancelWebDAVMutation(mutation.workspaceId, mutation.mutationId)
+      return true
+    } catch {
+      if (reportFailure && !quitting) renderState.value = t('workspace.webDAVMutationCancelFailed')
+      return false
+    } finally {
+      if (cancellation === workspaceMutationCancelGeneration) workspaceMutationCancelling.value = false
+      void drainPendingWorkspaceOpen()
+    }
+  })()
+  pendingWorkspaceMutationCancel = task
+  void task.finally(() => {
+    if (pendingWorkspaceMutationCancel === task) pendingWorkspaceMutationCancel = null
+  })
+  return task
+}
+
+function clearWorkspaceDialog() {
+  workspacePreviewGeneration += 1
+  workspacePreviewImages.release()
+  workspaceDialogEntry.value = null
+  workspaceDialogParentPath.value = ''
+  workspaceEntryName.value = ''
+  workspaceMutationError.value = ''
+  workspaceMutationNeedsRestart.value = false
+  workspaceMutationBusy.value = false
+  workspacePreviewImage.value = null
+  workspacePreviewSource.value = ''
+  workspaceDeleteBufferPreserved.value = false
+}
+
 function dismissActiveDialog() {
   if (activeDialog.value === 'webdav' && webDAVDialogBusy.value) return
   if (activeDialog.value === 'webdav' && webDAVDeleteCandidate.value) {
@@ -926,6 +1161,11 @@ function dismissActiveDialog() {
     return
   }
   if (activeDialog.value === 'image' && imageInsertBusy.value) return
+  if (
+    activeDialog.value === 'workspace'
+    && workspaceMutationBusy.value
+    && workspaceDialogView.value !== 'image'
+  ) return
   activeDialog.value = null
 }
 
@@ -1479,6 +1719,443 @@ async function openWorkspaceDocument(entry: WorkspaceEntryData) {
   })
 }
 
+function showWorkspaceCreateMarkdown(parentPath: string) {
+  if (busy.value || workspaceRefreshing.value || workspaceMutationCancelling.value) return
+  workspaceDialogView.value = 'create-markdown'
+  workspaceDialogEntry.value = null
+  workspaceDialogParentPath.value = workspaceDirectoryKey(parentPath)
+  workspaceEntryName.value = t('workspace.defaultMarkdownName')
+  workspaceMutationError.value = ''
+  activeDialog.value = 'workspace'
+}
+
+function showWorkspaceCreateDirectory(parentPath: string) {
+  if (busy.value || workspaceRefreshing.value || workspaceMutationCancelling.value) return
+  workspaceDialogView.value = 'create-directory'
+  workspaceDialogEntry.value = null
+  workspaceDialogParentPath.value = workspaceDirectoryKey(parentPath)
+  workspaceEntryName.value = t('workspace.defaultDirectoryName')
+  workspaceMutationError.value = ''
+  activeDialog.value = 'workspace'
+}
+
+function populateWorkspaceMutationDialog(view: 'rename' | 'delete', entry: WorkspaceEntryData) {
+  workspaceDialogView.value = view
+  workspaceDialogEntry.value = entry
+  workspaceDialogParentPath.value = workspaceParentPath(entry.path)
+  workspaceEntryName.value = entry.name
+  workspaceMutationError.value = ''
+  workspaceMutationNeedsRestart.value = false
+  workspaceDeleteBufferPreserved.value = false
+  activeDialog.value = 'workspace'
+}
+
+function beginWebDAVWorkspaceMutation(
+  activeWorkspace: WorkspaceData,
+  entry: WorkspaceEntryData,
+  operation: WorkspaceMutationOperation,
+) {
+  const generation = ++workspaceMutationBeginGeneration
+  workspaceMutationPreparing.value = true
+  busy.value = true
+  renderState.value = t('workspace.webDAVMutationPreparing')
+
+  const task = (async (): Promise<WorkspaceEntryData | null> => {
+    let mutationId = ''
+    let installed = false
+    try {
+      const result = await BeginWebDAVMutation(
+        activeWorkspace.id,
+        entry.path,
+        entry.kind,
+        entry.revision,
+        operation,
+      ) as WebDAVMutationData
+      mutationId = typeof result?.mutationId === 'string' ? result.mutationId.trim() : ''
+      const lockedEntry = normalizeWorkspaceEntries([result?.entry])[0]
+      const expiresAt = typeof result?.expiresAt === 'string' ? result.expiresAt.trim() : ''
+      if (
+        !mutationId
+        || !expiresAt
+        || !lockedEntry
+        || workspaceDirectoryKey(lockedEntry.path) !== workspaceDirectoryKey(entry.path)
+        || lockedEntry.kind !== entry.kind
+        || (lockedEntry.kind !== 'directory' && !lockedEntry.revision)
+      ) throw new Error(t('workspace.invalidResponse'))
+
+      if (
+        generation !== workspaceMutationBeginGeneration
+        || workspace.value?.id !== activeWorkspace.id
+      ) {
+        return null
+      }
+      activeWorkspaceMutation.value = {
+        workspaceId: activeWorkspace.id,
+        mutationId,
+        operation,
+        expiresAt,
+      }
+      installed = true
+      return lockedEntry
+    } catch (error) {
+      if (generation === workspaceMutationBeginGeneration) {
+        renderState.value = t('workspace.operationFailed', {
+          message: localizedWebDAVMutationError(error),
+        })
+      }
+      return null
+    } finally {
+      if (mutationId && !installed) {
+        await CancelWebDAVMutation(activeWorkspace.id, mutationId).catch(() => undefined)
+      }
+      workspaceMutationPreparing.value = false
+      busy.value = false
+    }
+  })()
+  pendingWorkspaceMutationBegin = task
+  void task.finally(() => {
+    if (pendingWorkspaceMutationBegin === task) pendingWorkspaceMutationBegin = null
+  })
+  return task
+}
+
+async function showWorkspaceRename(entry: WorkspaceEntryData) {
+  if (busy.value || workspaceRefreshing.value || workspaceMutationCancelling.value) return
+  const activeWorkspace = workspace.value
+  if (!activeWorkspace) return
+  let confirmedEntry = entry
+  if (activeWorkspace.provider === 'webdav') {
+    const lockedEntry = await beginWebDAVWorkspaceMutation(activeWorkspace, entry, 'rename')
+    if (!lockedEntry) return
+    confirmedEntry = lockedEntry
+  } else if (!entry.revision) {
+    renderState.value = t('workspace.revisionExpired')
+    return
+  }
+  populateWorkspaceMutationDialog('rename', confirmedEntry)
+}
+
+async function showWorkspaceDelete(entry: WorkspaceEntryData) {
+  if (busy.value || workspaceRefreshing.value || workspaceMutationCancelling.value) return
+  const activeWorkspace = workspace.value
+  if (!activeWorkspace) return
+  let confirmedEntry = entry
+  if (activeWorkspace.provider === 'webdav') {
+    const lockedEntry = await beginWebDAVWorkspaceMutation(activeWorkspace, entry, 'delete')
+    if (!lockedEntry) return
+    confirmedEntry = lockedEntry
+  } else if (!entry.revision) {
+    renderState.value = t('workspace.revisionExpired')
+    return
+  }
+  populateWorkspaceMutationDialog('delete', confirmedEntry)
+}
+
+async function showWorkspaceImage(entry: WorkspaceEntryData) {
+  const activeWorkspace = workspace.value
+  if (
+    !activeWorkspace
+    || entry.kind !== 'image'
+    || busy.value
+    || workspaceRefreshing.value
+    || workspaceMutationCancelling.value
+  ) return
+  const generation = ++workspacePreviewGeneration
+  workspaceDialogView.value = 'image'
+  workspaceDialogEntry.value = entry
+  workspaceDialogParentPath.value = workspaceParentPath(entry.path)
+  workspaceEntryName.value = entry.name
+  workspacePreviewImage.value = null
+  workspacePreviewSource.value = ''
+  workspaceMutationError.value = ''
+  workspaceMutationBusy.value = true
+  activeDialog.value = 'workspace'
+  try {
+    const image = activeWorkspace.provider === 'webdav'
+      ? await ReadWebDAVWorkspaceImage(activeWorkspace.id, entry.path) as ImageAssetData
+      : await ReadWorkspaceImage(activeWorkspace.id, entry.path) as ImageAssetData
+    if (
+      generation !== workspacePreviewGeneration
+      || activeDialog.value !== 'workspace'
+      || workspaceDialogView.value !== 'image'
+      || workspace.value?.id !== activeWorkspace.id
+    ) return
+    workspacePreviewImages.release()
+    const prepared = workspacePreviewImages.add(
+      'workspace-preview',
+      '',
+      activeWorkspace.provider === 'webdav' ? 'webdav-relative' : 'local-relative',
+      entry.path,
+      image,
+    )
+    workspacePreviewImage.value = image
+    workspacePreviewSource.value = prepared.previewSource
+  } catch (error) {
+    if (generation === workspacePreviewGeneration && activeDialog.value === 'workspace') {
+      workspaceMutationError.value = localizedWorkspaceErrorMessage(error)
+    }
+  } finally {
+    if (generation === workspacePreviewGeneration) workspaceMutationBusy.value = false
+  }
+}
+
+function normalizeWorkspaceRequestedName(view: WorkspaceDialogView, entry: WorkspaceEntryData | null) {
+  let name = workspaceEntryName.value.trim()
+  if (!name || name === '.' || name === '..' || /[\\/\u0000-\u001f\u007f]/u.test(name)) {
+    throw new Error(t('workspace.invalidName'))
+  }
+  const markdownName = view === 'create-markdown' || (view === 'rename' && entry?.kind === 'markdown')
+  if (markdownName) {
+    if (!name.includes('.')) name += '.md'
+    if (!/\.(?:md|markdown)$/iu.test(name)) throw new Error(t('workspace.markdownExtensionRequired'))
+  }
+  return name
+}
+
+async function createWorkspaceMarkdown(activeWorkspace: WorkspaceData, relativePath: string) {
+  return activeWorkspace.provider === 'webdav'
+    ? await CreateWebDAVMarkdownFile(activeWorkspace.id, relativePath) as DocumentData
+    : await CreateWorkspaceMarkdownFile(activeWorkspace.id, relativePath) as DocumentData
+}
+
+async function createWorkspaceDirectory(activeWorkspace: WorkspaceData, relativePath: string) {
+  if (activeWorkspace.provider === 'webdav') {
+    await CreateWebDAVDirectory(activeWorkspace.id, relativePath)
+  } else {
+    await CreateWorkspaceDirectory(activeWorkspace.id, relativePath)
+  }
+}
+
+async function renameWorkspaceEntry(
+  activeWorkspace: WorkspaceData,
+  entry: WorkspaceEntryData,
+  destinationPath: string,
+) {
+  if (activeWorkspace.provider === 'webdav') {
+    const mutation = activeWorkspaceMutation.value
+    if (
+      !mutation
+      || mutation.workspaceId !== activeWorkspace.id
+      || mutation.operation !== 'rename'
+    ) throw new Error(t('workspace.webDAVMutationExpired'))
+    // Commit consumes the opaque capability even when the server rejects the
+    // MOVE, so a failed attempt must be prepared again instead of reusing it.
+    activeWorkspaceMutation.value = null
+    const result = await CommitWebDAVRename(
+      activeWorkspace.id,
+      mutation.mutationId,
+      destinationPath,
+    )
+    const renamedEntry = normalizeWorkspaceEntries([result])[0]
+    if (
+      !renamedEntry
+      || renamedEntry.kind !== entry.kind
+      || workspaceDirectoryKey(renamedEntry.path) !== workspaceDirectoryKey(destinationPath)
+    ) throw new Error(t('workspace.invalidResponse'))
+    return renamedEntry
+  } else {
+    const result = await RenameWorkspaceEntry(
+      activeWorkspace.id,
+      entry.path,
+      destinationPath,
+      entry.kind,
+      entry.revision,
+    )
+    const renamedEntry = normalizeWorkspaceEntries([result])[0]
+    if (
+      !renamedEntry
+      || !renamedEntry.revision
+      || renamedEntry.kind !== entry.kind
+      || workspaceDirectoryKey(renamedEntry.path) !== workspaceDirectoryKey(destinationPath)
+    ) throw new Error(t('workspace.invalidResponse'))
+    return renamedEntry
+  }
+}
+
+async function deleteWorkspaceEntry(activeWorkspace: WorkspaceData, entry: WorkspaceEntryData) {
+  const recursive = entry.kind === 'directory'
+  if (activeWorkspace.provider === 'webdav') {
+    const mutation = activeWorkspaceMutation.value
+    if (
+      !mutation
+      || mutation.workspaceId !== activeWorkspace.id
+      || mutation.operation !== 'delete'
+    ) throw new Error(t('workspace.webDAVMutationExpired'))
+    // The backend removes the prepared mutation before attempting DELETE and
+    // always releases its lock afterward. Never expose a consumed token again.
+    activeWorkspaceMutation.value = null
+    await CommitWebDAVDelete(activeWorkspace.id, mutation.mutationId, recursive)
+  } else {
+    await DeleteWorkspaceEntry(activeWorkspace.id, entry.path, recursive, entry.revision)
+  }
+}
+
+function workspaceDocumentDisplayLocation(activeWorkspace: WorkspaceData, relativePath: string) {
+  if (activeWorkspace.provider === 'local') {
+    return localWorkspaceAbsolutePath(activeWorkspace.path, relativePath)
+  }
+  try {
+    const base = activeWorkspace.path.endsWith('/') ? activeWorkspace.path : `${activeWorkspace.path}/`
+    const encodedPath = workspaceDirectoryKey(relativePath)
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/')
+    return new URL(encodedPath, base).toString()
+  } catch {
+    return `${activeWorkspace.path.replace(/\/+$/u, '')}/${workspaceDirectoryKey(relativePath)}`
+  }
+}
+
+function updateCurrentDocumentAfterWorkspaceRename(
+  activeWorkspace: WorkspaceData,
+  sourcePath: string,
+  destinationPath: string,
+) {
+  if (
+    documentWorkspaceId.value !== activeWorkspace.id
+    || !workspacePathIsWithin(currentWorkspacePath.value, sourcePath)
+  ) return
+  const nextPath = rebaseWorkspacePath(currentWorkspacePath.value, sourcePath, destinationPath)
+  currentWorkspacePath.value = nextPath
+  fileName.value = nextPath.split('/').pop() || fileName.value
+  documentLocation.value = workspaceDocumentDisplayLocation(activeWorkspace, nextPath)
+  if (activeWorkspace.provider === 'local') {
+    localDocumentPath.value = localWorkspaceAbsolutePath(activeWorkspace.path, nextPath)
+  }
+}
+
+function preserveCurrentDocumentAfterWorkspaceDelete(activeWorkspace: WorkspaceData, deletedPath: string) {
+  if (
+    documentWorkspaceId.value !== activeWorkspace.id
+    || !workspacePathIsWithin(currentWorkspacePath.value, deletedPath)
+  ) return
+  const retainedSource = source.value
+  setDocument({
+    path: '',
+    name: t('document.untitledFilename'),
+    content: retainedSource,
+    welcome: false,
+  }, 'workspace.deletedCurrentPreserved')
+  // The deleted backing file can never be treated as the saved version. Keep
+  // even an empty retained buffer dirty so quit/open still invokes the guard.
+  savedSource.value = `${retainedSource}\u0000`
+}
+
+async function submitWorkspaceNameDialog() {
+  const activeWorkspace = workspace.value
+  const view = workspaceDialogView.value
+  const entry = workspaceDialogEntry.value
+  if (
+    !activeWorkspace
+    || workspaceMutationBusy.value
+    || workspaceMutationNeedsRestart.value
+    || !['create-markdown', 'create-directory', 'rename'].includes(view)
+  ) return
+  try {
+    const name = normalizeWorkspaceRequestedName(view, entry)
+    const destinationPath = workspaceJoinPath(workspaceDialogParentPath.value, name)
+    workspaceMutationError.value = ''
+
+    if (view === 'create-markdown') {
+      activeDialog.value = null
+      await performDocumentTransition('open', async () => {
+        workspaceMutationBusy.value = true
+        busy.value = true
+        try {
+          const document = await createWorkspaceMarkdown(activeWorkspace, destinationPath)
+          if (!document?.name) throw new Error(t('workspace.invalidResponse'))
+          setDocument(document, 'workspace.markdownCreated')
+          await refreshWorkspace({ silent: true })
+        } catch (error) {
+          await refreshWorkspace({ silent: true })
+          renderState.value = t('workspace.operationFailed', {
+            message: localizedWorkspaceErrorMessage(error),
+          })
+        } finally {
+          busy.value = false
+          workspaceMutationBusy.value = false
+        }
+      })
+      return
+    }
+
+    workspaceMutationBusy.value = true
+    busy.value = true
+    if (view === 'create-directory') {
+      await createWorkspaceDirectory(activeWorkspace, destinationPath)
+      renderState.value = t('workspace.directoryCreated', { name })
+    } else if (entry) {
+      if (destinationPath === workspaceDirectoryKey(entry.path)) {
+        activeDialog.value = null
+        return
+      }
+      const renamedEntry = await renameWorkspaceEntry(activeWorkspace, entry, destinationPath)
+      updateCurrentDocumentAfterWorkspaceRename(activeWorkspace, entry.path, renamedEntry.path)
+      renderState.value = t('workspace.renamed', { name })
+    }
+    activeDialog.value = null
+    await refreshWorkspace({ silent: true })
+  } catch (error) {
+    if (
+      activeWorkspace.provider === 'webdav'
+      && view === 'rename'
+      && !activeWorkspaceMutation.value
+    ) {
+      workspaceMutationNeedsRestart.value = true
+      workspaceMutationError.value = localizedWebDAVMutationError(error)
+      await refreshWorkspace({ silent: true })
+    } else {
+      workspaceMutationError.value = localizedWorkspaceErrorMessage(error)
+    }
+  } finally {
+    busy.value = false
+    workspaceMutationBusy.value = false
+  }
+}
+
+async function confirmDeleteWorkspaceEntry() {
+  const activeWorkspace = workspace.value
+  const entry = workspaceDialogEntry.value
+  if (
+    !activeWorkspace
+    || !entry
+    || workspaceMutationBusy.value
+    || workspaceMutationNeedsRestart.value
+    || workspaceDialogView.value !== 'delete'
+  ) return
+  const deletionCouldAffectCurrentDocument = documentWorkspaceId.value === activeWorkspace.id
+    && workspacePathIsWithin(currentWorkspacePath.value, entry.path)
+  workspaceMutationBusy.value = true
+  busy.value = true
+  workspaceMutationError.value = ''
+  if (deletionCouldAffectCurrentDocument) {
+    workspaceDeleteBufferPreserved.value = true
+    preserveCurrentDocumentAfterWorkspaceDelete(activeWorkspace, entry.path)
+  }
+  try {
+    await deleteWorkspaceEntry(activeWorkspace, entry)
+    renderState.value = deletionCouldAffectCurrentDocument
+      ? t('workspace.deletedCurrentPreserved')
+      : t('workspace.deleted', { name: entry.name })
+    activeDialog.value = null
+    await refreshWorkspace({ silent: true })
+  } catch (error) {
+    // Recursive deletion can fail after removing only part of a tree. Once the
+    // target covered the open document, never assume its backing file survived:
+    // preserve the buffer as an explicitly dirty untitled document.
+    if (activeWorkspace.provider === 'webdav') {
+      workspaceMutationNeedsRestart.value = true
+      workspaceMutationError.value = localizedWebDAVMutationError(error)
+    } else {
+      workspaceMutationError.value = localizedWorkspaceErrorMessage(error)
+    }
+    await refreshWorkspace({ silent: true })
+  } finally {
+    busy.value = false
+    workspaceMutationBusy.value = false
+  }
+}
+
 async function openRecentItem(value: unknown) {
   if (!value || typeof value !== 'object') return
   const candidate = value as Partial<RecentOpenEventData>
@@ -1499,7 +2176,8 @@ async function openRecentItem(value: unknown) {
   await performDocumentTransition('open', async () => {
     try {
       busy.value = true
-      const document = await OpenRecentFile(recentID) as DocumentData
+      const selected = await OpenRecentFile(recentID) as DocumentData
+      const document = await bindLocalDocumentToActiveWorkspace(selected)
       if (document?.name) setDocument(document)
     } catch (error) {
       showError(error)
@@ -1544,29 +2222,75 @@ async function saveDocument(): Promise<boolean> {
       return true
     }
 
+    const localWorkspaceCandidate = workspace.value
+    const activeLocalWorkspace = isWorkspaceBackedLocalDocument(
+      localWorkspaceCandidate,
+      documentStorageKind.value,
+      documentWorkspaceId.value,
+      currentWorkspacePath.value,
+    )
+      ? localWorkspaceCandidate
+      : null
+    if (activeLocalWorkspace) {
+      if (!localDocumentId.value) {
+        renderState.value = t('workspace.revisionExpired')
+        return false
+      }
+      try {
+        const result = await SaveWorkspaceMarkdownFile(
+          activeLocalWorkspace.id,
+          localDocumentId.value,
+          source.value,
+        )
+        if (!result?.path) throw new Error(t('workspace.invalidResponse'))
+        localDocumentPath.value = result.path
+        documentLocation.value = result.path
+        fileName.value = result.name || fileName.value
+        savedSource.value = source.value
+        builtInDocument.value = null
+        renderState.value = t('document.savedLocally')
+        void refreshWorkspace({ silent: true })
+        return true
+      } catch (error) {
+        renderState.value = t('workspace.operationFailed', {
+          message: localizedWorkspaceErrorMessage(error),
+        })
+        return false
+      }
+    }
+
     const previousLocalPath = localDocumentPath.value
-    const previousDocumentWorkspaceId = documentWorkspaceId.value
-    const previousWorkspacePath = currentWorkspacePath.value
-    const result = await SaveFile(previousLocalPath, source.value)
+    const expectedSource = source.value
+    const result = await SaveFile(previousLocalPath, expectedSource)
     if (result?.path) {
-      localDocumentPath.value = result.path
-      documentLocation.value = result.path
-      const activeWorkspacePath = workspace.value?.provider === 'local'
-        ? localWorkspaceRelativePath(workspace.value.path, result.path)
+      const activeLocalWorkspace = workspace.value?.provider === 'local' ? workspace.value : null
+      const activeWorkspacePath = activeLocalWorkspace
+        ? localWorkspaceRelativePath(activeLocalWorkspace.path, result.path)
         : ''
-      if (activeWorkspacePath && workspace.value?.provider === 'local') {
-        documentWorkspaceId.value = workspace.value.id
+      if (activeLocalWorkspace && activeWorkspacePath) {
+        const adopted = await OpenWorkspaceFile(activeLocalWorkspace.id, activeWorkspacePath) as DocumentData
+        if (
+          !adopted?.localDocumentId
+          || adopted.workspaceId !== activeLocalWorkspace.id
+          || workspaceDirectoryKey(adopted.workspacePath || '') !== workspaceDirectoryKey(activeWorkspacePath)
+          || adopted.content !== expectedSource
+        ) throw new Error(t('workspace.invalidResponse'))
+        localDocumentPath.value = adopted.path
+        documentLocation.value = adopted.displayLocation || adopted.path
+        documentWorkspaceId.value = activeLocalWorkspace.id
         currentWorkspacePath.value = activeWorkspacePath
-      } else if (previousWorkspacePath && sameWorkspaceFile(previousLocalPath, result.path)) {
-        documentWorkspaceId.value = previousDocumentWorkspaceId
-        currentWorkspacePath.value = previousWorkspacePath
+        localDocumentId.value = adopted.localDocumentId
+        fileName.value = adopted.name || result.name
       } else {
+        localDocumentPath.value = result.path
+        documentLocation.value = result.path
         documentWorkspaceId.value = ''
         currentWorkspacePath.value = ''
+        localDocumentId.value = ''
+        fileName.value = result.name
       }
       documentStorageKind.value = 'local'
-      fileName.value = result.name
-      savedSource.value = source.value
+      savedSource.value = expectedSource
       builtInDocument.value = null
       renderState.value = t('document.savedLocally')
       if (workspace.value) void refreshWorkspace({ silent: true })
@@ -1625,20 +2349,35 @@ async function reloadConflictingWebDAVDocument() {
 async function saveDocumentAs() {
   try {
     busy.value = true
+    const expectedSource = source.value
+    const previousLocalWorkspaceId = documentStorageKind.value === 'local' ? documentWorkspaceId.value : ''
+    const previousLocalDocumentId = documentStorageKind.value === 'local' ? localDocumentId.value : ''
     const previousRemoteWorkspaceId = remoteWorkspaceId.value
     const previousRemoteDocumentId = remoteDocumentId.value
     const saveAsHint = documentStorageKind.value === 'webdav' ? fileName.value : localDocumentPath.value
-    const result = await SaveFileAs(saveAsHint, source.value)
+    const result = await SaveFileAs(saveAsHint, expectedSource)
     if (result?.path) {
+      const activeLocalWorkspace = workspace.value?.provider === 'local' ? workspace.value : null
+      const activeWorkspacePath = activeLocalWorkspace
+        ? localWorkspaceRelativePath(activeLocalWorkspace.path, result.path)
+        : ''
+      if (activeLocalWorkspace && activeWorkspacePath) {
+        const adopted = await OpenWorkspaceFile(activeLocalWorkspace.id, activeWorkspacePath) as DocumentData
+        if (
+          !adopted?.localDocumentId
+          || adopted.workspaceId !== activeLocalWorkspace.id
+          || workspaceDirectoryKey(adopted.workspacePath || '') !== workspaceDirectoryKey(activeWorkspacePath)
+          || adopted.content !== expectedSource
+        ) throw new Error(t('workspace.invalidResponse'))
+        setDocument(adopted, 'document.savedAsLocally')
+        void refreshWorkspace({ silent: true })
+        return
+      }
       localDocumentPath.value = result.path
       documentLocation.value = result.path
-      const activeWorkspacePath = workspace.value?.provider === 'local'
-        ? localWorkspaceRelativePath(workspace.value.path, result.path)
-        : ''
-      documentWorkspaceId.value = activeWorkspacePath && workspace.value?.provider === 'local'
-        ? workspace.value.id
-        : ''
-      currentWorkspacePath.value = activeWorkspacePath
+      documentWorkspaceId.value = ''
+      currentWorkspacePath.value = ''
+      localDocumentId.value = ''
       documentStorageKind.value = 'local'
       remoteDocumentId.value = ''
       remoteWorkspaceId.value = ''
@@ -1647,6 +2386,9 @@ async function saveDocumentAs() {
       savedSource.value = source.value
       builtInDocument.value = null
       renderState.value = t('document.savedAsLocally')
+      if (previousLocalWorkspaceId && previousLocalDocumentId) {
+        void CloseWorkspaceDocument(previousLocalWorkspaceId, previousLocalDocumentId).catch(() => {})
+      }
       if (previousRemoteWorkspaceId && previousRemoteDocumentId) {
         void CloseWebDAVDocument(previousRemoteWorkspaceId, previousRemoteDocumentId).catch(() => {})
       }
@@ -1982,6 +2724,8 @@ function requestApplicationQuit() {
 
 async function handleCloseRequest() {
   try {
+    await cancelActiveWorkspaceMutation({ reportFailure: false })
+    if (activeDialog.value === 'workspace') activeDialog.value = null
     const completed = await performDocumentTransition('quit', async () => {
       if (pendingUpdateInstall) {
         updateState.value = 'installing'
@@ -2309,7 +3053,8 @@ async function drainSystemDocuments() {
       const document = pendingSystemDocuments.shift()
       if (!document) continue
       await performDocumentTransition('open', async () => {
-        setDocument(document)
+        const boundDocument = await bindLocalDocumentToActiveWorkspace(document)
+        setDocument(boundDocument)
         if (!document.activationId) return
         try {
           await ActivateRecentDocument(document.activationId)
@@ -3072,6 +3817,33 @@ function localizedErrorMessage(error: unknown) {
   return t(translations[match[1]] || 'webdav.operationFailed')
 }
 
+function localizedWorkspaceErrorMessage(error: unknown) {
+  const message = errorMessage(error)
+  if (/^\[INKMARK_WEBDAV:/u.test(message)) return localizedErrorMessage(error)
+  if (/already exists|file exists|已存在|冲突/iu.test(message)) return t('workspace.entryExists')
+  if (/not found|does not exist|不存在|找不到/iu.test(message)) return t('workspace.entryNotFound')
+  if (/permission|access denied|权限|拒绝访问/iu.test(message)) return t('workspace.permissionDenied')
+  if (/too large|exceeds|超过|过大/iu.test(message)) return t('workspace.resourceTooLarge')
+  if (/invalid|not allowed|无效|不允许|只能|路径|名称/iu.test(message)) return t('workspace.invalidOperation')
+  return t('workspace.operationUnavailable')
+}
+
+function localizedWebDAVMutationError(error: unknown) {
+  const message = errorMessage(error)
+  if (
+    message === t('workspace.webDAVMutationExpired')
+    || message === t('workspace.webDAVMutationUnsupported')
+  ) return message
+  const match = message.match(/^\[INKMARK_WEBDAV:([a-z_]+)\]/u)
+  if (!match) return localizedWorkspaceErrorMessage(error)
+  if (['conflict', 'locked', 'canceled', 'invalid_input'].includes(match[1])) {
+    return t('workspace.webDAVMutationExpired')
+  }
+  if (match[1] === 'unsupported') return t('workspace.webDAVMutationUnsupported')
+  if (match[1] === 'not_found') return t('workspace.entryNotFound')
+  return localizedErrorMessage(error)
+}
+
 function showError(error: unknown) {
   renderState.value = localizedErrorMessage(error)
 }
@@ -3101,6 +3873,10 @@ watch(activeDialog, (nextDialog, previousDialog) => {
     lastFocusedElement = null
   }
   if (previousDialog === 'image' && nextDialog !== 'image') clearImageInsertForm()
+  if (previousDialog === 'workspace' && nextDialog !== 'workspace') {
+    void cancelActiveWorkspaceMutation()
+    clearWorkspaceDialog()
+  }
   if (previousDialog === 'about' && nextDialog !== 'about') aboutView.value = 'overview'
   if (!nextDialog && previousDialog) {
     const returnFocus = dialogReturnFocus
@@ -3168,6 +3944,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  void cancelActiveWorkspaceMutation({ reportFailure: false })
   clearWebDAVConnectionManager()
   clearImageInsertForm()
   window.clearTimeout(renderTimer)
@@ -3176,6 +3953,7 @@ onBeforeUnmount(() => {
   mermaidRenderCache.clear()
   pendingImageAssets.clear()
   activePreviewImages.release()
+  workspacePreviewImages.release()
   if (layoutReconcileFrame !== null) window.cancelAnimationFrame(layoutReconcileFrame)
   layoutReconcileFrame = null
   layoutResizeObserver?.disconnect()
@@ -3288,13 +4066,19 @@ onBeforeUnmount(() => {
         :current-workspace-id="documentWorkspaceId"
         :current-workspace-path="currentWorkspacePath"
         :labels="workspaceLabels"
-        :disabled="busy || workspaceRefreshing"
+        :disabled="busy || workspaceRefreshing || workspaceMutationCancelling"
+        :modal-open="Boolean(activeDialog || unsavedTransition || webDAVConflictOpen)"
         :refreshing="workspaceRefreshing"
         :truncated-directories="truncatedWorkspaceDirectories"
         @close="closeWorkspace"
         @refresh="refreshWorkspace()"
         @toggle="toggleWorkspaceDirectory"
         @open="openWorkspaceDocument"
+        @preview="showWorkspaceImage"
+        @create-markdown="showWorkspaceCreateMarkdown"
+        @create-directory="showWorkspaceCreateDirectory"
+        @rename="showWorkspaceRename"
+        @delete="showWorkspaceDelete"
       />
 
       <main class="editor-layout">
@@ -3427,12 +4211,18 @@ onBeforeUnmount(() => {
           'webdav-dialog': activeDialog === 'webdav',
           'has-webdav-delete-confirmation': activeDialog === 'webdav' && Boolean(webDAVDeleteCandidate),
           'image-dialog': activeDialog === 'image',
+          'workspace-dialog': activeDialog === 'workspace',
+          'workspace-image-preview-dialog': activeDialog === 'workspace' && workspaceDialogView === 'image',
           'about-licenses-dialog': activeDialog === 'about' && aboutView === 'third-party',
         }"
-        role="dialog"
+        :role="activeDialog === 'workspace' && workspaceDialogView === 'delete' ? 'alertdialog' : 'dialog'"
         aria-modal="true"
         :aria-labelledby="`dialog-${activeDialog}`"
-        :aria-describedby="activeDialog === 'webdav' ? 'dialog-webdav-description' : undefined"
+        :aria-describedby="activeDialog === 'webdav'
+          ? 'dialog-webdav-description'
+          : activeDialog === 'workspace' && workspaceDialogView === 'delete'
+            ? 'dialog-workspace-description'
+            : undefined"
       >
         <template v-if="activeDialog === 'settings'">
           <h2 id="dialog-settings">{{ t('settings.title') }}</h2>
@@ -3867,6 +4657,86 @@ onBeforeUnmount(() => {
             >{{ imageInsertError }}</p>
           </form>
         </template>
+        <template v-else-if="activeDialog === 'workspace'">
+          <h2 id="dialog-workspace">{{ workspaceDialogTitle }}</h2>
+
+          <p
+            v-if="activeWorkspaceMutation && ['rename', 'delete'].includes(workspaceDialogView)"
+            class="workspace-lock-status"
+            role="status"
+            aria-live="polite"
+          >{{ workspaceMutationLockLabel }}</p>
+
+          <template v-if="workspaceDialogView === 'image'">
+            <p class="workspace-preview-location" :title="workspaceDialogEntry?.path">
+              {{ workspaceDialogEntry?.path }}
+            </p>
+            <div
+              v-if="workspaceMutationBusy"
+              class="workspace-image-loading"
+              role="status"
+              aria-live="polite"
+            >{{ t('workspace.loadingImage') }}</div>
+            <figure v-else-if="workspacePreviewImage && workspacePreviewSource" class="workspace-image-preview">
+              <img
+                :src="workspacePreviewSource"
+                :alt="workspaceDialogEntry?.name || t('workspace.imagePreviewTitle')"
+              />
+              <figcaption>
+                <strong>{{ workspacePreviewImage.name }}</strong>
+                <span>{{ workspacePreviewImage.width }} × {{ workspacePreviewImage.height }}</span>
+                <span>{{ t('image.fileSize', { size: Math.max(1, Math.ceil(workspacePreviewImage.size / 1024)) }) }}</span>
+              </figcaption>
+            </figure>
+          </template>
+
+          <template v-else-if="workspaceDialogView === 'delete'">
+            <p id="dialog-workspace-description" class="workspace-delete-message">
+              {{ workspaceDeleteDescription }}
+            </p>
+            <p
+              v-if="workspaceDeleteAffectsCurrentDocument || workspaceDeleteBufferPreserved"
+              class="workspace-preserve-message"
+            >
+              {{ t('workspace.deleteCurrentPreserved') }}
+            </p>
+          </template>
+
+          <form
+            v-else
+            id="workspace-entry-form"
+            class="workspace-entry-form"
+            @submit.prevent="submitWorkspaceNameDialog"
+          >
+            <label for="workspace-entry-name">{{ t('workspace.nameLabel') }}</label>
+            <input
+              id="workspace-entry-name"
+              v-model="workspaceEntryName"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              maxlength="255"
+              data-dialog-initial
+              :disabled="workspaceMutationBusy || workspaceMutationNeedsRestart"
+              @focus="($event.target as HTMLInputElement).select()"
+            />
+            <p class="workspace-entry-parent">
+              {{ t('workspace.parentLocation', { path: workspaceDialogParentLabel }) }}
+            </p>
+          </form>
+
+          <p
+            v-if="workspaceMutationError"
+            class="connection-status is-error workspace-operation-error"
+            role="alert"
+            aria-live="assertive"
+          >{{ t('workspace.operationFailed', { message: workspaceMutationError }) }}</p>
+          <p
+            v-if="workspaceMutationNeedsRestart"
+            class="workspace-mutation-retry"
+            role="status"
+          >{{ t('workspace.webDAVMutationRetry') }}</p>
+        </template>
         <template v-else-if="activeDialog === 'shortcuts'">
           <h2 id="dialog-shortcuts">{{ t('help.shortcutsTitle') }}</h2>
           <p>{{ t('help.shortcutsIntro') }}</p>
@@ -4005,6 +4875,29 @@ onBeforeUnmount(() => {
               class="button primary"
               :disabled="!canInsertImage"
             >{{ imageInsertBusy ? t('image.processing') : t('image.insert') }}</button>
+          </template>
+          <template v-else-if="activeDialog === 'workspace'">
+            <button
+              type="button"
+              class="button secondary"
+              :data-dialog-initial="['delete', 'image'].includes(workspaceDialogView) ? '' : undefined"
+              :disabled="workspaceMutationBusy && workspaceDialogView !== 'image'"
+              @click="dismissActiveDialog"
+            >{{ workspaceDialogView === 'image' ? t('common.close') : t('common.cancel') }}</button>
+            <button
+              v-if="workspaceDialogView === 'delete'"
+              type="button"
+              class="button danger"
+              :disabled="workspaceMutationBusy || workspaceMutationNeedsRestart"
+              @click="confirmDeleteWorkspaceEntry"
+            >{{ workspaceMutationBusy ? t('workspace.deleting') : t('workspace.deleteConfirm') }}</button>
+            <button
+              v-else-if="workspaceDialogView !== 'image'"
+              type="submit"
+              form="workspace-entry-form"
+              class="button primary"
+              :disabled="workspaceMutationBusy || workspaceMutationNeedsRestart || !workspaceEntryName.trim()"
+            >{{ workspaceMutationBusy ? t('workspace.processing') : t('common.confirm') }}</button>
           </template>
           <template v-else>
             <button

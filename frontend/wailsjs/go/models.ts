@@ -27,6 +27,7 @@ export namespace main {
 	    displayLocation?: string;
 	    workspaceId?: string;
 	    workspacePath?: string;
+	    localDocumentId?: string;
 	    remoteDocumentId?: string;
 	    etag?: string;
 
@@ -46,6 +47,7 @@ export namespace main {
 	        this.displayLocation = source["displayLocation"];
 	        this.workspaceId = source["workspaceId"];
 	        this.workspacePath = source["workspacePath"];
+	        this.localDocumentId = source["localDocumentId"];
 	        this.remoteDocumentId = source["remoteDocumentId"];
 	        this.etag = source["etag"];
 	    }
@@ -264,6 +266,60 @@ export namespace main {
 	        this.removeCredentials = source["removeCredentials"];
 	    }
 	}
+	export class WorkspaceEntry {
+	    name: string;
+	    path: string;
+	    absolutePath: string;
+	    kind: string;
+	    revision?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceEntry(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.absolutePath = source["absolutePath"];
+	        this.kind = source["kind"];
+	        this.revision = source["revision"];
+	    }
+	}
+	export class WebDAVMutationPreparation {
+	    mutationId: string;
+	    entry: WorkspaceEntry;
+	    expiresAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new WebDAVMutationPreparation(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mutationId = source["mutationId"];
+	        this.entry = this.convertValues(source["entry"], WorkspaceEntry);
+	        this.expiresAt = source["expiresAt"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class WebDAVSaveResult {
 	    path: string;
 	    name: string;
@@ -280,24 +336,6 @@ export namespace main {
 	        this.name = source["name"];
 	        this.etag = source["etag"];
 	        this.conflict = source["conflict"];
-	    }
-	}
-	export class WorkspaceEntry {
-	    name: string;
-	    path: string;
-	    absolutePath: string;
-	    kind: string;
-
-	    static createFrom(source: any = {}) {
-	        return new WorkspaceEntry(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.path = source["path"];
-	        this.absolutePath = source["absolutePath"];
-	        this.kind = source["kind"];
 	    }
 	}
 	export class Workspace {

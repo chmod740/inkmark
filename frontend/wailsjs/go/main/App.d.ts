@@ -4,9 +4,13 @@ import {main} from '../models';
 
 export function ActivateRecentDocument(arg1:string):Promise<void>;
 
+export function BeginWebDAVMutation(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.WebDAVMutationPreparation>;
+
 export function CancelQuitRequest():Promise<void>;
 
 export function CancelUpdateDownload():Promise<void>;
+
+export function CancelWebDAVMutation(arg1:string,arg2:string):Promise<void>;
 
 export function CheckForUpdates():Promise<main.UpdateInfo>;
 
@@ -18,13 +22,29 @@ export function CloseWebDAVWorkspace(arg1:string):Promise<void>;
 
 export function CloseWorkspace(arg1:string):Promise<void>;
 
+export function CloseWorkspaceDocument(arg1:string,arg2:string):Promise<void>;
+
+export function CommitWebDAVDelete(arg1:string,arg2:string,arg3:boolean):Promise<void>;
+
+export function CommitWebDAVRename(arg1:string,arg2:string,arg3:string):Promise<main.WorkspaceEntry>;
+
 export function ConfirmQuit():Promise<void>;
 
 export function ConnectSavedWebDAV(arg1:string):Promise<main.Workspace>;
 
 export function ConnectWebDAV(arg1:main.WebDAVConfig):Promise<main.Workspace>;
 
+export function CreateWebDAVDirectory(arg1:string,arg2:string):Promise<main.WorkspaceEntry>;
+
+export function CreateWebDAVMarkdownFile(arg1:string,arg2:string):Promise<main.Document>;
+
+export function CreateWorkspaceDirectory(arg1:string,arg2:string):Promise<main.WorkspaceEntry>;
+
+export function CreateWorkspaceMarkdownFile(arg1:string,arg2:string):Promise<main.Document>;
+
 export function DeleteSavedWebDAVConnection(arg1:string):Promise<void>;
+
+export function DeleteWorkspaceEntry(arg1:string,arg2:string,arg3:boolean,arg4:string):Promise<void>;
 
 export function DownloadUpdate(arg1:string):Promise<main.UpdateDownload>;
 
@@ -70,7 +90,13 @@ export function OpenWorkspaceFile(arg1:string,arg2:string):Promise<main.Document
 
 export function OverwriteWebDAVFile(arg1:string,arg2:string,arg3:string):Promise<main.WebDAVSaveResult>;
 
+export function ReadWebDAVWorkspaceImage(arg1:string,arg2:string):Promise<main.ImageAssetData>;
+
 export function ReadWorkspaceDirectory(arg1:string,arg2:string):Promise<main.WorkspaceDirectory>;
+
+export function ReadWorkspaceImage(arg1:string,arg2:string):Promise<main.ImageAssetData>;
+
+export function RenameWorkspaceEntry(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.WorkspaceEntry>;
 
 export function RenderingTestDocument():Promise<main.Document>;
 
@@ -87,6 +113,8 @@ export function SaveFileAs(arg1:string,arg2:string):Promise<main.SaveResult>;
 export function SaveWebDAVConnection(arg1:main.WebDAVConnectionInput):Promise<main.SavedWebDAVConnection>;
 
 export function SaveWebDAVFile(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.WebDAVSaveResult>;
+
+export function SaveWorkspaceMarkdownFile(arg1:string,arg2:string,arg3:string):Promise<main.SaveResult>;
 
 export function SelectImageFile():Promise<main.ImageAssetData>;
 

@@ -117,14 +117,15 @@ func IsWebDAVErrorKind(err error, kind WebDAVErrorKind) bool {
 }
 
 type WebDAVClient struct {
-	mu                  sync.RWMutex
-	baseURL             *url.URL
-	advertisedRootPath  string
-	advertisedRootKnown bool
-	username            string
-	password            string
-	client              *http.Client
-	sessions            map[string]webDAVSession
+	mu                            sync.RWMutex
+	baseURL                       *url.URL
+	advertisedRootPath            string
+	advertisedRootKnown           bool
+	username                      string
+	password                      string
+	client                        *http.Client
+	sessions                      map[string]webDAVSession
+	testAfterMutationLockAcquired func()
 }
 
 type WebDAVEntry struct {
@@ -162,6 +163,15 @@ type WebDAVWriteResult struct {
 	ETag            string `json:"etag,omitempty"`
 	Created         bool   `json:"created"`
 	ConcurrencyMode string `json:"concurrencyMode,omitempty"`
+}
+
+type webDAVResourceMetadata struct {
+	Path        string
+	ETag        string
+	Modified    string
+	ContentType string
+	Size        int64
+	Directory   bool
 }
 
 type webDAVSession struct {
@@ -234,7 +244,7 @@ func (client *WebDAVClient) ListDirectory(ctx context.Context, relativePath stri
 			continue
 		}
 		properties, ok := response.successfulProperties()
-		if !ok {
+		if !ok || properties.ResourceType == nil {
 			continue
 		}
 		entry := WebDAVEntry{
@@ -248,7 +258,7 @@ func (client *WebDAVClient) ListDirectory(ctx context.Context, relativePath stri
 		if size, parseErr := strconv.ParseInt(strings.TrimSpace(properties.ContentLength), 10, 64); parseErr == nil && size >= 0 {
 			entry.Size = size
 		}
-		if !entry.Directory && !isMarkdownFilename(entry.Name) {
+		if !entry.Directory && !isMarkdownFilename(entry.Name) && !isImageFilename(entry.Name) {
 			continue
 		}
 		entriesByPath[entryPath] = entry
@@ -314,6 +324,41 @@ func (client *WebDAVClient) ReadMarkdown(ctx context.Context, relativePath strin
 		Content:          string(data),
 		ETag:             etag,
 		Modified:         strings.TrimSpace(response.Header.Get("Last-Modified")),
+		RemoteDocumentID: documentID,
+		DisplayLocation:  client.displayLocation(normalized),
+	}, nil
+}
+
+// registerCreatedMarkdownSession turns a successfully verified create-only
+// PUT into an editable document capability without issuing another GET. The
+// PUT path already compared the complete representation and returned its
+// canonical ETag, so an additional network read would only introduce a
+// commit-then-read-failure window.
+func (client *WebDAVClient) registerCreatedMarkdownSession(relativePath string, etag string) (WebDAVDocument, error) {
+	normalized, err := normalizeWebDAVMarkdownPath(relativePath)
+	if err != nil {
+		return WebDAVDocument{}, invalidWebDAVPathError("create document", relativePath, err)
+	}
+	etag = strings.TrimSpace(etag)
+	if etag == "" {
+		return WebDAVDocument{}, &WebDAVError{Kind: WebDAVErrorUnsupported, Operation: "create document", Path: normalized, Err: errors.New("verified create did not provide a canonical ETag")}
+	}
+	documentID, err := newOpaqueID()
+	if err != nil {
+		return WebDAVDocument{}, &WebDAVError{Kind: WebDAVErrorProtocol, Operation: "create document", Path: normalized, Err: errors.New("could not create a document session")}
+	}
+	client.mu.Lock()
+	if client.sessions == nil {
+		client.mu.Unlock()
+		return WebDAVDocument{}, &WebDAVError{Kind: WebDAVErrorInvalidInput, Operation: "create document", Path: normalized, Err: errors.New("WebDAV client is closed")}
+	}
+	client.sessions[documentID] = webDAVSession{Path: normalized, ETag: etag}
+	client.mu.Unlock()
+	return WebDAVDocument{
+		Path:             normalized,
+		Name:             path.Base(normalized),
+		Content:          "",
+		ETag:             etag,
 		RemoteDocumentID: documentID,
 		DisplayLocation:  client.displayLocation(normalized),
 	}, nil
@@ -443,6 +488,38 @@ func (client *WebDAVClient) CloseDocument(documentID string) {
 	client.mu.Lock()
 	delete(client.sessions, strings.TrimSpace(documentID))
 	client.mu.Unlock()
+}
+
+// rebaseDocumentSessions updates opaque document capabilities after a
+// successful WebDAV MOVE. Validators are deliberately preserved: if the
+// server changed an ETag while moving the resource, the next ordinary save
+// must surface a conflict rather than silently trusting a validator which was
+// not compared with the editor's current content.
+func (client *WebDAVClient) rebaseDocumentSessions(sourcePath string, destinationPath string) {
+	if client == nil {
+		return
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	for documentID, session := range client.sessions {
+		if rebased, ok := rebaseWebDAVDescendantPath(session.Path, sourcePath, destinationPath); ok {
+			session.Path = rebased
+			client.sessions[documentID] = session
+		}
+	}
+}
+
+func (client *WebDAVClient) closeDocumentSessionsAtPath(targetPath string) {
+	if client == nil {
+		return
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	for documentID, session := range client.sessions {
+		if webDAVPathAtOrBelow(session.Path, targetPath) {
+			delete(client.sessions, documentID)
+		}
+	}
 }
 
 func (client *WebDAVClient) Close() {
@@ -636,11 +713,86 @@ func (client *WebDAVClient) CreateDirectory(ctx context.Context, relativePath st
 }
 
 func (client *WebDAVClient) Delete(ctx context.Context, relativePath string) error {
+	return client.DeleteResource(ctx, relativePath, false)
+}
+
+// DeleteResource keeps collection deletion explicit. WebDAV DELETE on a
+// collection is recursive by protocol, so callers must supply the resource
+// type and the app bridge only invokes this with a separately confirmed UI
+// recursion flag.
+func (client *WebDAVClient) DeleteResource(ctx context.Context, relativePath string, directory bool) error {
 	normalized, err := normalizeNonRootWebDAVPath(relativePath)
 	if err != nil {
 		return invalidWebDAVPathError("delete", relativePath, err)
 	}
-	response, err := client.request(ctx, http.MethodDelete, normalized, false, nil, nil)
+	response, err := client.request(ctx, http.MethodDelete, normalized, directory, nil, nil)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if err := requireWebDAVStatus(response, "delete", normalized, http.StatusOK, http.StatusAccepted, http.StatusNoContent); err != nil {
+		drainWebDAVResponse(response.Body)
+		return err
+	}
+	drainWebDAVResponse(response.Body)
+	return nil
+}
+
+func (client *WebDAVClient) DeleteResourceLocked(ctx context.Context, relativePath string, expectedDirectory bool, expectedRevision string) error {
+	normalized, err := normalizeNonRootWebDAVPath(relativePath)
+	if err != nil {
+		return invalidWebDAVPathError("delete", relativePath, err)
+	}
+	lockDepth := "0"
+	if expectedDirectory {
+		// Recursive DELETE must freeze the whole confirmed collection tree.
+		lockDepth = "infinity"
+	}
+	lockToken, lockNullCreated, err := client.lockResourceTargetWithDepth(ctx, normalized, expectedDirectory, lockDepth)
+	if err != nil {
+		return err
+	}
+	if client.testAfterMutationLockAcquired != nil {
+		client.testAfterMutationLockAcquired()
+	}
+	var metadata webDAVResourceMetadata
+	metadataKnown := false
+	if lockNullCreated {
+		confirmed, exists, confirmErr := client.resourceMetadataAfterLock(normalized, expectedDirectory)
+		if confirmErr != nil {
+			client.bestEffortUnlockTarget(normalized, expectedDirectory, lockToken)
+			return confirmErr
+		}
+		if exists {
+			// Some servers/proxies incorrectly return 201 for an existing lock
+			// target. Never interpret that status alone as authority to delete it.
+			metadata = confirmed
+			metadataKnown = true
+		} else {
+			client.bestEffortUnlockTarget(normalized, expectedDirectory, lockToken)
+			return &WebDAVError{Kind: WebDAVErrorNotFound, Operation: "delete", Path: normalized, Err: errors.New("resource no longer exists")}
+		}
+	}
+	defer client.bestEffortUnlockTarget(normalized, expectedDirectory, lockToken)
+	if !metadataKnown {
+		var exists bool
+		metadata, exists, err = client.resourceMetadata(ctx, normalized, expectedDirectory)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return &WebDAVError{Kind: WebDAVErrorNotFound, Operation: "delete", Path: normalized}
+		}
+	}
+	if metadata.Directory != expectedDirectory {
+		return &WebDAVError{Kind: WebDAVErrorConflict, Operation: "delete", Path: normalized, Err: errors.New("resource type changed while awaiting confirmation")}
+	}
+	if err := validateLockedWebDAVRevision("delete", normalized, metadata, expectedDirectory, expectedRevision); err != nil {
+		return err
+	}
+	headers := make(http.Header)
+	headers.Set("If", "("+lockToken+")")
+	response, err := client.request(ctx, http.MethodDelete, normalized, expectedDirectory, nil, headers)
 	if err != nil {
 		return err
 	}
@@ -654,6 +806,12 @@ func (client *WebDAVClient) Delete(ctx context.Context, relativePath string) err
 }
 
 func (client *WebDAVClient) Move(ctx context.Context, sourcePath string, destinationPath string, overwrite bool) error {
+	return client.MoveResource(ctx, sourcePath, destinationPath, false, overwrite)
+}
+
+// MoveResource emits collection URI trailing slashes when moving a directory
+// and always lets the caller control the WebDAV Overwrite header.
+func (client *WebDAVClient) MoveResource(ctx context.Context, sourcePath string, destinationPath string, directory bool, overwrite bool) error {
 	source, err := normalizeNonRootWebDAVPath(sourcePath)
 	if err != nil {
 		return invalidWebDAVPathError("move", sourcePath, err)
@@ -665,7 +823,10 @@ func (client *WebDAVClient) Move(ctx context.Context, sourcePath string, destina
 	if source == destination {
 		return &WebDAVError{Kind: WebDAVErrorInvalidInput, Operation: "move", Path: source, Err: errors.New("source and destination are identical")}
 	}
-	destinationURL, err := client.resourceURL(destination, false)
+	if directory && strings.HasPrefix(destination, source+"/") {
+		return &WebDAVError{Kind: WebDAVErrorInvalidInput, Operation: "move", Path: source, Err: errors.New("a collection cannot be moved into itself")}
+	}
+	destinationURL, err := client.resourceURL(destination, directory)
 	if err != nil {
 		return invalidWebDAVPathError("move", destinationPath, err)
 	}
@@ -676,7 +837,7 @@ func (client *WebDAVClient) Move(ctx context.Context, sourcePath string, destina
 	} else {
 		headers.Set("Overwrite", "F")
 	}
-	response, err := client.request(ctx, "MOVE", source, false, nil, headers)
+	response, err := client.request(ctx, "MOVE", source, directory, nil, headers)
 	if err != nil {
 		return err
 	}
@@ -689,13 +850,140 @@ func (client *WebDAVClient) Move(ctx context.Context, sourcePath string, destina
 	return nil
 }
 
+func (client *WebDAVClient) MoveResourceLocked(ctx context.Context, sourcePath string, destinationPath string, expectedDirectory bool, expectedRevision string) error {
+	source, err := normalizeNonRootWebDAVPath(sourcePath)
+	if err != nil {
+		return invalidWebDAVPathError("move", sourcePath, err)
+	}
+	destination, err := normalizeNonRootWebDAVPath(destinationPath)
+	if err != nil {
+		return invalidWebDAVPathError("move", destinationPath, err)
+	}
+	if source == destination {
+		return &WebDAVError{Kind: WebDAVErrorInvalidInput, Operation: "move", Path: source, Err: errors.New("source and destination are identical")}
+	}
+	if parentWebDAVPath(source) != parentWebDAVPath(destination) {
+		return &WebDAVError{Kind: WebDAVErrorInvalidInput, Operation: "move", Path: source, Err: errors.New("locked move is limited to a same-parent rename")}
+	}
+	if expectedDirectory && strings.HasPrefix(destination, source+"/") {
+		return &WebDAVError{Kind: WebDAVErrorInvalidInput, Operation: "move", Path: source, Err: errors.New("a collection cannot be moved into itself")}
+	}
+	// x/net/webdav and other strict DAV implementations confirm both MOVE
+	// operands against one If-list. Because rename is limited to siblings, an
+	// exclusive infinite-depth lock on their common parent safely covers both
+	// source and destination while avoiding a lock-null destination resource.
+	lockPath := parentWebDAVPath(source)
+	lockToken, lockNullCreated, err := client.lockResourceTargetWithDepth(ctx, lockPath, true, "infinity")
+	if err != nil {
+		return err
+	}
+	if client.testAfterMutationLockAcquired != nil {
+		client.testAfterMutationLockAcquired()
+	}
+	var parentMetadata webDAVResourceMetadata
+	parentMetadataKnown := false
+	if lockNullCreated {
+		if lockPath == "" {
+			client.bestEffortUnlockTarget(lockPath, true, lockToken)
+			return &WebDAVError{Kind: WebDAVErrorProtocol, Operation: "move", Path: source, Err: errors.New("server reported the WebDAV root as a lock-null resource")}
+		}
+		confirmed, exists, confirmErr := client.resourceMetadataAfterLock(lockPath, true)
+		if confirmErr != nil {
+			client.bestEffortUnlockTarget(lockPath, true, lockToken)
+			return confirmErr
+		}
+		if exists {
+			parentMetadata = confirmed
+			parentMetadataKnown = true
+		} else {
+			client.bestEffortUnlockTarget(lockPath, true, lockToken)
+			return &WebDAVError{Kind: WebDAVErrorNotFound, Operation: "move", Path: source, Err: errors.New("source parent no longer exists")}
+		}
+	}
+	// The locked collection is never moved, so its unlock path is invariant
+	// across success, rejected responses, and transport-unknown outcomes.
+	defer client.bestEffortUnlockTarget(lockPath, true, lockToken)
+	if !parentMetadataKnown {
+		var parentExists bool
+		parentMetadata, parentExists, err = client.resourceMetadata(ctx, lockPath, true)
+		if err != nil {
+			return err
+		}
+		if !parentExists {
+			return &WebDAVError{Kind: WebDAVErrorNotFound, Operation: "move", Path: source, Err: errors.New("source parent no longer exists")}
+		}
+	}
+	if !parentMetadata.Directory {
+		return &WebDAVError{Kind: WebDAVErrorConflict, Operation: "move", Path: source, Err: errors.New("source parent changed type while locked")}
+	}
+	metadata, exists, err := client.resourceMetadata(ctx, source, expectedDirectory)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return &WebDAVError{Kind: WebDAVErrorNotFound, Operation: "move", Path: source}
+	}
+	if metadata.Directory != expectedDirectory {
+		return &WebDAVError{Kind: WebDAVErrorConflict, Operation: "move", Path: source, Err: errors.New("resource type changed while awaiting confirmation")}
+	}
+	if err := validateLockedWebDAVRevision("move", source, metadata, expectedDirectory, expectedRevision); err != nil {
+		return err
+	}
+	destinationURL, err := client.resourceURL(destination, expectedDirectory)
+	if err != nil {
+		return invalidWebDAVPathError("move", destinationPath, err)
+	}
+	headers := make(http.Header)
+	headers.Set("Destination", destinationURL.String())
+	headers.Set("Overwrite", "F")
+	headers.Set("If", "("+lockToken+")")
+	response, err := client.request(ctx, "MOVE", source, expectedDirectory, nil, headers)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if err := requireWebDAVStatus(response, "move", source, http.StatusCreated, http.StatusNoContent); err != nil {
+		drainWebDAVResponse(response.Body)
+		return err
+	}
+	drainWebDAVResponse(response.Body)
+	return nil
+}
+
+func validateLockedWebDAVRevision(operation string, relativePath string, metadata webDAVResourceMetadata, expectedDirectory bool, expectedRevision string) error {
+	if expectedDirectory {
+		return &WebDAVError{Kind: WebDAVErrorUnsupported, Operation: operation, Path: relativePath, Err: errors.New("collection mutations require a prepared lock capability")}
+	}
+	kind := ""
+	if isMarkdownFilename(relativePath) {
+		kind = "markdown"
+	} else if isImageFilename(relativePath) {
+		kind = "image"
+	}
+	if kind == "" {
+		return &WebDAVError{Kind: WebDAVErrorInvalidInput, Operation: operation, Path: relativePath, Err: errors.New("unsupported file type")}
+	}
+	actualRevision := webDAVMetadataRevision(relativePath, kind, metadata)
+	if strings.TrimSpace(expectedRevision) == "" || actualRevision == "" {
+		return &WebDAVError{Kind: WebDAVErrorUnsupported, Operation: operation, Path: relativePath, Err: errors.New("destructive file mutations require a strong ETag revision")}
+	}
+	if actualRevision != expectedRevision {
+		return &WebDAVError{Kind: WebDAVErrorConflict, Operation: operation, Path: relativePath, Err: errors.New("remote resource changed")}
+	}
+	return nil
+}
+
 func (client *WebDAVClient) propfind(ctx context.Context, relativePath string, depth string) (webDAVMultiStatus, error) {
+	directoryTarget := relativePath == "" || depth == "1"
+	return client.propfindTarget(ctx, relativePath, depth, directoryTarget)
+}
+
+func (client *WebDAVClient) propfindTarget(ctx context.Context, relativePath string, depth string, directoryTarget bool) (webDAVMultiStatus, error) {
 	body := strings.NewReader(`<?xml version="1.0" encoding="utf-8"?>
 <d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getcontentlength/><d:getlastmodified/><d:getetag/><d:getcontenttype/></d:prop></d:propfind>`)
 	headers := make(http.Header)
 	headers.Set("Depth", depth)
 	headers.Set("Content-Type", "application/xml; charset=utf-8")
-	directoryTarget := relativePath == "" || depth == "1"
 	response, err := client.request(ctx, "PROPFIND", relativePath, directoryTarget, body, headers)
 	if err != nil {
 		return webDAVMultiStatus{}, err
@@ -798,6 +1086,51 @@ func (client *WebDAVClient) resourceState(ctx context.Context, relativePath stri
 	return "", false, &WebDAVError{Kind: WebDAVErrorProtocol, Operation: "stat", Path: relativePath, Err: errors.New("Depth-0 response did not describe the resource")}
 }
 
+func (client *WebDAVClient) resourceMetadata(ctx context.Context, relativePath string, directory bool) (webDAVResourceMetadata, bool, error) {
+	if err := client.ensureAdvertisedRoot(ctx); err != nil {
+		return webDAVResourceMetadata{}, false, err
+	}
+	multiStatus, err := client.propfindTarget(ctx, relativePath, "0", directory)
+	if err != nil {
+		if IsWebDAVErrorKind(err, WebDAVErrorNotFound) {
+			return webDAVResourceMetadata{}, false, nil
+		}
+		return webDAVResourceMetadata{}, false, err
+	}
+	for _, response := range multiStatus.Responses {
+		mappedPath, hrefErr := client.relativePathFromHrefForRequest(response.Href, relativePath, directory)
+		if hrefErr != nil || mappedPath != relativePath {
+			continue
+		}
+		status := webDAVStatusLineCode(response.Status)
+		if status == http.StatusNotFound || status == http.StatusGone {
+			return webDAVResourceMetadata{}, false, nil
+		}
+		if status >= 400 {
+			return webDAVResourceMetadata{}, false, &WebDAVError{Kind: webDAVStatusErrorKind(status), Operation: "stat", Path: relativePath, StatusCode: status}
+		}
+		properties, ok := response.successfulProperties()
+		if !ok {
+			return webDAVResourceMetadata{}, true, &WebDAVError{Kind: WebDAVErrorProtocol, Operation: "stat", Path: relativePath, Err: errors.New("Depth-0 response omitted resource properties")}
+		}
+		if properties.ResourceType == nil {
+			return webDAVResourceMetadata{}, true, &WebDAVError{Kind: WebDAVErrorProtocol, Operation: "stat", Path: relativePath, Err: errors.New("Depth-0 response omitted the resourcetype property")}
+		}
+		metadata := webDAVResourceMetadata{
+			Path:        mappedPath,
+			ETag:        strings.TrimSpace(properties.ETag),
+			Modified:    strings.TrimSpace(properties.LastModified),
+			ContentType: strings.TrimSpace(properties.ContentType),
+			Directory:   properties.ResourceType.Collection != nil,
+		}
+		if size, parseErr := strconv.ParseInt(strings.TrimSpace(properties.ContentLength), 10, 64); parseErr == nil && size >= 0 {
+			metadata.Size = size
+		}
+		return metadata, true, nil
+	}
+	return webDAVResourceMetadata{}, false, &WebDAVError{Kind: WebDAVErrorProtocol, Operation: "stat", Path: relativePath, Err: errors.New("Depth-0 response did not describe the resource")}
+}
+
 func validateWebDAVMarkdownContent(normalized string, content string) error {
 	if len(content) > maxWebDAVDocumentSize {
 		return &WebDAVError{Kind: WebDAVErrorTooLarge, Operation: "write", Path: normalized, Err: errors.New("document exceeds the size limit")}
@@ -820,13 +1153,24 @@ func (client *WebDAVClient) tryExclusiveWriteLock(ctx context.Context, relativeP
 }
 
 func (client *WebDAVClient) lockResource(ctx context.Context, relativePath string) (string, bool, error) {
+	return client.lockResourceTarget(ctx, relativePath, false)
+}
+
+func (client *WebDAVClient) lockResourceTarget(ctx context.Context, relativePath string, directory bool) (string, bool, error) {
+	return client.lockResourceTargetWithDepth(ctx, relativePath, directory, "0")
+}
+
+func (client *WebDAVClient) lockResourceTargetWithDepth(ctx context.Context, relativePath string, directory bool, depth string) (string, bool, error) {
+	if depth != "0" && depth != "infinity" {
+		return "", false, &WebDAVError{Kind: WebDAVErrorInvalidInput, Operation: "lock", Path: relativePath, Err: errors.New("invalid LOCK depth")}
+	}
 	body := strings.NewReader(`<?xml version="1.0" encoding="utf-8"?>
 <d:lockinfo xmlns:d="DAV:"><d:lockscope><d:exclusive/></d:lockscope><d:locktype><d:write/></d:locktype><d:owner><d:href>urn:inkmark:markdown</d:href></d:owner></d:lockinfo>`)
 	headers := make(http.Header)
 	headers.Set("Content-Type", "application/xml; charset=utf-8")
-	headers.Set("Depth", "0")
+	headers.Set("Depth", depth)
 	headers.Set("Timeout", "Second-30")
-	response, err := client.request(ctx, "LOCK", relativePath, false, body, headers)
+	response, err := client.request(ctx, "LOCK", relativePath, directory, body, headers)
 	if err != nil {
 		return "", false, err
 	}
@@ -861,9 +1205,13 @@ func (client *WebDAVClient) lockResource(ctx context.Context, relativePath strin
 }
 
 func (client *WebDAVClient) unlockResource(ctx context.Context, relativePath string, lockToken string) error {
+	return client.unlockResourceTarget(ctx, relativePath, false, lockToken)
+}
+
+func (client *WebDAVClient) unlockResourceTarget(ctx context.Context, relativePath string, directory bool, lockToken string) error {
 	headers := make(http.Header)
 	headers.Set("Lock-Token", lockToken)
-	response, err := client.request(ctx, "UNLOCK", relativePath, false, nil, headers)
+	response, err := client.request(ctx, "UNLOCK", relativePath, directory, nil, headers)
 	if err != nil {
 		return err
 	}
@@ -877,14 +1225,18 @@ func (client *WebDAVClient) unlockResource(ctx context.Context, relativePath str
 }
 
 func (client *WebDAVClient) deleteLockedResource(ctx context.Context, relativePath string, lockToken string) error {
+	return client.deleteLockedResourceTarget(ctx, relativePath, false, lockToken, "delete lock-null")
+}
+
+func (client *WebDAVClient) deleteLockedResourceTarget(ctx context.Context, relativePath string, directory bool, lockToken string, operation string) error {
 	headers := make(http.Header)
 	headers.Set("If", "("+lockToken+")")
-	response, err := client.request(ctx, http.MethodDelete, relativePath, false, nil, headers)
+	response, err := client.request(ctx, http.MethodDelete, relativePath, directory, nil, headers)
 	if err != nil {
 		return err
 	}
 	defer response.Body.Close()
-	if err := requireWebDAVStatus(response, "delete lock-null", relativePath, http.StatusOK, http.StatusAccepted, http.StatusNoContent, http.StatusNotFound); err != nil {
+	if err := requireWebDAVStatus(response, operation, relativePath, http.StatusOK, http.StatusAccepted, http.StatusNoContent, http.StatusNotFound); err != nil {
 		drainWebDAVResponse(response.Body)
 		return err
 	}
@@ -893,9 +1245,24 @@ func (client *WebDAVClient) deleteLockedResource(ctx context.Context, relativePa
 }
 
 func (client *WebDAVClient) bestEffortUnlock(relativePath string, lockToken string) {
+	client.bestEffortUnlockTarget(relativePath, false, lockToken)
+}
+
+func (client *WebDAVClient) bestEffortUnlockTarget(relativePath string, directory bool, lockToken string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = client.unlockResource(ctx, relativePath, lockToken)
+	_ = client.unlockResourceTarget(ctx, relativePath, directory, lockToken)
+}
+
+// resourceMetadataAfterLock uses an independent bounded context so a caller
+// cancellation immediately after HTTP 201 cannot turn an ambiguous response
+// into destructive lock-null cleanup. Mutation callers use absence only to
+// return NotFound and unlock; unlike create-only writes, they never DELETE a
+// target solely because LOCK returned 201.
+func (client *WebDAVClient) resourceMetadataAfterLock(relativePath string, directory bool) (webDAVResourceMetadata, bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return client.resourceMetadata(ctx, relativePath, directory)
 }
 
 func (client *WebDAVClient) bestEffortDeleteLocked(relativePath string, lockToken string) {
@@ -1340,8 +1707,9 @@ func (response webDAVResponse) successfulProperties() (webDAVProperties, bool) {
 		}
 		found = true
 		properties := propertyStat.Properties
-		if properties.ResourceType.Collection != nil {
-			merged.ResourceType.Collection = properties.ResourceType.Collection
+		if properties.ResourceType != nil {
+			resourceType := *properties.ResourceType
+			merged.ResourceType = &resourceType
 		}
 		if properties.ContentLength != "" {
 			merged.ContentLength = properties.ContentLength
@@ -1365,11 +1733,11 @@ type webDAVPropertyStat struct {
 }
 
 type webDAVProperties struct {
-	ResourceType  webDAVResourceType `xml:"resourcetype"`
-	ContentLength string             `xml:"getcontentlength"`
-	LastModified  string             `xml:"getlastmodified"`
-	ETag          string             `xml:"getetag"`
-	ContentType   string             `xml:"getcontenttype"`
+	ResourceType  *webDAVResourceType `xml:"resourcetype"`
+	ContentLength string              `xml:"getcontentlength"`
+	LastModified  string              `xml:"getlastmodified"`
+	ETag          string              `xml:"getetag"`
+	ContentType   string              `xml:"getcontenttype"`
 }
 
 type webDAVResourceType struct {

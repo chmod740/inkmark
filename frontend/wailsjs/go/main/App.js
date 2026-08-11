@@ -6,12 +6,20 @@ export function ActivateRecentDocument(arg1) {
   return window['go']['main']['App']['ActivateRecentDocument'](arg1);
 }
 
+export function BeginWebDAVMutation(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['BeginWebDAVMutation'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function CancelQuitRequest() {
   return window['go']['main']['App']['CancelQuitRequest']();
 }
 
 export function CancelUpdateDownload() {
   return window['go']['main']['App']['CancelUpdateDownload']();
+}
+
+export function CancelWebDAVMutation(arg1, arg2) {
+  return window['go']['main']['App']['CancelWebDAVMutation'](arg1, arg2);
 }
 
 export function CheckForUpdates() {
@@ -34,6 +42,18 @@ export function CloseWorkspace(arg1) {
   return window['go']['main']['App']['CloseWorkspace'](arg1);
 }
 
+export function CloseWorkspaceDocument(arg1, arg2) {
+  return window['go']['main']['App']['CloseWorkspaceDocument'](arg1, arg2);
+}
+
+export function CommitWebDAVDelete(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CommitWebDAVDelete'](arg1, arg2, arg3);
+}
+
+export function CommitWebDAVRename(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CommitWebDAVRename'](arg1, arg2, arg3);
+}
+
 export function ConfirmQuit() {
   return window['go']['main']['App']['ConfirmQuit']();
 }
@@ -46,8 +66,28 @@ export function ConnectWebDAV(arg1) {
   return window['go']['main']['App']['ConnectWebDAV'](arg1);
 }
 
+export function CreateWebDAVDirectory(arg1, arg2) {
+  return window['go']['main']['App']['CreateWebDAVDirectory'](arg1, arg2);
+}
+
+export function CreateWebDAVMarkdownFile(arg1, arg2) {
+  return window['go']['main']['App']['CreateWebDAVMarkdownFile'](arg1, arg2);
+}
+
+export function CreateWorkspaceDirectory(arg1, arg2) {
+  return window['go']['main']['App']['CreateWorkspaceDirectory'](arg1, arg2);
+}
+
+export function CreateWorkspaceMarkdownFile(arg1, arg2) {
+  return window['go']['main']['App']['CreateWorkspaceMarkdownFile'](arg1, arg2);
+}
+
 export function DeleteSavedWebDAVConnection(arg1) {
   return window['go']['main']['App']['DeleteSavedWebDAVConnection'](arg1);
+}
+
+export function DeleteWorkspaceEntry(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['DeleteWorkspaceEntry'](arg1, arg2, arg3, arg4);
 }
 
 export function DownloadUpdate(arg1) {
@@ -138,8 +178,20 @@ export function OverwriteWebDAVFile(arg1, arg2, arg3) {
   return window['go']['main']['App']['OverwriteWebDAVFile'](arg1, arg2, arg3);
 }
 
+export function ReadWebDAVWorkspaceImage(arg1, arg2) {
+  return window['go']['main']['App']['ReadWebDAVWorkspaceImage'](arg1, arg2);
+}
+
 export function ReadWorkspaceDirectory(arg1, arg2) {
   return window['go']['main']['App']['ReadWorkspaceDirectory'](arg1, arg2);
+}
+
+export function ReadWorkspaceImage(arg1, arg2) {
+  return window['go']['main']['App']['ReadWorkspaceImage'](arg1, arg2);
+}
+
+export function RenameWorkspaceEntry(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['RenameWorkspaceEntry'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function RenderingTestDocument() {
@@ -172,6 +224,10 @@ export function SaveWebDAVConnection(arg1) {
 
 export function SaveWebDAVFile(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveWebDAVFile'](arg1, arg2, arg3, arg4);
+}
+
+export function SaveWorkspaceMarkdownFile(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveWorkspaceMarkdownFile'](arg1, arg2, arg3);
 }
 
 export function SelectImageFile() {

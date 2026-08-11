@@ -65,6 +65,7 @@ type Document struct {
 	DisplayLocation  string `json:"displayLocation,omitempty"`
 	WorkspaceID      string `json:"workspaceId,omitempty"`
 	WorkspacePath    string `json:"workspacePath,omitempty"`
+	LocalDocumentID  string `json:"localDocumentId,omitempty"`
 	RemoteDocumentID string `json:"remoteDocumentId,omitempty"`
 	ETag             string `json:"etag,omitempty"`
 }
