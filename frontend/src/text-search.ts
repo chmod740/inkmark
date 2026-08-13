@@ -7,7 +7,14 @@ export interface TextSearchMatch {
   readonly total: number
 }
 
+export interface TextSearchSegment {
+  readonly text: string
+  readonly highlighted: boolean
+  readonly current: boolean
+}
+
 export const maximumSearchQueryLength = 1024
+export const maximumHighlightedTextMatches = 2000
 
 function searchPattern(query: string, caseSensitive: boolean): RegExp {
   const literal = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -66,4 +73,40 @@ export function findTextMatch(
     ordinal,
     total,
   }
+}
+
+export function segmentTextMatches(
+  source: string,
+  rawQuery: unknown,
+  currentStart = -1,
+  caseSensitive = false,
+): readonly TextSearchSegment[] {
+  const query = normalizeSearchQuery(rawQuery)
+  if (!query) return [{ text: source, highlighted: false, current: false }]
+  const pattern = searchPattern(query, caseSensitive)
+  const positions: Array<{ start: number, end: number, current: boolean }> = []
+  let currentPosition: { start: number, end: number, current: boolean } | null = null
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(source))) {
+    const position = { start: match.index, end: match.index + match[0].length, current: match.index === currentStart }
+    if (position.current) currentPosition = position
+    if (positions.length < maximumHighlightedTextMatches) positions.push(position)
+  }
+  if (currentPosition && !positions.some((position) => position.current)) {
+    positions[positions.length - 1] = currentPosition
+    positions.sort((left, right) => left.start - right.start)
+  }
+  if (positions.length === 0) return [{ text: source, highlighted: false, current: false }]
+
+  const segments: TextSearchSegment[] = []
+  let offset = 0
+  for (const position of positions) {
+    if (position.start > offset) {
+      segments.push({ text: source.slice(offset, position.start), highlighted: false, current: false })
+    }
+    segments.push({ text: source.slice(position.start, position.end), highlighted: true, current: position.current })
+    offset = position.end
+  }
+  if (offset < source.length) segments.push({ text: source.slice(offset), highlighted: false, current: false })
+  return segments
 }

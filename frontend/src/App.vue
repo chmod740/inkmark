@@ -122,6 +122,7 @@ import {
   countTextMatches,
   findTextMatch,
   maximumSearchQueryLength,
+  segmentTextMatches,
   type SearchDirection,
 } from './text-search'
 import {
@@ -361,6 +362,7 @@ const renderState = ref('')
 const busy = ref(false)
 const editor = ref<HTMLTextAreaElement | null>(null)
 const findInput = ref<HTMLInputElement | null>(null)
+const findHighlightLayer = ref<HTMLElement | null>(null)
 const findOpen = ref(false)
 const findQuery = ref('')
 const findCaseSensitive = ref(false)
@@ -682,6 +684,13 @@ const themes = computed<Array<{ value: Theme; label: string }>>(() => [
 ])
 const activeThemeLabel = computed(() => themes.value.find((item) => item.value === theme.value)?.label || theme.value)
 const findMatchCount = computed(() => countTextMatches(source.value, findQuery.value, findCaseSensitive.value))
+const findHighlightSegments = computed(() => segmentTextMatches(
+  source.value,
+  findQuery.value,
+  findCurrentStart.value,
+  findCaseSensitive.value,
+))
+const findHighlightsVisible = computed(() => findOpen.value && Boolean(findQuery.value) && findMatchCount.value > 0)
 const findStatusLabel = computed(() => {
   if (!findQuery.value) return t('search.enterQuery')
   if (findMatchCount.value === 0) return t('search.noResults')
@@ -3188,6 +3197,31 @@ function closeFindBar() {
   void nextTick(() => editor.value?.focus({ preventScroll: true }))
 }
 
+function syncFindHighlightScroll() {
+  const target = editor.value
+  const highlightLayer = findHighlightLayer.value
+  if (!target || !highlightLayer) return
+  highlightLayer.scrollTop = target.scrollTop
+  highlightLayer.scrollLeft = target.scrollLeft
+}
+
+function handleEditorScroll() {
+  syncFindHighlightScroll()
+  syncFromEditor()
+}
+
+function scrollCurrentFindMatchIntoView() {
+  const target = editor.value
+  const highlightLayer = findHighlightLayer.value
+  const currentHighlight = highlightLayer?.querySelector<HTMLElement>('.find-highlight-current')
+  if (!target || !currentHighlight) return
+  const centeredTop = currentHighlight.offsetTop - ((target.clientHeight - currentHighlight.offsetHeight) / 2)
+  beginScroll('editor')
+  target.scrollTop = Math.max(0, Math.min(target.scrollHeight - target.clientHeight, centeredTop))
+  syncFindHighlightScroll()
+  syncFromEditor()
+}
+
 function findNext(direction: SearchDirection = 1) {
   const target = editor.value
   if (!target || !findQuery.value) return
@@ -3204,10 +3238,16 @@ function findNext(direction: SearchDirection = 1) {
   findMatchOrdinal.value = match.ordinal
   target.focus({ preventScroll: true })
   target.setSelectionRange(match.start, match.end)
-  findInput.value?.focus({ preventScroll: true })
+  void nextTick(() => {
+    scrollCurrentFindMatchIntoView()
+    findInput.value?.focus({ preventScroll: true })
+  })
 }
 
-watch([findQuery, findCaseSensitive, source], resetFindPosition)
+watch([findQuery, findCaseSensitive, source], () => {
+  resetFindPosition()
+  void nextTick(syncFindHighlightScroll)
+})
 
 function handleSystemLanguageChange() {
   if (languageMode.value === 'auto') void applyLanguageMode('auto').catch(showError)
@@ -4496,20 +4536,35 @@ onBeforeUnmount(() => {
           <button type="button" :aria-label="t('search.next')" :title="t('search.next')" @click="findNext(1)">↓</button>
           <button type="button" class="find-close" :aria-label="t('search.close')" :title="t('search.close')" @click="closeFindBar">×</button>
         </div>
-        <textarea
-          ref="editor"
-          v-model="source"
-          class="source-editor"
-          :aria-label="t('panel.editorAriaLabel')"
-          :disabled="busy"
-          spellcheck="false"
-          @input="beginScroll('editor')"
-          @keydown="beginScroll('editor')"
-          @pointerdown="beginScroll('editor')"
-          @scroll="syncFromEditor"
-          @touchstart.passive="beginScroll('editor')"
-          @wheel.passive="beginScroll('editor')"
-        ></textarea>
+        <div class="source-editor-stack">
+          <pre
+            v-if="findHighlightsVisible"
+            ref="findHighlightLayer"
+            class="source-find-highlights"
+            aria-hidden="true"
+          ><span
+            v-for="(segment, index) in findHighlightSegments"
+            :key="index"
+            :class="{
+              'find-highlight-match': segment.highlighted,
+              'find-highlight-current': segment.current,
+            }"
+          >{{ segment.text }}</span></pre>
+          <textarea
+            ref="editor"
+            v-model="source"
+            class="source-editor"
+            :aria-label="t('panel.editorAriaLabel')"
+            :disabled="busy"
+            spellcheck="false"
+            @input="beginScroll('editor')"
+            @keydown="beginScroll('editor')"
+            @pointerdown="beginScroll('editor')"
+            @scroll="handleEditorScroll"
+            @touchstart.passive="beginScroll('editor')"
+            @wheel.passive="beginScroll('editor')"
+          ></textarea>
+        </div>
         </section>
 
         <section class="preview-panel" :aria-label="t('panel.previewAriaLabel')">

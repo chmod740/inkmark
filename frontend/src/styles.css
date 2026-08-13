@@ -468,7 +468,17 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 var(--inkmark-code-font); o
 .find-bar button:hover { background: #fff; }
 .find-bar .find-close { font-size: 17px; }
 .preview-caption { color: #174e52; }
-.source-editor { width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 24px 26px 80px; resize: none; border: 0; outline: 0; color: #2e3633; background: var(--editor-paper); caret-color: #8c241d; font: 14px/1.72 var(--inkmark-code-font); overflow-anchor: none; tab-size: 4; }
+.source-editor-stack { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--editor-paper); }
+.source-editor, .source-find-highlights { position: absolute; width: 100%; height: 100%; inset: 0; min-width: 0; min-height: 0; margin: 0; padding: 24px 26px 80px; border: 0; font: 14px/1.72 var(--inkmark-code-font); overflow-wrap: break-word; scrollbar-gutter: stable; tab-size: 4; white-space: pre-wrap; }
+.source-editor { z-index: 0; resize: none; outline: 0; color: #2e3633; background: var(--editor-paper); caret-color: #8c241d; overflow-anchor: none; }
+.source-find-highlights { z-index: 1; overflow: scroll; color: transparent; background: transparent; pointer-events: none; scrollbar-color: transparent transparent; }
+.source-editor::-webkit-scrollbar,
+.source-find-highlights::-webkit-scrollbar { width: 14px; height: 14px; }
+.source-find-highlights::-webkit-scrollbar-thumb,
+.source-find-highlights::-webkit-scrollbar-track,
+.source-find-highlights::-webkit-scrollbar-corner { background: transparent; }
+.find-highlight-match { color: #1c2422; background: #f6d84a; border-radius: 2px; box-shadow: 0 0 0 1px rgba(122, 91, 0, .18); }
+.find-highlight-current { color: #181f1d; background: #ff9f3f; box-shadow: 0 0 0 2px rgba(190, 75, 0, .42); }
 .source-editor::selection { color: #102322; background: #b9d8d5; }
 .preview-viewport { min-width: 0; min-height: 0; overflow: auto; outline: 0; background: #fff; overflow-anchor: none; scrollbar-gutter: stable; }
 .view-edit .editor-layout, .view-preview .editor-layout { grid-template-columns: minmax(0, 1fr); }
@@ -1040,6 +1050,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 var(--inkmark-code-font); o
 [data-color-scheme="dark"] .find-bar button:hover { background: #354548; }
 [data-color-scheme="dark"] .font-settings-preview { color: #e4ece9; border-color: #465753; background: #182321; }
 [data-color-scheme="dark"] .font-settings-preview code { color: #bcd7d0; background: transparent; }
+[data-color-scheme="dark"] .source-editor-stack { background: #151d1f; }
 [data-color-scheme="dark"] .source-editor { color: #d5dfdc; background: #151d1f; }
 [data-color-scheme="dark"] .connection-field input { border-color: #52615d; background: #131c1e; }
 [data-color-scheme="dark"] .connection-password-toggle { color: #9dd3cf; }
@@ -1226,6 +1237,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 var(--inkmark-code-font); o
 .app-shell:is(.theme-mist, .theme-paper, .theme-pine, .theme-sakura, .theme-ocean, .theme-indigo, .theme-nord, .theme-obsidian) .source-panel,
 .app-shell:is(.theme-mist, .theme-paper, .theme-pine, .theme-sakura, .theme-ocean, .theme-indigo, .theme-nord, .theme-obsidian) .preview-panel { border-color: var(--theme-border); background: var(--theme-paper); }
 .app-shell:is(.theme-mist, .theme-paper, .theme-pine, .theme-sakura, .theme-ocean, .theme-indigo, .theme-nord, .theme-obsidian) .source-editor { color: var(--theme-ink); background: var(--theme-editor); caret-color: var(--theme-accent); }
+.app-shell:is(.theme-mist, .theme-paper, .theme-pine, .theme-sakura, .theme-ocean, .theme-indigo, .theme-nord, .theme-obsidian) .source-editor-stack { background: var(--theme-editor); }
 .app-shell:is(.theme-mist, .theme-paper, .theme-pine, .theme-sakura, .theme-ocean, .theme-indigo, .theme-nord, .theme-obsidian) .source-editor::selection { color: var(--theme-ink); background: var(--theme-selection); }
 .app-shell:is(.theme-mist, .theme-paper, .theme-pine, .theme-sakura, .theme-ocean, .theme-indigo, .theme-nord, .theme-obsidian) .preview-viewport { background: var(--theme-preview); }
 .app-shell:is(.theme-mist, .theme-paper, .theme-pine, .theme-sakura, .theme-ocean, .theme-indigo, .theme-nord, .theme-obsidian) .status-bar { color: var(--theme-header-ink); border-color: var(--theme-header-bottom); background: linear-gradient(var(--theme-header-top), var(--theme-header-bottom)); }

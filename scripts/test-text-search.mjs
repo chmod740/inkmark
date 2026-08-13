@@ -7,6 +7,7 @@ import {
   findTextMatch,
   maximumSearchQueryLength,
   normalizeSearchQuery,
+  segmentTextMatches,
 } from '../frontend/src/text-search.ts'
 
 test('literal text search counts and navigates with deterministic wrapping', () => {
@@ -28,6 +29,17 @@ test('queries remain literal, bounded, Unicode-safe, and empty-safe', () => {
   assert.equal(normalizeSearchQuery({ toString: () => 'hostile' }), '')
 })
 
+test('highlight segments preserve source text, bound the DOM, and retain the current match', () => {
+  const source = '<tag> Match & match\n' + 'match '.repeat(2_050)
+  const currentStart = source.lastIndexOf('match')
+  const segments = segmentTextMatches(source, 'match', currentStart)
+  assert.equal(segments.map(({ text }) => text).join(''), source)
+  assert.equal(segments.filter(({ highlighted }) => highlighted).length, 2_000)
+  assert.equal(segments.filter(({ current }) => current).length, 1)
+  assert.equal(segments.find(({ current }) => current)?.text, 'match')
+  assert.equal(segments[0].text.startsWith('<tag> '), true)
+})
+
 test('application wires native and keyboard find into an accessible editor search bar', async () => {
   const app = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
   const menu = await readFile(new URL('../menu.go', import.meta.url), 'utf8')
@@ -38,4 +50,6 @@ test('application wires native and keyboard find into an accessible editor searc
   assert.match(app, /@keydown\.enter\.prevent="findNext\(\$event\.shiftKey \? -1 : 1\)"/)
   assert.match(app, /@keydown\.escape\.prevent="closeFindBar"/)
   assert.match(app, /target\.setSelectionRange\(match\.start, match\.end\)/)
+  assert.match(app, /class="source-find-highlights"[\s\S]*find-highlight-current/)
+  assert.match(app, /currentHighlight\.offsetTop[\s\S]*beginScroll\('editor'\)[\s\S]*target\.scrollTop[\s\S]*syncFromEditor\(\)/)
 })
