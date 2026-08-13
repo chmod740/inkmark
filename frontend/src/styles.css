@@ -855,9 +855,58 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .markdown-alert-warning .markdown-alert-title { color: #9a6700; }
 .markdown-alert-caution { border-left-color: #cf222e !important; }
 .markdown-alert-caution .markdown-alert-title { color: #cf222e; }
+.markdown-mention {
+  display: inline-block;
+  padding: 0 .34em;
+  color: #075985;
+  border: 1px solid #bae6fd;
+  border-radius: 999px;
+  background: #f0f9ff;
+  font-size: .92em;
+  font-weight: 650;
+  line-height: 1.45;
+  vertical-align: .04em;
+}
+.markdown-body .footnotes-sep { height: 1px; margin: 36px 0 20px; background: #d0d7de; }
+.markdown-body .footnotes { color: #59636e; font-size: .88em; }
+.markdown-body .footnotes-list { padding-left: 1.7em; }
+.markdown-body .footnote-item { padding-left: .2em; scroll-margin-top: 18px; }
+.markdown-body .footnote-item > p { margin-bottom: 8px; }
+.markdown-body .footnote-ref a,
+.markdown-body .footnote-backref { font-weight: 650; text-decoration: none; }
+.markdown-body .footnote-ref a { padding: 0 .12em; }
+.markdown-body .footnote-backref { margin-left: .28em; }
 .markdown-body pre.mermaid { min-height: 150px; padding: 18px; color: #27312f; border: 1px solid #d0d7de; background: #fbfcfb; text-align: center; white-space: pre-wrap; }
 .markdown-body pre.mermaid svg { display: block; max-width: 100% !important; height: auto; margin: auto; }
 .markdown-body pre.mermaid-error { color: #a40e26; border-color: #e5a2ab; background: #fff4f5; text-align: left; }
+.markdown-body pre.extended-diagram {
+  position: relative;
+  min-height: 150px;
+  padding: 44px 18px 18px;
+  color: #27312f;
+  border: 1px solid #d0d7de;
+  background: #fbfcfb;
+  white-space: pre-wrap;
+}
+.markdown-body pre.extended-diagram::before {
+  position: absolute;
+  top: 12px;
+  left: 18px;
+  padding: 2px 7px;
+  color: #57606a;
+  border: 1px solid #d0d7de;
+  border-radius: 999px;
+  background: #f6f8fa;
+  content: attr(data-kind);
+  font: 700 10px/1.4 "SFMono-Regular", Consolas, monospace;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.markdown-body pre.extended-diagram-rendered { padding: 18px; text-align: center; }
+.markdown-body pre.extended-diagram-rendered::before { display: none; }
+.markdown-body pre.extended-diagram svg,
+.markdown-body pre.extended-diagram canvas { display: block; max-width: 100%; height: auto; margin: auto; }
+.markdown-body pre.extended-diagram-error { color: #a40e26; border-color: #e5a2ab; background: #fff4f5; }
 .render-error { color: #a40e26; white-space: pre-wrap; }
 
 .theme-clean .preview-viewport { background: #edf0ed; }
@@ -951,7 +1000,14 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .theme-dark .markdown-body pre, .theme-dark .markdown-body th, .theme-dark .markdown-body tr:nth-child(2n) { background: #161b22; }
 .theme-dark .markdown-body pre, .theme-dark .markdown-body th, .theme-dark .markdown-body td, .theme-dark .markdown-body details { border-color: #30363d; }
 .theme-dark .markdown-alert { color: #c9d1d9 !important; background: #161b22; }
+.theme-dark .markdown-mention { color: #79c0ff; border-color: #234e70; background: #102a43; }
+.theme-dark .markdown-body .footnotes-sep { background: #30363d; }
+.theme-dark .markdown-body .footnotes { color: #8b949e; }
 .theme-dark .markdown-body pre.mermaid { color: #c9d1d9; background: #111820; }
+.theme-dark .markdown-body pre.extended-diagram { color: #c9d1d9; border-color: #30363d; background: #111820; }
+.theme-dark .markdown-body pre.extended-diagram::before { color: #8b949e; border-color: #30363d; background: #161b22; }
+.theme-dark .markdown-body pre.extended-diagram-rendered { color: #1f2328; border-color: #57606a; background: #f6f8fa; }
+.theme-dark .markdown-body pre.extended-diagram-error { color: #f0aaa5; border-color: #704440; background: #321e1e; }
 .theme-dark .markdown-body .image-resource-error { color: #f0aaa5; border-color: #704440; background: #321e1e; }
 .theme-dark .hljs { color: #c9d1d9; background: #161b22; }
 .theme-dark .hljs-comment, .theme-dark .hljs-quote { color: #8b949e; }

@@ -7,6 +7,14 @@ import MarkdownIt from 'markdown-it'
 import taskLists from 'markdown-it-task-lists'
 import { katex as markdownKatex } from '@mdit/plugin-katex'
 import mermaid from 'mermaid'
+import {
+  classifyExtendedFence,
+  convertBulletMindmap,
+  installMarkdownExtensions,
+  parseCalloutMarker,
+  segmentMentions,
+} from './markdown-extensions'
+import { renderExtendedDiagrams } from './extended-diagrams'
 import DirectorySidebar from './DirectorySidebar.vue'
 import inkmarkIcon from './assets/inkmark-icon.svg?no-inline'
 import {
@@ -29,6 +37,7 @@ import {
   BoundedCache,
   LatestPreviewCommit,
   maximumMermaidCacheEntries,
+  maximumMermaidDiagramsPerPreview,
   mermaidCacheKey,
 } from './preview-render'
 import {
@@ -411,6 +420,7 @@ const imageResolverGate = new ImageResolverGate()
 const imageDecodeGate = new ImageDecodeGate()
 const pendingImageAssets = new Map<string, PendingImageAssetRequest>()
 let activePreviewImages = new PreviewImageResourceSet()
+let activeExtendedDiagramDispose: (() => void) | null = null
 const workspacePreviewImages = new PreviewImageResourceSet()
 type MermaidRenderResult = Awaited<ReturnType<typeof mermaid.render>>
 const mermaidRenderCache = new BoundedCache<string, MermaidRenderResult>(maximumMermaidCacheEntries)
@@ -495,6 +505,7 @@ const markdown = new MarkdownIt({
   linkify: true,
   typographer: true,
 })
+installMarkdownExtensions(markdown)
 markdown.use(taskLists, { enabled: false, label: true, labelAfter: true })
 markdown.use(markdownKatex, { delimiters: 'all', throwOnError: false })
 markdown.core.ruler.push('inkmark-source-lines', (state) => {
@@ -526,11 +537,22 @@ markdown.renderer.rules.math_block = (tokens, index) => {
 }
 const defaultFence = markdown.renderer.rules.fence || ((tokens, index, options, _env, self) => self.renderToken(tokens, index, options))
 markdown.renderer.rules.fence = (tokens, index, options, env, self) => {
-  const language = tokens[index].info.trim().split(/\s+/)[0].toLowerCase()
-  if (language === 'mermaid' || language === 'mmd') {
-    const sourceLine = tokens[index].map?.[0]
-    const sourceAttribute = sourceLine === undefined ? '' : ` data-source-line="${sourceLine}"`
-    return `<pre class="mermaid"${sourceAttribute}>${markdown.utils.escapeHtml(tokens[index].content)}</pre>`
+  const token = tokens[index]
+  const classification = classifyExtendedFence(token.info, token.content)
+  if (classification.status !== 'supported') return defaultFence(tokens, index, options, env, self)
+
+  const sourceLine = token.map?.[0]
+  const sourceAttribute = sourceLine === undefined ? '' : ` data-source-line="${sourceLine}"`
+  if (classification.kind === 'mermaid') {
+    return `<pre class="mermaid" data-kind="mermaid"${sourceAttribute}>${markdown.utils.escapeHtml(classification.source)}</pre>`
+  }
+  if (classification.kind === 'mindmap') {
+    const definition = convertBulletMindmap(classification.source)
+    if (!definition) return defaultFence(tokens, index, options, env, self)
+    return `<pre class="mermaid" data-kind="mindmap"${sourceAttribute}>${markdown.utils.escapeHtml(definition)}</pre>`
+  }
+  if (classification.kind === 'echarts' || classification.kind === 'abc' || classification.kind === 'graphviz') {
+    return `<pre class="extended-diagram" data-kind="${classification.kind}" data-extended-diagram="${classification.kind}"${sourceAttribute}>${markdown.utils.escapeHtml(classification.source)}</pre>`
   }
   return defaultFence(tokens, index, options, env, self)
 }
@@ -2513,7 +2535,7 @@ async function capturePreviewCanvas(
   try {
     await document.fonts?.ready
     await waitForLocalImages(clone)
-    if (fitPDFPages) fitTallMermaidForPDF(clone, captureWidth)
+    if (fitPDFPages) fitTallDiagramsForPDF(clone, captureWidth)
     const width = Math.max(1, clone.scrollWidth)
     const height = Math.max(1, clone.scrollHeight)
     // Keep the raw RGBA canvas below roughly 72 MB. The Base64 bridge and PDF
@@ -2563,11 +2585,11 @@ async function capturePreviewCanvas(
   }
 }
 
-function fitTallMermaidForPDF(root: HTMLElement, captureWidth: number) {
+function fitTallDiagramsForPDF(root: HTMLElement, captureWidth: number) {
   // The A4 content box is 190 × 277 mm. Reserve space for the section
   // heading/margins, then scale only diagrams that cannot fit on one page.
   const maximumDiagramHeight = Math.floor(captureWidth * 277 / 190 - 150)
-  root.querySelectorAll<SVGSVGElement>('.mermaid-rendered svg').forEach((svg) => {
+  root.querySelectorAll<SVGSVGElement>('.mermaid-rendered svg, .extended-diagram-rendered svg').forEach((svg) => {
     const bounds = svg.getBoundingClientRect()
     if (bounds.width <= 0 || bounds.height <= maximumDiagramHeight) return
     const scale = maximumDiagramHeight / bounds.height
@@ -3285,6 +3307,8 @@ async function renderNow(sourceText = source.value, renderTheme = theme.value): 
   if (!target) return false
   const sequence = previewCommit.begin()
   const nextPreviewImages = new PreviewImageResourceSet()
+  const nextExtendedDiagram = { dispose: null as (() => void) | null }
+  let acceptExtendedDiagramResult = true
   const imageContext = currentImageRenderContext()
   renderState.value = t('status.rendering')
   try {
@@ -3293,7 +3317,8 @@ async function renderNow(sourceText = source.value, renderTheme = theme.value): 
       USE_PROFILES: { html: true },
       ADD_TAGS: ['details', 'summary', 'mark'],
       ADD_ATTR: [
-        'target', 'rel', 'checked', 'disabled', 'data-alert', 'data-display-mode', 'data-source-line',
+        'target', 'rel', 'checked', 'disabled', 'data-alert', 'data-display-mode', 'data-source-line', 'data-kind',
+        'data-extended-diagram', 'data-extended-diagram-state',
         'data-inkmark-image-source', 'data-inkmark-image-alt', 'data-inkmark-image-title',
       ],
       // No resource-bearing HTML reaches the detached staging DOM. Markdown
@@ -3313,12 +3338,25 @@ async function renderNow(sourceText = source.value, renderTheme = theme.value): 
       highlightCode(staging)
       await Promise.all([
         renderDiagrams(staging, sequence, renderTheme),
+        renderExtendedDiagrams(staging, {
+          isCurrent: () => previewCommit.isCurrent(sequence),
+          echartsRenderer: 'svg',
+          chartWidth: target.clientWidth,
+          chartHeight: 420,
+        }).then((result) => {
+          if (!acceptExtendedDiagramResult || !previewCommit.isCurrent(sequence)) result.dispose()
+          else nextExtendedDiagram.dispose = result.dispose
+        }),
         preparePreviewImages(staging, sequence, imageContext, nextPreviewImages),
       ])
       return staging
     }, (staging) => {
       // All expensive and asynchronous work happens off-screen. Replacing the
       // children once keeps the old preview stable until the new one is ready.
+      acceptExtendedDiagramResult = false
+      activeExtendedDiagramDispose?.()
+      activeExtendedDiagramDispose = nextExtendedDiagram.dispose
+      nextExtendedDiagram.dispose = null
       target.classList.remove('render-error')
       target.replaceChildren(...Array.from(staging.childNodes))
       activePreviewImages.release()
@@ -3327,12 +3365,18 @@ async function renderNow(sourceText = source.value, renderTheme = theme.value): 
       reconcileActiveScroll()
     })
     if (!committed) {
+      acceptExtendedDiagramResult = false
+      nextExtendedDiagram.dispose?.()
+      nextExtendedDiagram.dispose = null
       nextPreviewImages.release()
       return false
     }
     renderState.value = t('status.rendered')
     return true
   } catch (error) {
+    acceptExtendedDiagramResult = false
+    nextExtendedDiagram.dispose?.()
+    nextExtendedDiagram.dispose = null
     nextPreviewImages.release()
     if (!previewCommit.isCurrent(sequence)) return false
     target.textContent = t('error.markdownRenderFailed', { message: errorMessage(error) })
@@ -3345,13 +3389,15 @@ async function renderNow(sourceText = source.value, renderTheme = theme.value): 
 function decoratePreview(root: HTMLElement) {
   root.classList.remove('render-error')
   linkifyTextNodes(root)
+  decorateMentions(root)
 
   root.querySelectorAll<HTMLQuoteElement>('blockquote').forEach((blockquote) => {
     if (blockquote.classList.contains('markdown-alert')) return
-    const first = blockquote.firstElementChild
-    const match = first?.textContent?.match(/^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i)
-    if (!first || !match) return
-    const type = match[1].toLowerCase()
+    const first = blockquote.firstElementChild as HTMLElement | null
+    if (!first) return
+    const marker = parseCalloutMarker(first.textContent || '')
+    if (!marker || !removeLeadingText(first, marker.marker.length, /\r?\n/u.test(marker.marker))) return
+    const type = marker.type
     const labels: Record<string, string> = {
       note: t('alert.note'),
       tip: t('alert.tip'),
@@ -3359,7 +3405,6 @@ function decoratePreview(root: HTMLElement) {
       warning: t('alert.warning'),
       caution: t('alert.caution'),
     }
-    first.textContent = (first.textContent || '').replace(match[0], '')
     const title = document.createElement('div')
     title.className = 'markdown-alert-title'
     title.textContent = labels[type]
@@ -3379,7 +3424,6 @@ function decoratePreview(root: HTMLElement) {
     checkbox.disabled = true
   })
   root.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((anchor) => {
-    anchor.rel = 'noopener noreferrer'
     anchor.addEventListener('click', (event) => {
       const href = anchor.getAttribute('href') || ''
       if (href === '#inkmark-render-test') {
@@ -3392,15 +3436,84 @@ function decoratePreview(root: HTMLElement) {
         void showWelcome()
         return
       }
+      if (href.startsWith('#')) {
+        if (scrollToPreviewAnchor(anchor, href)) event.preventDefault()
+        return
+      }
       if (/^(https?:|mailto:)/i.test(href)) {
         event.preventDefault()
         void OpenExternal(href)
       }
     })
+    if (/^(https?:|mailto:)/i.test(anchor.getAttribute('href') || '')) {
+      anchor.rel = 'noopener noreferrer'
+    }
   })
   root.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6').forEach((heading, index) => {
     heading.id = `heading-${index + 1}`
   })
+}
+
+function removeLeadingText(root: HTMLElement, characterCount: number, removeLeadingBreak = false) {
+  let remaining = characterCount
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  while (remaining > 0 && walker.nextNode()) {
+    const node = walker.currentNode as Text
+    const removed = Math.min(remaining, node.data.length)
+    node.deleteData(0, removed)
+    remaining -= removed
+  }
+  if (remaining !== 0) return false
+  if (removeLeadingBreak) {
+    while (root.firstChild?.nodeType === Node.TEXT_NODE && !root.firstChild.textContent) {
+      root.firstChild.remove()
+    }
+    if (root.firstChild instanceof HTMLBRElement) root.firstChild.remove()
+  }
+  return true
+}
+
+function decorateMentions(root: HTMLElement) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  const nodes: Text[] = []
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text
+    if (!node.data.includes('@')) continue
+    if (node.parentElement?.closest('a, code, pre, style, script, textarea, .markdown-mention')) continue
+    if (segmentMentions(node.data).some((segment) => segment.kind === 'mention')) nodes.push(node)
+  }
+
+  nodes.forEach((node) => {
+    const fragment = document.createDocumentFragment()
+    segmentMentions(node.data).forEach((segment) => {
+      if (segment.kind === 'text') {
+        fragment.append(segment.value)
+        return
+      }
+      const mention = document.createElement('span')
+      mention.className = 'markdown-mention'
+      mention.dataset.username = segment.username
+      mention.textContent = segment.value
+      fragment.append(mention)
+    })
+    node.replaceWith(fragment)
+  })
+}
+
+function scrollToPreviewAnchor(anchor: HTMLAnchorElement, href: string) {
+  let targetID = ''
+  try {
+    targetID = decodeURIComponent(href.slice(1))
+  } catch {
+    return false
+  }
+  if (!targetID) return false
+  const previewRoot = anchor.closest<HTMLElement>('.markdown-body')
+  const destination = Array.from(previewRoot?.querySelectorAll<HTMLElement>('[id]') || [])
+    .find((candidate) => candidate.id === targetID)
+  if (!destination) return false
+  destination.scrollIntoView({ block: 'start' })
+  return true
 }
 
 function linkifyTextNodes(root: HTMLElement) {
@@ -3408,7 +3521,7 @@ function linkifyTextNodes(root: HTMLElement) {
   const nodes: Text[] = []
   while (walker.nextNode()) {
     const node = walker.currentNode as Text
-    if (!node.parentElement?.closest('a, code, pre, script, style') && /https?:\/\//.test(node.data)) {
+    if (!node.parentElement?.closest('a, code, pre, script, style, textarea, .markdown-mention') && /https?:\/\//.test(node.data)) {
       nodes.push(node)
     }
   }
@@ -3470,6 +3583,14 @@ function highlightCode(root: HTMLElement) {
 async function renderDiagrams(root: HTMLElement, sequence: number, renderTheme: Theme) {
   const diagrams = Array.from(root.querySelectorAll<HTMLElement>('pre.mermaid'))
   if (!diagrams.length) return
+  diagrams.slice(maximumMermaidDiagramsPerPreview).forEach((diagram) => {
+    diagram.classList.add('mermaid-error')
+    diagram.dataset.mermaidState = 'limit'
+    diagram.setAttribute('role', 'img')
+    diagram.setAttribute('aria-label', 'diagram could not be rendered')
+    diagram.textContent = '[diagram unavailable: diagram count exceeds the limit]'
+  })
+  diagrams.length = Math.min(diagrams.length, maximumMermaidDiagramsPerPreview)
   const usedCacheKeys = new Set<string>()
   mermaid.initialize({
     startOnLoad: false,
@@ -3938,6 +4059,8 @@ onBeforeUnmount(() => {
   previewCommit.invalidate()
   if (updateState.value === 'downloading') void CancelUpdateDownload()
   mermaidRenderCache.clear()
+  activeExtendedDiagramDispose?.()
+  activeExtendedDiagramDispose = null
   pendingImageAssets.clear()
   activePreviewImages.release()
   workspacePreviewImages.release()

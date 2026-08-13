@@ -33,6 +33,8 @@ pnpm --dir frontend test:i18n
 pnpm --dir frontend test:export
 pnpm --dir frontend test:scroll
 pnpm --dir frontend test:preview
+pnpm --dir frontend test:markdown
+pnpm --dir frontend test:diagrams
 pnpm --dir frontend test:update
 pnpm --dir frontend test:ui
 pnpm --dir frontend test:workspace

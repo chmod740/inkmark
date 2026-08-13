@@ -23,7 +23,7 @@
 - macOS 与 Windows 原生菜单，集中提供文件、编辑、视图、格式、帮助和更新功能
 - 自动检测、简体中文、English 三种语言模式；默认自动跟随系统语言
 - 普通启动显示对应语言的本地欢迎页；从 Finder 或资源管理器打开 Markdown 文件时直接显示目标内容
-- 欢迎页和“帮助”菜单提供中英双语综合渲染测试页，覆盖表格、公式、代码、提示块、安全 HTML 与十类 Mermaid 图
+- 欢迎页和“帮助”菜单提供中英双语综合渲染测试页，覆盖表格、公式、代码、表情、脚注、提示块、安全 HTML、Mermaid、思维导图、ECharts、ABC 乐谱与 Graphviz
 - 应用、文件关联、桌面快捷方式和应用内使用统一图标
 - “关于墨笺”显示版本、作者和更新状态
 - “帮助”菜单可以检查 GitHub Releases，在应用内下载并校验当前平台安装包；确认未保存文档后自动关闭旧版本并打开系统安装界面
@@ -31,9 +31,11 @@
 ## Markdown 与预览
 
 - CommonMark 与 GitHub Flavored Markdown
-- 表格、任务列表、删除线、自动链接和提示块
+- 表格、任务列表、删除线、自动链接、Emoji 短码、脚注，以及 GitHub 与 `NOTE:` 风格提示块
+- 普通文本中的 `@用户名` 可作视觉标记；它不会查询用户目录、发送通知或生成外部链接
 - KaTeX 行内公式与块级公式
-- Mermaid 流程图、时序图等图表
+- Mermaid 流程图、时序图等图表，并可把两空格缩进的 `mindmap` 列表转换为思维导图
+- 受限 JSON 折线图 ECharts、静态 ABC 五线谱，以及在可超时 Worker 中生成的 Graphviz SVG；三类输出均经过安全清理且不加载外部资源
 - JavaScript、TypeScript、Python、Go、Rust、JSON、Shell 等常用代码高亮
 - 原始 HTML 安全过滤，阻止脚本、iframe、object、embed 和原始 SVG 注入
 - 静态 PNG、JPEG、GIF 与 WebP 图片；支持本地相对地址、Data URI、私有 WebDAV 相对地址和公开 HTTPS 地址四种渲染方式
@@ -53,7 +55,7 @@
 
 从 [GitHub Releases](https://github.com/chmod740/inkmark/releases/latest) 下载对应安装包：
 
-- macOS 11 或更高版本：优先使用 `macos-universal.pkg` 原位升级，也提供同时支持 Apple Silicon 与 Intel 的 DMG 和 ZIP
+- macOS 11 或更高版本（建议安装最新系统更新，以获得完整 Graphviz WebView/WASM 兼容性）：优先使用 `macos-universal.pkg` 原位升级，也提供同时支持 Apple Silicon 与 Intel 的 DMG 和 ZIP
 - Windows 10/11 x64：`windows-amd64-setup.exe`
 
 macOS 与 Windows 安装包目前未使用商业代码签名证书。首次运行时系统可能显示 Gatekeeper 或 SmartScreen 提示，请确认文件来自本仓库 Release，并使用同一 Release 中的 `SHA256SUMS` 校验完整性。
@@ -72,7 +74,7 @@ macOS 与 Windows 安装包目前未使用商业代码签名证书。首次运�
 
 ## 离线与联网说明
 
-编辑器运行时不会从 CDN 加载 JavaScript、CSS、字体、KaTeX、Mermaid 或高亮资源。本地相对图片和 Data URI 图片可完全离线预览与导出。
+编辑器运行时不会从 CDN 加载 JavaScript、CSS、字体、KaTeX、Mermaid、ECharts、ABC、Graphviz 或高亮资源。本地相对图片、Data URI 图片和内置图表可完全离线预览与导出。
 
 以下操作会按用户请求联网：
 
@@ -114,6 +116,8 @@ pnpm --dir frontend test:i18n
 pnpm --dir frontend test:export
 pnpm --dir frontend test:scroll
 pnpm --dir frontend test:preview
+pnpm --dir frontend test:markdown
+pnpm --dir frontend test:diagrams
 pnpm --dir frontend test:update
 pnpm --dir frontend test:ui
 pnpm --dir frontend test:workspace
@@ -121,10 +125,11 @@ pnpm --dir frontend test:webdav
 pnpm --dir frontend test:saved-webdav
 pnpm --dir frontend test:image
 pnpm --dir frontend test:installer
+pnpm --dir frontend test:notices
 node scripts/verify-offline.mjs
 ```
 
-测试覆盖本地文件读写、WebDAV 认证与目录解析、系统凭据库连接管理、路径编码、ETag 冲突、远端保存、本地与 WebDAV 工作区的新建/重命名/递归删除、图片条目安全预览、本地与 WebDAV 图片导入、四类图片渲染、公共图片网络边界、受限工作区目录访问、侧边栏懒加载与上下文菜单、最近项目、未保存文档切换与原生关闭守卫、语言设置、原生菜单、安全升级下载与安装编排、原子预览提交、版本比较与 Release 响应、导出结构、外部资源策略、同步滚动、大文档锚点上限和离线资源完整性。真实 WebDAV 回归测试只在运行时注入测试地址与凭据时执行，并会清理随机命名的临时资源。
+测试覆盖本地文件读写、WebDAV 认证与目录解析、系统凭据库连接管理、路径编码、ETag 冲突、远端保存、本地与 WebDAV 工作区的新建/重命名/递归删除、图片条目安全预览、本地与 WebDAV 图片导入、四类图片渲染、Emoji/脚注/提示块/提及、思维导图与三类静态图形的输入限制和恶意载荷拒绝、公共图片网络边界、受限工作区目录访问、侧边栏懒加载与上下文菜单、最近项目、未保存文档切换与原生关闭守卫、语言设置、原生菜单、安全升级下载与安装编排、原子预览提交、版本比较与 Release 响应、导出结构、外部资源策略、同步滚动、大文档锚点上限和离线资源完整性。真实 WebDAV 回归测试只在运行时注入测试地址与凭据时执行，并会清理随机命名的临时资源。
 
 ## 项目结构
 
@@ -145,6 +150,8 @@ node scripts/verify-offline.mjs
 - `frontend/src/export-document.ts`：HTML、PDF、PNG、TXT 和 Word 兼容导出
 - `frontend/src/scroll-sync.ts`：稳定的双向滚动同步
 - `frontend/src/preview-render.ts`：预览原子提交与 Mermaid 缓存
+- `frontend/src/markdown-extensions.ts`：Emoji、脚注、提示块、提及和思维导图语法适配
+- `frontend/src/extended-diagrams.ts`、`graphviz-worker.ts`：受限 ECharts、ABC 与隔离 Graphviz 静态渲染
 - `frontend/src/image-resources.ts`：四类图片来源识别、预览资源生命周期与导出转换
 - `samples/markdown-rendering-test.md`：应用内置的中英双语综合渲染样例
 - `scripts/`：构建、打包和回归测试脚本

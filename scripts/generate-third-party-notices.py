@@ -18,6 +18,36 @@ MANIFESTS = (ROOT / "go.mod", ROOT / "go.sum", ROOT / "frontend/package.json", R
 GO_TARGETS = (("macOS", "darwin", "arm64"), ("Windows", "windows", "amd64"))
 GO_TAGS = "desktop production wv2runtime.download"
 LICENSE_NAME = re.compile(r"^(?:licen[cs]e|copying|notice|third.?party)", re.IGNORECASE)
+VIZ_PACKAGE = ("@viz-js/viz", "3.29.0")
+VIZ_SOURCE_REVISION = "96be4ed32789125f00cffa3ae390bd8809fc9c03"
+VIZ_WRAPPER_LICENSE = {
+    "path": ROOT / "scripts/licenses/viz-js-3.29.0-MIT.txt",
+    "sha256": "f1fb91bf7cbcb42b2af56949e4fa909e1979d5b57c2826cabacdb4b631457720",
+    "source": "https://github.com/mdaines/viz-js/blob/release-viz-3.29.0/LICENSE",
+}
+VIZ_EMBEDDED_COMPONENTS = (
+    {
+        "name": "Graphviz",
+        "version": "15.1.1",
+        "license": "EPL-2.0",
+        "uri": "https://gitlab.com/api/v4/projects/4207231/packages/generic/graphviz-releases/15.1.1/graphviz-15.1.1.tar.gz",
+        "archive_sha256": "d511d8938bbfe985b84506c96d1bbf1acba4ad88e62b51421a8b954e572f30d9",
+        "license_path": ROOT / "scripts/licenses/Graphviz-15.1.1-EPL-2.0.txt",
+        # The upstream tag's COPYING has no final newline; normalized_text adds one.
+        "license_sha256": "8c349f80764d0648e645f41ef23772a70c995a0924b5235f735f4a3d09df127c",
+        "license_source": "https://gitlab.com/graphviz/graphviz/-/blob/15.1.1/COPYING",
+    },
+    {
+        "name": "Expat",
+        "version": "2.8.1",
+        "license": "MIT",
+        "uri": "https://github.com/libexpat/libexpat/releases/download/R_2_8_1/expat-2.8.1.tar.gz",
+        "archive_sha256": "a52eb72108be160e190b5cafa5bba8663f1313f2013e26060d1c18e26e31067b",
+        "license_path": ROOT / "scripts/licenses/Expat-2.8.1-MIT.txt",
+        "license_sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
+        "license_source": "https://github.com/libexpat/libexpat/blob/R_2_8_1/expat/COPYING",
+    },
+)
 
 
 def run(*args: str, env: dict[str, str] | None = None) -> str:
@@ -40,6 +70,19 @@ def normalized_text(path: Path) -> str:
 
 def manifest_digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def verified_license_text(path: Path, expected_sha256: str) -> str:
+    if not path.is_file():
+        raise RuntimeError(f"vendored license text is missing: {path.relative_to(ROOT)}")
+    text = normalized_text(path)
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    if digest != expected_sha256:
+        raise RuntimeError(
+            f"vendored license text changed: {path.relative_to(ROOT)} "
+            f"(expected {expected_sha256}, got {digest})"
+        )
+    return text
 
 
 def license_files(root: Path) -> list[Path]:
@@ -82,6 +125,56 @@ def go_inventory() -> tuple[list[dict[str, object]], list[tuple[str, str, str]]]
     return inventory, texts
 
 
+def viz_license_texts(package_root: Path) -> list[tuple[str, str, str]]:
+    provenance_path = package_root / "lib/provenance.json"
+    if not provenance_path.is_file():
+        raise RuntimeError("@viz-js/viz has no build provenance")
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+
+    build_root = provenance.get("predicate", {}).get("buildDefinition", {}).get("externalParameters", {}).get("request", {}).get("root", {})
+    revision = build_root.get("request", {}).get("args", {}).get("vcs:revision")
+    if revision != VIZ_SOURCE_REVISION:
+        raise RuntimeError(f"unexpected @viz-js/viz source revision: {revision!r}")
+
+    dependencies = provenance.get("predicate", {}).get("buildDefinition", {}).get("resolvedDependencies", [])
+    resolved = {
+        item.get("uri"): item.get("digest", {}).get("sha256")
+        for item in dependencies
+        if isinstance(item, dict)
+    }
+    for embedded in VIZ_EMBEDDED_COMPONENTS:
+        actual_digest = resolved.get(embedded["uri"])
+        if actual_digest != embedded["archive_sha256"]:
+            raise RuntimeError(
+                f"@viz-js/viz provenance mismatch for {embedded['name']}@{embedded['version']}: "
+                f"expected {embedded['archive_sha256']}, got {actual_digest!r}"
+            )
+
+    subject_digests = {
+        item.get("name"): item.get("digest", {}).get("sha256")
+        for item in provenance.get("subject", [])
+        if isinstance(item, dict)
+    }
+    backend_path = package_root / "lib/backend.js"
+    expected_backend_digest = subject_digests.get("backend.js")
+    if not expected_backend_digest or manifest_digest(backend_path) != expected_backend_digest:
+        raise RuntimeError("@viz-js/viz backend does not match its provenance subject")
+
+    component = f"{VIZ_PACKAGE[0]}@{VIZ_PACKAGE[1]}"
+    texts = [(
+        component,
+        f"{VIZ_WRAPPER_LICENSE['path'].relative_to(ROOT)} (official license: {VIZ_WRAPPER_LICENSE['source']})",
+        verified_license_text(VIZ_WRAPPER_LICENSE["path"], VIZ_WRAPPER_LICENSE["sha256"]),
+    )]
+    for embedded in VIZ_EMBEDDED_COMPONENTS:
+        texts.append((
+            f"{component} / embedded {embedded['name']}@{embedded['version']}",
+            f"{embedded['license_path'].relative_to(ROOT)} (official license: {embedded['license_source']})",
+            verified_license_text(embedded["license_path"], embedded["license_sha256"]),
+        ))
+    return texts
+
+
 def node_inventory() -> tuple[list[dict[str, str]], list[tuple[str, str, str]]]:
     raw = run("pnpm", "--dir", "frontend", "licenses", "list", "--prod", "--json")
     report = json.loads(raw)
@@ -100,11 +193,33 @@ def node_inventory() -> tuple[list[dict[str, str]], list[tuple[str, str, str]]]:
                 }
                 paths[key] = package_root
 
+    if VIZ_PACKAGE in components:
+        components[VIZ_PACKAGE]["license"] = "MIT; embeds Graphviz 15.1.1 (EPL-2.0) and Expat 2.8.1 (MIT)"
+        components[VIZ_PACKAGE]["source"] = "https://github.com/mdaines/viz-js/tree/release-viz-3.29.0/packages/viz"
+
     inventory = [components[key] for key in sorted(components)]
+    if VIZ_PACKAGE in components:
+        inventory.extend({
+            "component": f"{VIZ_PACKAGE[0]}@{VIZ_PACKAGE[1]} embedded {embedded['name']}@{embedded['version']}",
+            "license": embedded["license"],
+            "source": embedded["uri"],
+        } for embedded in VIZ_EMBEDDED_COMPONENTS)
+        inventory.sort(key=lambda item: item["component"])
     texts: list[tuple[str, str, str]] = []
     for key in sorted(components):
         package_root = paths[key]
         files = license_files(package_root)
+        if key == VIZ_PACKAGE:
+            # The published npm archive omits its repository LICENSE and embeds
+            # native WASM components. Verify SLSA provenance instead of trusting
+            # package.json's MIT field, then use exact texts pinned from upstream.
+            texts.extend(viz_license_texts(package_root))
+            continue
+        if key == ("echarts", "6.1.0"):
+            d3_license = package_root / "licenses/LICENSE-d3"
+            if not d3_license.is_file():
+                raise RuntimeError("echarts@6.1.0 is missing licenses/LICENSE-d3")
+            files.append(d3_license)
         if key == ("pako", "2.2.0"):
             zlib_notice = package_root / "lib/zlib/README"
             if zlib_notice.is_file():

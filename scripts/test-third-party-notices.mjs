@@ -6,6 +6,11 @@ import test from 'node:test'
 const root = new URL('../', import.meta.url)
 const noticeURL = new URL('../THIRD_PARTY_NOTICES.txt', import.meta.url)
 const manifestNames = ['go.mod', 'go.sum', 'frontend/package.json', 'frontend/pnpm-lock.yaml']
+const pinnedLicenseFiles = {
+  'scripts/licenses/viz-js-3.29.0-MIT.txt': 'f1fb91bf7cbcb42b2af56949e4fa909e1979d5b57c2826cabacdb4b631457720',
+  'scripts/licenses/Graphviz-15.1.1-EPL-2.0.txt': '8c349f80764d0648e645f41ef23772a70c995a0924b5235f735f4a3d09df127c',
+  'scripts/licenses/Expat-2.8.1-MIT.txt': '31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87',
+}
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
@@ -38,8 +43,22 @@ test('notice covers platform binaries, frontend runtime dependencies, and KaTeX 
     'jspdf@4.2.1',
     'katex@0.18.1',
     'markdown-it@15.0.0',
+    'markdown-it-emoji@3.1.0',
+    'markdown-it-footnote@4.0.0',
     'markdown-it-task-lists@2.1.1',
     'mermaid@11.16.1',
+    'echarts@6.1.0',
+    'echarts@6.1.0 (licenses/LICENSE-d3)',
+    'Copyright 2010-2016 Mike Bostock',
+    'abcjs@6.7.0',
+    '@viz-js/viz@3.29.0 (MIT; embeds Graphviz 15.1.1 (EPL-2.0) and Expat 2.8.1 (MIT)',
+    '@viz-js/viz@3.29.0 / embedded Graphviz@15.1.1',
+    '@viz-js/viz@3.29.0 / embedded Expat@2.8.1',
+    'graphviz-releases/15.1.1/graphviz-15.1.1.tar.gz',
+    'libexpat/releases/download/R_2_8_1/expat-2.8.1.tar.gz',
+    'Eclipse Public License - v 2.0',
+    'Copyright (c) Michael Daines',
+    'Copyright (c) 1998-2000 Thai Open Source Software Center Ltd and Clark Cooper',
     'vue@3.5.40',
     'khroma@2.1.0',
     'pako@2.2.0 (lib/zlib/README)',
@@ -51,4 +70,11 @@ test('notice covers platform binaries, frontend runtime dependencies, and KaTeX 
   for (const marker of required) assert.ok(notice.includes(marker), `${marker} must be covered`)
   assert.ok((notice.match(/^License text \d+/gm) || []).length >= 50, 'full component license texts must be present')
   assert.doesNotMatch(notice, /\/Users\/|[A-Z]:\\Users\\/, 'notice must not expose build-machine paths')
+})
+
+test('manually pinned WASM license texts match their audited upstream snapshots', async () => {
+  for (const [name, expected] of Object.entries(pinnedLicenseFiles)) {
+    const bytes = await readFile(new URL(name, root))
+    assert.equal(sha256(bytes), expected, `${name} must stay identical to its audited repository snapshot`)
+  }
 })

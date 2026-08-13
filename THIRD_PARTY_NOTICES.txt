@@ -10,8 +10,8 @@ third-party licenses reproduced below.
 This file is generated from the release dependency manifests. Exact inputs:
 - go.mod SHA-256 de0abf071f9551c8e7d30f7e6bc69c9e5b167a729d2b6c4d7a99b2db83008401
 - go.sum SHA-256 a1962f50dee0646a0c3f7190c88e1e45ae0ddc62bdad9d1b880aaa35831542cc
-- frontend/package.json SHA-256 6b5b053bce40d5273619656e1cb307f78011e072e112b108f6976f18849df787
-- frontend/pnpm-lock.yaml SHA-256 12a11d491bd8c6a975e23e3e39c504a0f7f1c1b88e28689a49d9c9bc52c705d4
+- frontend/package.json SHA-256 0cb54610d1abf8e5afda8e989b257417b926cc36fbaf4bc3c7f2d9216d8b01b0
+- frontend/pnpm-lock.yaml SHA-256 119bdf588b6cf1eea9187201ab675cea84d529649116bd4062bf693907ab0677
 
 GO COMPONENTS EMBEDDED IN RELEASE BINARIES
 ------------------------------------------
@@ -39,7 +39,7 @@ GO COMPONENTS EMBEDDED IN RELEASE BINARIES
 
 FRONTEND PRODUCTION DEPENDENCY CLOSURE
 --------------------------------------
-Direct runtime dependencies: @mdit/plugin-katex, dompurify, highlight.js, html2canvas, jspdf, katex, markdown-it, markdown-it-task-lists, mermaid, vue
+Direct runtime dependencies: @mdit/plugin-katex, @viz-js/viz, abcjs, dompurify, echarts, highlight.js, html2canvas, jspdf, katex, markdown-it, markdown-it-emoji, markdown-it-footnote, markdown-it-task-lists, mermaid, vue
 All entries below are included conservatively from pnpm's production graph;
 entries not named above are transitive production dependencies.
 - @antfu/install-pkg@1.1.0 (MIT; https://github.com/antfu/install-pkg#readme)
@@ -57,7 +57,6 @@ entries not named above are transitive production dependencies.
 - @mdit/plugin-katex@1.0.2 (MIT; https://mdit-plugins.github.io/katex.html)
 - @mdit/plugin-tex@1.0.2 (MIT; https://mdit-plugins.github.io/tex.html)
 - @mermaid-js/parser@1.2.0 (MIT; https://github.com/mermaid-js/mermaid/tree/develop/packages/mermaid/parser/#readme)
-- @types/d3@7.4.3 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3)
 - @types/d3-array@3.2.2 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-array)
 - @types/d3-axis@3.0.6 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-axis)
 - @types/d3-brush@3.0.6 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-brush)
@@ -79,15 +78,16 @@ entries not named above are transitive production dependencies.
 - @types/d3-polygon@3.0.2 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-polygon)
 - @types/d3-quadtree@3.0.6 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-quadtree)
 - @types/d3-random@3.0.4 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-random)
-- @types/d3-scale@4.0.9 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-scale)
 - @types/d3-scale-chromatic@3.1.0 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-scale-chromatic)
+- @types/d3-scale@4.0.9 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-scale)
 - @types/d3-selection@3.0.11 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-selection)
 - @types/d3-shape@3.1.8 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-shape)
-- @types/d3-time@3.0.4 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-time)
 - @types/d3-time-format@4.0.3 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-time-format)
+- @types/d3-time@3.0.4 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-time)
 - @types/d3-timer@3.0.2 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-timer)
 - @types/d3-transition@3.0.9 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-transition)
 - @types/d3-zoom@3.0.8 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-zoom)
+- @types/d3@7.4.3 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3)
 - @types/geojson@7946.0.16 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/geojson)
 - @types/linkify-it@5.0.0 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/linkify-it)
 - @types/markdown-it@14.1.2 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/markdown-it)
@@ -96,6 +96,9 @@ entries not named above are transitive production dependencies.
 - @types/raf@3.4.3 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/raf)
 - @types/trusted-types@2.0.7 (MIT; https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/trusted-types)
 - @upsetjs/venn.js@2.0.0 (MIT; https://github.com/upsetjs/venn.js)
+- @viz-js/viz@3.29.0 (MIT; embeds Graphviz 15.1.1 (EPL-2.0) and Expat 2.8.1 (MIT); https://github.com/mdaines/viz-js/tree/release-viz-3.29.0/packages/viz)
+- @viz-js/viz@3.29.0 embedded Expat@2.8.1 (MIT; https://github.com/libexpat/libexpat/releases/download/R_2_8_1/expat-2.8.1.tar.gz)
+- @viz-js/viz@3.29.0 embedded Graphviz@15.1.1 (EPL-2.0; https://gitlab.com/api/v4/projects/4207231/packages/generic/graphviz-releases/15.1.1/graphviz-15.1.1.tar.gz)
 - @vue/compiler-core@3.5.40 (MIT; https://github.com/vuejs/core/tree/main/packages/compiler-core#readme)
 - @vue/compiler-dom@3.5.40 (MIT; https://github.com/vuejs/core/tree/main/packages/compiler-dom#readme)
 - @vue/compiler-sfc@3.5.40 (MIT; https://github.com/vuejs/core/tree/main/packages/compiler-sfc#readme)
@@ -105,6 +108,7 @@ entries not named above are transitive production dependencies.
 - @vue/runtime-dom@3.5.40 (MIT; https://github.com/vuejs/core/tree/main/packages/runtime-dom#readme)
 - @vue/server-renderer@3.5.40 (MIT; https://github.com/vuejs/core/tree/main/packages/server-renderer#readme)
 - @vue/shared@3.5.40 (MIT; https://github.com/vuejs/core/tree/main/packages/shared#readme)
+- abcjs@6.7.0 (MIT; https://abcjs.net)
 - argparse@3.0.0 (Python-2.0; https://github.com/nodeca/argparse#readme)
 - base64-arraybuffer@1.0.2 (MIT; https://github.com/niklasvh/base64-arraybuffer)
 - canvg@3.0.11 (MIT; https://github.com/canvg/canvg#readme)
@@ -115,10 +119,9 @@ entries not named above are transitive production dependencies.
 - cose-base@2.2.0 (MIT; https://github.com/iVis-at-Bilkent/cose-base#readme)
 - css-line-break@2.1.0 (MIT; https://github.com/niklasvh/css-line-break#readme)
 - csstype@3.2.3 (MIT; https://github.com/frenic/csstype#readme)
-- cytoscape@3.34.0 (MIT; http://js.cytoscape.org)
 - cytoscape-cose-bilkent@4.1.0 (MIT; https://github.com/cytoscape/cytoscape.js-cose-bilkent)
 - cytoscape-fcose@2.2.0 (MIT; https://github.com/iVis-at-Bilkent/cytoscape.js-fcose)
-- d3@7.9.0 (ISC; https://d3js.org)
+- cytoscape@3.34.0 (MIT; http://js.cytoscape.org)
 - d3-array@2.12.1 (BSD-3-Clause; https://d3js.org/d3-array/)
 - d3-array@3.2.4 (ISC; https://d3js.org/d3-array/)
 - d3-axis@3.0.0 (ISC; https://d3js.org/d3-axis/)
@@ -143,20 +146,22 @@ entries not named above are transitive production dependencies.
 - d3-quadtree@3.0.1 (ISC; https://d3js.org/d3-quadtree/)
 - d3-random@3.0.1 (ISC; https://d3js.org/d3-random/)
 - d3-sankey@0.12.3 (BSD-3-Clause; https://github.com/d3/d3-sankey)
-- d3-scale@4.0.2 (ISC; https://d3js.org/d3-scale/)
 - d3-scale-chromatic@3.1.0 (ISC; https://d3js.org/d3-scale-chromatic/)
+- d3-scale@4.0.2 (ISC; https://d3js.org/d3-scale/)
 - d3-selection@3.0.0 (ISC; https://d3js.org/d3-selection/)
 - d3-shape@1.3.7 (BSD-3-Clause; https://d3js.org/d3-shape/)
 - d3-shape@3.2.0 (ISC; https://d3js.org/d3-shape/)
-- d3-time@3.1.0 (ISC; https://d3js.org/d3-time/)
 - d3-time-format@4.1.0 (ISC; https://d3js.org/d3-time-format/)
+- d3-time@3.1.0 (ISC; https://d3js.org/d3-time/)
 - d3-timer@3.0.1 (ISC; https://d3js.org/d3-timer/)
 - d3-transition@3.0.1 (ISC; https://d3js.org/d3-transition/)
 - d3-zoom@3.0.0 (ISC; https://d3js.org/d3-zoom/)
+- d3@7.9.0 (ISC; https://d3js.org)
 - dagre-d3-es@7.0.14 (MIT; https://github.com/tbo47/dagre-es#readme)
 - dayjs@1.11.21 (MIT; https://day.js.org)
 - delaunator@5.1.0 (ISC; https://github.com/mapbox/delaunator#readme)
 - dompurify@3.4.13 ((MPL-2.0 OR Apache-2.0); https://github.com/cure53/DOMPurify)
+- echarts@6.1.0 (Apache-2.0; https://echarts.apache.org)
 - entities@7.0.1 (BSD-2-Clause; https://github.com/fb55/entities#readme)
 - entities@8.0.0 (BSD-2-Clause; https://github.com/fb55/entities#readme)
 - es-toolkit@1.50.0 (MIT; https://es-toolkit.dev)
@@ -180,8 +185,10 @@ entries not named above are transitive production dependencies.
 - linkify-it@6.1.0 (MIT; https://github.com/markdown-it/linkify-it#readme)
 - lodash-es@4.18.1 (MIT; https://lodash.com/custom-builds)
 - magic-string@0.30.21 (MIT; https://github.com/Rich-Harris/magic-string#readme)
-- markdown-it@15.0.0 (MIT; https://github.com/markdown-it/markdown-it#readme)
+- markdown-it-emoji@3.1.0 (MIT; https://github.com/markdown-it/markdown-it-emoji#readme)
+- markdown-it-footnote@4.0.0 (MIT; https://github.com/markdown-it/markdown-it-footnote#readme)
 - markdown-it-task-lists@2.1.1 (ISC; https://github.com/revin/markdown-it-task-lists#readme)
+- markdown-it@15.0.0 (MIT; https://github.com/markdown-it/markdown-it#readme)
 - marked@16.4.2 (MIT; https://marked.js.org)
 - mdurl@2.1.0 (MIT; https://github.com/markdown-it/mdurl#readme)
 - mermaid@11.16.1 (MIT; https://github.com/mermaid-js/mermaid#readme)
@@ -209,11 +216,13 @@ entries not named above are transitive production dependencies.
 - text-segmentation@1.0.3 (MIT; https://github.com/niklasvh/text-segmentation)
 - tinyexec@1.3.0 (MIT; https://github.com/tinylibs/tinyexec#readme)
 - ts-dedent@2.3.0 (MIT; https://github.com/tamino-martinius/node-ts-dedent#readme)
+- tslib@2.3.0 (0BSD; https://www.typescriptlang.org/)
 - typescript@5.7.3 (Apache-2.0; https://www.typescriptlang.org/)
 - uc.micro@3.0.0 (MIT; https://github.com/markdown-it/uc.micro#readme)
 - utrie@1.0.2 (MIT; https://github.com/niklasvh/utrie)
 - uuid@14.0.1 (MIT; https://github.com/uuidjs/uuid#readme)
 - vue@3.5.40 (MIT; https://vuejs.org/)
+- zrender@6.1.0 (BSD-3-Clause; https://github.com/ecomfe/zrender#readme)
 
 KATEX FONT AND STRETCHY-GLYPH NOTICE
 ------------------------------------
@@ -1293,7 +1302,33 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-License text 22 — SHA-256 3e3edc1224eec9c39cd26491a21304a62883c1e5b6a65c5283ccc7a6cc94baee
+License text 22 — SHA-256 31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87
+Applies to:
+- @viz-js/viz@3.29.0 / embedded Expat@2.8.1 (scripts/licenses/Expat-2.8.1-MIT.txt (official license: https://github.com/libexpat/libexpat/blob/R_2_8_1/expat/COPYING))
+
+Copyright (c) 1998-2000 Thai Open Source Software Center Ltd and Clark Cooper
+Copyright (c) 2001-2025 Expat maintainers
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+License text 23 — SHA-256 3e3edc1224eec9c39cd26491a21304a62883c1e5b6a65c5283ccc7a6cc94baee
 Applies to:
 - d3-geo@3.1.1 (LICENSE)
 
@@ -1332,7 +1367,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-License text 23 — SHA-256 3e6849627f74ff73c257a3ae1efb574015d94fc1035c05ec3c15805165efcbc4
+License text 24 — SHA-256 3e6849627f74ff73c257a3ae1efb574015d94fc1035c05ec3c15805165efcbc4
 Applies to:
 - d3-array@3.2.4 (LICENSE)
 - d3@7.9.0 (LICENSE)
@@ -1351,7 +1386,7 @@ OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
 TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 
-License text 24 — SHA-256 3f10f3374cf30076196eb239667ce6063c64e4275afd2b397f6343f69676bb79
+License text 25 — SHA-256 3f10f3374cf30076196eb239667ce6063c64e4275afd2b397f6343f69676bb79
 Applies to:
 - github.com/wailsapp/go-webview2@v1.0.22 (LICENSE)
 
@@ -1378,7 +1413,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 25 — SHA-256 3f1fc64a3fded0d8c44382af796cc434fb4026a5d3d56da296dd272277dc336f
+License text 26 — SHA-256 3f1fc64a3fded0d8c44382af796cc434fb4026a5d3d56da296dd272277dc336f
 Applies to:
 - github.com/tkrajina/go-reflector@v0.5.8 (LICENSE.txt)
 
@@ -1585,7 +1620,7 @@ Applies to:
    See the License for the specific language governing permissions and
    limitations under the License.
 
-License text 26 — SHA-256 4335e2ceb33d8d7e75125192466ae8604617b0a67492b919604fe52dc56018d9
+License text 27 — SHA-256 4335e2ceb33d8d7e75125192466ae8604617b0a67492b919604fe52dc56018d9
 Applies to:
 - github.com/wailsapp/mimetype@v1.4.1 (LICENSE)
 
@@ -1611,7 +1646,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 27 — SHA-256 47ec9747cf2c470a505fcb20f3ec2ff2e60ea4febaf2e1e7041a24fc369fac3c
+License text 28 — SHA-256 47ec9747cf2c470a505fcb20f3ec2ff2e60ea4febaf2e1e7041a24fc369fac3c
 Applies to:
 - fast-png@6.4.0 (LICENSE)
 
@@ -1637,7 +1672,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 28 — SHA-256 4801bb0c5d70b980b3e1f63d1d2df8d84fec22548e3d73f03a68df1fb808791f
+License text 29 — SHA-256 4801bb0c5d70b980b3e1f63d1d2df8d84fec22548e3d73f03a68df1fb808791f
 Applies to:
 - github.com/pkg/browser@v0.0.0-20240102092130-5ac0b6a4141c (LICENSE)
 
@@ -1665,7 +1700,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-License text 29 — SHA-256 483acb265f182907d1caf6cff9c16c96f31325ed23792832cc5d8b12d5f88c8a
+License text 30 — SHA-256 483acb265f182907d1caf6cff9c16c96f31325ed23792832cc5d8b12d5f88c8a
 Applies to:
 - punycode.js@2.3.1 (LICENSE-MIT.txt)
 - uc.micro@3.0.0 (LICENSE.txt)
@@ -1691,7 +1726,7 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-License text 30 — SHA-256 4a5a644717fc90d678e8fbbc537a08452d0566726710eef47b196abd6363e635
+License text 31 — SHA-256 4a5a644717fc90d678e8fbbc537a08452d0566726710eef47b196abd6363e635
 Applies to:
 - cytoscape@3.34.0 (license-update.mjs)
 
@@ -1728,7 +1763,7 @@ SOFTWARE.`;
 
 fs.writeFileSync(path.join(__dirname, 'LICENSE'), license);
 
-License text 31 — SHA-256 4bc935e71be198c67ddf3c2b5fddb195f6edc182bfc155a96a6db61b44b494b9
+License text 32 — SHA-256 4bc935e71be198c67ddf3c2b5fddb195f6edc182bfc155a96a6db61b44b494b9
 Applies to:
 - safer-buffer@2.1.2 (LICENSE)
 
@@ -1754,7 +1789,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 32 — SHA-256 51887a3d47051ac2fce1210562e5b9fe0830a8a8fabeb272c2d586eeb18a05fd
+License text 33 — SHA-256 51887a3d47051ac2fce1210562e5b9fe0830a8a8fabeb272c2d586eeb18a05fd
 Applies to:
 - regenerator-runtime@0.13.11 (LICENSE)
 
@@ -1780,7 +1815,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 33 — SHA-256 51f3674294d988d89dbebd31273baaeb3c697a15482d9699b14d1fded2e132a7
+License text 34 — SHA-256 51f3674294d988d89dbebd31273baaeb3c697a15482d9699b14d1fded2e132a7
 Applies to:
 - es-toolkit@1.50.0 (LICENSE)
 
@@ -1806,7 +1841,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 34 — SHA-256 527adf9d4c760f7367c2aeffed6a89afba8ba40ea1b0efbc8f56496ad30ea9cf
+License text 35 — SHA-256 527adf9d4c760f7367c2aeffed6a89afba8ba40ea1b0efbc8f56496ad30ea9cf
 Applies to:
 - typescript@5.7.3 (LICENSE.txt)
 
@@ -1866,7 +1901,7 @@ If the Work includes a "NOTICE" text file as part of its distribution, then any 
 
 END OF TERMS AND CONDITIONS
 
-License text 35 — SHA-256 55d1e31e036f46489d5933ec0b2abc0a711b8239c06f8f477ad980d5a0bc8d5c
+License text 36 — SHA-256 55d1e31e036f46489d5933ec0b2abc0a711b8239c06f8f477ad980d5a0bc8d5c
 Applies to:
 - @iconify/types@2.0.0 (license.txt)
 
@@ -1892,7 +1927,41 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 36 — SHA-256 56fc930ed22382ada309ec7437ad44cfd6c3ac91fe4459fdfb5ffb4701edbde8
+License text 37 — SHA-256 55ea01207028f76d844678511f29fc800f8a1e67a8a0fe80470128677847ad32
+Applies to:
+- zrender@6.1.0 (LICENSE)
+
+BSD 3-Clause License
+
+Copyright (c) 2017, Baidu Inc.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of the copyright holder nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License text 38 — SHA-256 56fc930ed22382ada309ec7437ad44cfd6c3ac91fe4459fdfb5ffb4701edbde8
 Applies to:
 - @iconify/utils@3.1.4 (license.txt)
 
@@ -1918,7 +1987,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 37 — SHA-256 582c3022bd01942336095f92b58a90b1be624dc547d987555c6c956512dd24c1
+License text 39 — SHA-256 582c3022bd01942336095f92b58a90b1be624dc547d987555c6c956512dd24c1
 Applies to:
 - d3-delaunay@6.0.4 (LICENSE)
 
@@ -1937,7 +2006,24 @@ OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
 TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 
-License text 38 — SHA-256 5be1f3465bba68a626777f984878814aaf35e7ef8e9fd314d469bcf887050fb8
+License text 40 — SHA-256 5989359645911c04a140c49d89496b13feca980bbf36d2250a12d3b9d06250d6
+Applies to:
+- tslib@2.3.0 (LICENSE.txt)
+
+Copyright (c) Microsoft Corporation.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+
+License text 41 — SHA-256 5be1f3465bba68a626777f984878814aaf35e7ef8e9fd314d469bcf887050fb8
 Applies to:
 - postcss@8.5.25 (LICENSE)
 
@@ -1962,7 +2048,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-License text 39 — SHA-256 5e807b516a9be9229ed459880bf353a336e2d947867247290680d437017be391
+License text 42 — SHA-256 5e807b516a9be9229ed459880bf353a336e2d947867247290680d437017be391
 Applies to:
 - hachure-fill@0.5.2 (LICENSE)
 
@@ -1988,7 +2074,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 40 — SHA-256 5faab7526d055651be3aab769d58897be6bd91f3d39d137f25f12dba1b31d5dc
+License text 43 — SHA-256 5faab7526d055651be3aab769d58897be6bd91f3d39d137f25f12dba1b31d5dc
 Applies to:
 - dayjs@1.11.21 (LICENSE)
 
@@ -2014,7 +2100,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 41 — SHA-256 5fb3cf4a14c3c5af6e473a192df8bca10c77754e3a0c6492c79fb92a76a5478a
+License text 44 — SHA-256 5fb3cf4a14c3c5af6e473a192df8bca10c77754e3a0c6492c79fb92a76a5478a
 Applies to:
 - cose-base@1.0.3 (LICENSE)
 - cose-base@2.2.0 (LICENSE)
@@ -2041,7 +2127,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 42 — SHA-256 609e3755e6e7a048b8ca85de25233cfc4f62ec7cb9afeea603269a03b73db197
+License text 45 — SHA-256 609e3755e6e7a048b8ca85de25233cfc4f62ec7cb9afeea603269a03b73db197
 Applies to:
 - stackblur-canvas@2.7.0 (LICENSE-MIT.txt)
 
@@ -2068,7 +2154,234 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-License text 43 — SHA-256 6582629e2979466878f6014313dcc2f3756c9616148682227ce3063dde310750
+License text 46 — SHA-256 634293835b43a6dd2094fa39182a3d9a6b9ca43b7fdb9ac354e8037af2a3093a
+Applies to:
+- echarts@6.1.0 (LICENSE)
+
+
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+
+
+
+
+========================================================================
+Apache ECharts Subcomponents:
+
+The Apache ECharts project contains subcomponents with separate copyright
+notices and license terms. Your use of the source code for these
+subcomponents is also subject to the terms and conditions of the following
+licenses.
+
+BSD 3-Clause (d3.js):
+The following files embed [d3.js](https://github.com/d3/d3) BSD 3-Clause:
+    `/src/chart/treemap/treemapLayout.ts`,
+    `/src/chart/tree/layoutHelper.ts`,
+    `/src/chart/graph/forceHelper.ts`,
+    `/src/util/number.ts`
+See `/licenses/LICENSE-d3` for details of the license.
+
+License text 47 — SHA-256 6582629e2979466878f6014313dcc2f3756c9616148682227ce3063dde310750
 Applies to:
 - picocolors@1.1.1 (LICENSE)
 
@@ -2088,7 +2401,7 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-License text 44 — SHA-256 66b333b0f66759a0b710459e03f7029abe17f4358114a128d2c972e642961b49
+License text 48 — SHA-256 66b333b0f66759a0b710459e03f7029abe17f4358114a128d2c972e642961b49
 Applies to:
 - khroma@2.1.0 (license)
 
@@ -2114,7 +2427,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-License text 45 — SHA-256 67cd5e903c1f908edfa27c25606fa806ce629d9a8ddb7d83019d9fd1f83f7fde
+License text 49 — SHA-256 67cd5e903c1f908edfa27c25606fa806ce629d9a8ddb7d83019d9fd1f83f7fde
 Applies to:
 - @antfu/install-pkg@1.1.0 (LICENSE)
 
@@ -2140,7 +2453,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 46 — SHA-256 6a3508febf2cfccfee96597394543a6154a4bb0b1f91f28404be42c09e9fcb54
+License text 50 — SHA-256 6a3508febf2cfccfee96597394543a6154a4bb0b1f91f28404be42c09e9fcb54
 Applies to:
 - @upsetjs/venn.js@2.0.0 (LICENSE)
 
@@ -2167,7 +2480,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 47 — SHA-256 6b2194e178545b3dcde4a40a09b5f6c00bd9b5b695db0c826c14995c6c9b4ec5
+License text 51 — SHA-256 6b2194e178545b3dcde4a40a09b5f6c00bd9b5b695db0c826c14995c6c9b4ec5
 Applies to:
 - raf@3.4.1 (LICENSE)
 
@@ -2179,7 +2492,7 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-License text 48 — SHA-256 6b6a356c4337e2446841f30f3cdf7e7023af8c5260b5e347c0f987b9f6aa2644
+License text 52 — SHA-256 6b6a356c4337e2446841f30f3cdf7e7023af8c5260b5e347c0f987b9f6aa2644
 Applies to:
 - mdurl@2.1.0 (LICENSE)
 
@@ -2229,7 +2542,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 
-License text 49 — SHA-256 6c081431591d9df696c82dc598fe1423765b8a299b200ed00b281afd0f64c490
+License text 53 — SHA-256 6c081431591d9df696c82dc598fe1423765b8a299b200ed00b281afd0f64c490
 Applies to:
 - highlight.js@11.11.1 (LICENSE)
 
@@ -2263,7 +2576,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-License text 50 — SHA-256 6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd
+License text 54 — SHA-256 6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd
 Applies to:
 - source-map-js@1.2.1 (LICENSE)
 
@@ -2296,7 +2609,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-License text 51 — SHA-256 6ec71bfac83b3a260158e53408a81392f84982fe19c43b4c2b6e2b6f0b44457b
+License text 55 — SHA-256 6ec71bfac83b3a260158e53408a81392f84982fe19c43b4c2b6e2b6f0b44457b
 Applies to:
 - github.com/leaanthony/slicer@v1.6.0 (LICENSE)
 
@@ -2322,7 +2635,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 52 — SHA-256 71be9e71c25397d6aa0c50e6cfa0aec4c3614556c3e1e3aaa37f4adbfc727555
+License text 56 — SHA-256 71be9e71c25397d6aa0c50e6cfa0aec4c3614556c3e1e3aaa37f4adbfc727555
 Applies to:
 - text-segmentation@1.0.3 (LICENSE)
 - utrie@1.0.2 (LICENSE)
@@ -2350,7 +2663,7 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-License text 53 — SHA-256 766ccc1f306c885aa45542a9846bbd0a505b27a0374f146778171c2254ce18e3
+License text 57 — SHA-256 766ccc1f306c885aa45542a9846bbd0a505b27a0374f146778171c2254ce18e3
 Applies to:
 - katex@0.16.47 (LICENSE)
 - katex@0.18.1 (LICENSE)
@@ -2377,7 +2690,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 54 — SHA-256 766daa9b2ab0ab2698c769f334a6d72c42437b0a7d0d0dfd5c13c64b3120117b
+License text 58 — SHA-256 766daa9b2ab0ab2698c769f334a6d72c42437b0a7d0d0dfd5c13c64b3120117b
 Applies to:
 - fflate@0.8.3 (LICENSE)
 
@@ -2403,7 +2716,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 55 — SHA-256 769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c
+License text 59 — SHA-256 769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c
 Applies to:
 - @jridgewell/sourcemap-codec@1.5.5 (LICENSE)
 
@@ -2427,7 +2740,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 56 — SHA-256 77d1b21a5460ffc70d50101e9490a44b35dd713dab8a6f847c54ce4d3e81234a
+License text 60 — SHA-256 77d1b21a5460ffc70d50101e9490a44b35dd713dab8a6f847c54ce4d3e81234a
 Applies to:
 - github.com/bep/debounce@v1.2.1 (LICENSE)
 
@@ -2453,7 +2766,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 57 — SHA-256 7842a82012622e5a37bfe4f6c1b67cd3bae6350716b5bf87f36cea0bdc1319dc
+License text 61 — SHA-256 7842a82012622e5a37bfe4f6c1b67cd3bae6350716b5bf87f36cea0bdc1319dc
 Applies to:
 - d3-dsv@3.0.1 (LICENSE)
 
@@ -2471,7 +2784,7 @@ OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
 TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 
-License text 58 — SHA-256 792c48c5a849a15fdf9e37e8bcf9e6d1dd13b32b46c642a748a0a46a9919d473
+License text 62 — SHA-256 792c48c5a849a15fdf9e37e8bcf9e6d1dd13b32b46c642a748a0a46a9919d473
 Applies to:
 - markdown-it@15.0.0 (LICENSE)
 
@@ -2498,7 +2811,7 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-License text 59 — SHA-256 7eea8533ea92bd8c32a901e89ecb0305890905bb12711449565ddff96891146d
+License text 63 — SHA-256 7eea8533ea92bd8c32a901e89ecb0305890905bb12711449565ddff96891146d
 Applies to:
 - d3-shape@1.3.7 (LICENSE)
 
@@ -2530,7 +2843,34 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-License text 60 — SHA-256 83079c1e6a115e87382d901caa2a878cb000511623ab1c76465dddf394b2b77d
+License text 64 — SHA-256 81d61236a5f25294b2dad0c866d4ad6a40b865148b28df9a71f49ba771a6c54b
+Applies to:
+- markdown-it-footnote@4.0.0 (LICENSE)
+
+Copyright (c) 2014-2015 Vitaly Puzrin, Alex Kocharin.
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+License text 65 — SHA-256 83079c1e6a115e87382d901caa2a878cb000511623ab1c76465dddf394b2b77d
 Applies to:
 - performance-now@2.1.0 (license.txt)
 
@@ -2542,7 +2882,35 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-License text 61 — SHA-256 86045408b01f66f9319a2fe7bc7f7e115f272956ac44d2d840fc00127124a78c
+License text 66 — SHA-256 842634cf42996c9bb69e70b94e1a7293a85ab3816df729c8ca01eed7a322ad74
+Applies to:
+- abcjs@6.7.0 (license.js)
+
+/**!
+Copyright (c) 2009-2026 Paul Rosen and Gregory Dyke
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+**This text is from: http://opensource.org/licenses/MIT**
+!**/
+
+License text 67 — SHA-256 86045408b01f66f9319a2fe7bc7f7e115f272956ac44d2d840fc00127124a78c
 Applies to:
 - rgbcolor@1.0.1 (LICENSE.md)
 
@@ -2573,7 +2941,7 @@ Exemptions
 
 Please either apply this, the MIT license, or the license in './FEEL-FREE.md'
 
-License text 62 — SHA-256 86622ffc909487e6029235d31503263b796895679b0926f4a4d6f02d2623fde0
+License text 68 — SHA-256 86622ffc909487e6029235d31503263b796895679b0926f4a4d6f02d2623fde0
 Applies to:
 - canvg@3.0.11 (LICENSE)
 
@@ -2599,7 +2967,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 63 — SHA-256 8770a1a4b69ee722636643e81340ce4a8f0b8415b1c568487edc9062338bfcc7
+License text 69 — SHA-256 8770a1a4b69ee722636643e81340ce4a8f0b8415b1c568487edc9062338bfcc7
 Applies to:
 - import-meta-resolve@4.2.0 (license)
 
@@ -2678,7 +3046,17 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 """
 
-License text 64 — SHA-256 88c579c6ee44b41137a21321190d177982e5b17d4fa1b83a4a2e3ea325a8fc9a
+License text 70 — SHA-256 88c2418a8ab4dba3486b263600ab39e0c78c36142ddfa4167ed3d9c3a2d2ab38
+Applies to:
+- echarts@6.1.0 (NOTICE)
+
+Apache ECharts
+Copyright 2017-2026 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (https://www.apache.org/).
+
+License text 71 — SHA-256 88c579c6ee44b41137a21321190d177982e5b17d4fa1b83a4a2e3ea325a8fc9a
 Applies to:
 - stylis@4.4.0 (LICENSE)
 
@@ -2704,7 +3082,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 65 — SHA-256 88d9b4eb60579c191ec391ca04c16130572d7eedc4a86daa58bf28c6e14c9bcd
+License text 72 — SHA-256 88d9b4eb60579c191ec391ca04c16130572d7eedc4a86daa58bf28c6e14c9bcd
 Applies to:
 - robust-predicates@3.0.3 (LICENSE)
 
@@ -2733,7 +3111,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 For more information, please refer to <http://unlicense.org>
 
-License text 66 — SHA-256 8b0b04396771e4773d03d2b07ecc54bc3efd42cb82d105b4c88988dadb58e2ca
+License text 73 — SHA-256 8b0b04396771e4773d03d2b07ecc54bc3efd42cb82d105b4c88988dadb58e2ca
 Applies to:
 - @mdit/plugin-tex@1.0.2 (LICENSE)
 
@@ -2760,7 +3138,289 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-License text 67 — SHA-256 8d427fd87bc9579ea368fde3d49f9ca22eac857f91a9dec7e3004bdfab7dee86
+License text 74 — SHA-256 8c349f80764d0648e645f41ef23772a70c995a0924b5235f735f4a3d09df127c
+Applies to:
+- @viz-js/viz@3.29.0 / embedded Graphviz@15.1.1 (scripts/licenses/Graphviz-15.1.1-EPL-2.0.txt (official license: https://gitlab.com/graphviz/graphviz/-/blob/15.1.1/COPYING))
+
+Eclipse Public License - v 2.0
+
+    THE ACCOMPANYING PROGRAM IS PROVIDED UNDER THE TERMS OF THIS ECLIPSE
+    PUBLIC LICENSE ("AGREEMENT"). ANY USE, REPRODUCTION OR DISTRIBUTION
+    OF THE PROGRAM CONSTITUTES RECIPIENT'S ACCEPTANCE OF THIS AGREEMENT.
+
+1. DEFINITIONS
+
+"Contribution" means:
+
+  a) in the case of the initial Contributor, the initial content
+     Distributed under this Agreement, and
+
+  b) in the case of each subsequent Contributor:
+     i) changes to the Program, and
+     ii) additions to the Program;
+  where such changes and/or additions to the Program originate from
+  and are Distributed by that particular Contributor. A Contribution
+  "originates" from a Contributor if it was added to the Program by
+  such Contributor itself or anyone acting on such Contributor's behalf.
+  Contributions do not include changes or additions to the Program that
+  are not Modified Works.
+
+"Contributor" means any person or entity that Distributes the Program.
+
+"Licensed Patents" mean patent claims licensable by a Contributor which
+are necessarily infringed by the use or sale of its Contribution alone
+or when combined with the Program.
+
+"Program" means the Contributions Distributed in accordance with this
+Agreement.
+
+"Recipient" means anyone who receives the Program under this Agreement
+or any Secondary License (as applicable), including Contributors.
+
+"Derivative Works" shall mean any work, whether in Source Code or other
+form, that is based on (or derived from) the Program and for which the
+editorial revisions, annotations, elaborations, or other modifications
+represent, as a whole, an original work of authorship.
+
+"Modified Works" shall mean any work in Source Code or other form that
+results from an addition to, deletion from, or modification of the
+contents of the Program, including, for purposes of clarity any new file
+in Source Code form that contains any contents of the Program. Modified
+Works shall not include works that contain only declarations,
+interfaces, types, classes, structures, or files of the Program solely
+in each case in order to link to, bind by name, or subclass the Program
+or Modified Works thereof.
+
+"Distribute" means the acts of a) distributing or b) making available
+in any manner that enables the transfer of a copy.
+
+"Source Code" means the form of a Program preferred for making
+modifications, including but not limited to software source code,
+documentation source, and configuration files.
+
+"Secondary License" means either the GNU General Public License,
+Version 2.0, or any later versions of that license, including any
+exceptions or additional permissions as identified by the initial
+Contributor.
+
+2. GRANT OF RIGHTS
+
+  a) Subject to the terms of this Agreement, each Contributor hereby
+  grants Recipient a non-exclusive, worldwide, royalty-free copyright
+  license to reproduce, prepare Derivative Works of, publicly display,
+  publicly perform, Distribute and sublicense the Contribution of such
+  Contributor, if any, and such Derivative Works.
+
+  b) Subject to the terms of this Agreement, each Contributor hereby
+  grants Recipient a non-exclusive, worldwide, royalty-free patent
+  license under Licensed Patents to make, use, sell, offer to sell,
+  import and otherwise transfer the Contribution of such Contributor,
+  if any, in Source Code or other form. This patent license shall
+  apply to the combination of the Contribution and the Program if, at
+  the time the Contribution is added by the Contributor, such addition
+  of the Contribution causes such combination to be covered by the
+  Licensed Patents. The patent license shall not apply to any other
+  combinations which include the Contribution. No hardware per se is
+  licensed hereunder.
+
+  c) Recipient understands that although each Contributor grants the
+  licenses to its Contributions set forth herein, no assurances are
+  provided by any Contributor that the Program does not infringe the
+  patent or other intellectual property rights of any other entity.
+  Each Contributor disclaims any liability to Recipient for claims
+  brought by any other entity based on infringement of intellectual
+  property rights or otherwise. As a condition to exercising the
+  rights and licenses granted hereunder, each Recipient hereby
+  assumes sole responsibility to secure any other intellectual
+  property rights needed, if any. For example, if a third party
+  patent license is required to allow Recipient to Distribute the
+  Program, it is Recipient's responsibility to acquire that license
+  before distributing the Program.
+
+  d) Each Contributor represents that to its knowledge it has
+  sufficient copyright rights in its Contribution, if any, to grant
+  the copyright license set forth in this Agreement.
+
+  e) Notwithstanding the terms of any Secondary License, no
+  Contributor makes additional grants to any Recipient (other than
+  those set forth in this Agreement) as a result of such Recipient's
+  receipt of the Program under the terms of a Secondary License
+  (if permitted under the terms of Section 3).
+
+3. REQUIREMENTS
+
+3.1 If a Contributor Distributes the Program in any form, then:
+
+  a) the Program must also be made available as Source Code, in
+  accordance with section 3.2, and the Contributor must accompany
+  the Program with a statement that the Source Code for the Program
+  is available under this Agreement, and informs Recipients how to
+  obtain it in a reasonable manner on or through a medium customarily
+  used for software exchange; and
+
+  b) the Contributor may Distribute the Program under a license
+  different than this Agreement, provided that such license:
+     i) effectively disclaims on behalf of all other Contributors all
+     warranties and conditions, express and implied, including
+     warranties or conditions of title and non-infringement, and
+     implied warranties or conditions of merchantability and fitness
+     for a particular purpose;
+
+     ii) effectively excludes on behalf of all other Contributors all
+     liability for damages, including direct, indirect, special,
+     incidental and consequential damages, such as lost profits;
+
+     iii) does not attempt to limit or alter the recipients' rights
+     in the Source Code under section 3.2; and
+
+     iv) requires any subsequent distribution of the Program by any
+     party to be under a license that satisfies the requirements
+     of this section 3.
+
+3.2 When the Program is Distributed as Source Code:
+
+  a) it must be made available under this Agreement, or if the
+  Program (i) is combined with other material in a separate file or
+  files made available under a Secondary License, and (ii) the initial
+  Contributor attached to the Source Code the notice described in
+  Exhibit A of this Agreement, then the Program may be made available
+  under the terms of such Secondary Licenses, and
+
+  b) a copy of this Agreement must be included with each copy of
+  the Program.
+
+3.3 Contributors may not remove or alter any copyright, patent,
+trademark, attribution notices, disclaimers of warranty, or limitations
+of liability ("notices") contained within the Program from any copy of
+the Program which they Distribute, provided that Contributors may add
+their own appropriate notices.
+
+4. COMMERCIAL DISTRIBUTION
+
+Commercial distributors of software may accept certain responsibilities
+with respect to end users, business partners and the like. While this
+license is intended to facilitate the commercial use of the Program,
+the Contributor who includes the Program in a commercial product
+offering should do so in a manner which does not create potential
+liability for other Contributors. Therefore, if a Contributor includes
+the Program in a commercial product offering, such Contributor
+("Commercial Contributor") hereby agrees to defend and indemnify every
+other Contributor ("Indemnified Contributor") against any losses,
+damages and costs (collectively "Losses") arising from claims, lawsuits
+and other legal actions brought by a third party against the Indemnified
+Contributor to the extent caused by the acts or omissions of such
+Commercial Contributor in connection with its distribution of the Program
+in a commercial product offering. The obligations in this section do not
+apply to any claims or Losses relating to any actual or alleged
+intellectual property infringement. In order to qualify, an Indemnified
+Contributor must: a) promptly notify the Commercial Contributor in
+writing of such claim, and b) allow the Commercial Contributor to control,
+and cooperate with the Commercial Contributor in, the defense and any
+related settlement negotiations. The Indemnified Contributor may
+participate in any such claim at its own expense.
+
+For example, a Contributor might include the Program in a commercial
+product offering, Product X. That Contributor is then a Commercial
+Contributor. If that Commercial Contributor then makes performance
+claims, or offers warranties related to Product X, those performance
+claims and warranties are such Commercial Contributor's responsibility
+alone. Under this section, the Commercial Contributor would have to
+defend claims against the other Contributors related to those performance
+claims and warranties, and if a court requires any other Contributor to
+pay any damages as a result, the Commercial Contributor must pay
+those damages.
+
+5. NO WARRANTY
+
+EXCEPT AS EXPRESSLY SET FORTH IN THIS AGREEMENT, AND TO THE EXTENT
+PERMITTED BY APPLICABLE LAW, THE PROGRAM IS PROVIDED ON AN "AS IS"
+BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EITHER EXPRESS OR
+IMPLIED INCLUDING, WITHOUT LIMITATION, ANY WARRANTIES OR CONDITIONS OF
+TITLE, NON-INFRINGEMENT, MERCHANTABILITY OR FITNESS FOR A PARTICULAR
+PURPOSE. Each Recipient is solely responsible for determining the
+appropriateness of using and distributing the Program and assumes all
+risks associated with its exercise of rights under this Agreement,
+including but not limited to the risks and costs of program errors,
+compliance with applicable laws, damage to or loss of data, programs
+or equipment, and unavailability or interruption of operations.
+
+6. DISCLAIMER OF LIABILITY
+
+EXCEPT AS EXPRESSLY SET FORTH IN THIS AGREEMENT, AND TO THE EXTENT
+PERMITTED BY APPLICABLE LAW, NEITHER RECIPIENT NOR ANY CONTRIBUTORS
+SHALL HAVE ANY LIABILITY FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING WITHOUT LIMITATION LOST
+PROFITS), HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OR DISTRIBUTION OF THE PROGRAM OR THE
+EXERCISE OF ANY RIGHTS GRANTED HEREUNDER, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES.
+
+7. GENERAL
+
+If any provision of this Agreement is invalid or unenforceable under
+applicable law, it shall not affect the validity or enforceability of
+the remainder of the terms of this Agreement, and without further
+action by the parties hereto, such provision shall be reformed to the
+minimum extent necessary to make such provision valid and enforceable.
+
+If Recipient institutes patent litigation against any entity
+(including a cross-claim or counterclaim in a lawsuit) alleging that the
+Program itself (excluding combinations of the Program with other software
+or hardware) infringes such Recipient's patent(s), then such Recipient's
+rights granted under Section 2(b) shall terminate as of the date such
+litigation is filed.
+
+All Recipient's rights under this Agreement shall terminate if it
+fails to comply with any of the material terms or conditions of this
+Agreement and does not cure such failure in a reasonable period of
+time after becoming aware of such noncompliance. If all Recipient's
+rights under this Agreement terminate, Recipient agrees to cease use
+and distribution of the Program as soon as reasonably practicable.
+However, Recipient's obligations under this Agreement and any licenses
+granted by Recipient relating to the Program shall continue and survive.
+
+Everyone is permitted to copy and distribute copies of this Agreement,
+but in order to avoid inconsistency the Agreement is copyrighted and
+may only be modified in the following manner. The Agreement Steward
+reserves the right to publish new versions (including revisions) of
+this Agreement from time to time. No one other than the Agreement
+Steward has the right to modify this Agreement. The Eclipse Foundation
+is the initial Agreement Steward. The Eclipse Foundation may assign the
+responsibility to serve as the Agreement Steward to a suitable separate
+entity. Each new version of the Agreement will be given a distinguishing
+version number. The Program (including Contributions) may always be
+Distributed subject to the version of the Agreement under which it was
+received. In addition, after a new version of the Agreement is published,
+Contributor may elect to Distribute the Program (including its
+Contributions) under the new version.
+
+Except as expressly stated in Sections 2(a) and 2(b) above, Recipient
+receives no rights or licenses to the intellectual property of any
+Contributor under this Agreement, whether expressly, by implication,
+estoppel or otherwise. All rights in the Program not expressly granted
+under this Agreement are reserved. Nothing in this Agreement is intended
+to be enforceable by any entity that is not a Contributor or Recipient.
+No third-party beneficiary rights are created under this Agreement.
+
+Exhibit A - Form of Secondary Licenses Notice
+
+"This Source Code may also be made available under the following
+Secondary Licenses when the conditions for such availability set forth
+in the Eclipse Public License, v. 2.0 are satisfied: {name license(s),
+version(s), and exceptions or additional permissions here}."
+
+  Simply including a copy of this Agreement, including this Exhibit A
+  is not sufficient to license the Source Code under Secondary Licenses.
+
+  If it is not possible or desirable to put the notice in a particular
+  file, then You may include the notice in a location (such as a LICENSE
+  file in a relevant directory) where a recipient would be likely to
+  look for such a notice.
+
+  You may add additional accurate notices of copyright ownership.
+
+License text 75 — SHA-256 8d427fd87bc9579ea368fde3d49f9ca22eac857f91a9dec7e3004bdfab7dee86
 Applies to:
 - github.com/pkg/errors@v0.9.1 (LICENSE)
 
@@ -2788,7 +3448,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-License text 68 — SHA-256 8e3a3f82f59a60958f56ca08f445647c32a4733dc7ca6c2c46f6eb898471ab9c
+License text 76 — SHA-256 8e3a3f82f59a60958f56ca08f445647c32a4733dc7ca6c2c46f6eb898471ab9c
 Applies to:
 - marked@16.4.2 (LICENSE.md)
 
@@ -2837,7 +3497,7 @@ Redistribution and use in source and binary forms, with or without modification,
 
 This software is provided by the copyright holders and contributors “as is” and any express or implied warranties, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose are disclaimed. In no event shall the copyright owner or contributors be liable for any direct, indirect, incidental, special, exemplary, or consequential damages (including, but not limited to, procurement of substitute goods or services; loss of use, data, or profits; or business interruption) however caused and on any theory of liability, whether in contract, strict liability, or tort (including negligence or otherwise) arising in any way out of the use of this software, even if advised of the possibility of such damage.
 
-License text 69 — SHA-256 911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad
+License text 77 — SHA-256 911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad
 Applies to:
 - golang.org/x/image@v0.43.0 (LICENSE)
 - golang.org/x/net@v0.54.0 (LICENSE)
@@ -2872,7 +3532,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-License text 70 — SHA-256 95e3f7f0e81e9b4940cdfaa1956aaff5e4dfd2fb1565041e7c78eb9a606f23e3
+License text 78 — SHA-256 95e3f7f0e81e9b4940cdfaa1956aaff5e4dfd2fb1565041e7c78eb9a606f23e3
 Applies to:
 - linkify-it@6.1.0 (LICENSE)
 
@@ -2899,7 +3559,7 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-License text 71 — SHA-256 9ea8903938dab5f12c4572d60725069bec2d1b0dc3bcc210b09bae946a5ebb1f
+License text 79 — SHA-256 9ea8903938dab5f12c4572d60725069bec2d1b0dc3bcc210b09bae946a5ebb1f
 Applies to:
 - internmap@1.0.1 (LICENSE)
 - internmap@2.0.3 (LICENSE)
@@ -2918,7 +3578,7 @@ OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
 TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 
-License text 72 — SHA-256 a04665b3b2de56c66730c1f720f528175739e4104f79073614aa611da1e85539
+License text 80 — SHA-256 a04665b3b2de56c66730c1f720f528175739e4104f79073614aa611da1e85539
 Applies to:
 - pako@2.2.0 (LICENSE)
 
@@ -2944,7 +3604,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-License text 73 — SHA-256 a09b0d6d76e768fca2085fad05743ee81ddd11946bcda160a3cf5e1081a479aa
+License text 81 — SHA-256 a09b0d6d76e768fca2085fad05743ee81ddd11946bcda160a3cf5e1081a479aa
 Applies to:
 - d3-path@3.1.0 (LICENSE)
 
@@ -2962,7 +3622,7 @@ OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
 TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 
-License text 74 — SHA-256 a59885f5f0f3b3c07cf9444db5fe399b6f0791eac82055f7b85cc65500551039
+License text 82 — SHA-256 a59885f5f0f3b3c07cf9444db5fe399b6f0791eac82055f7b85cc65500551039
 Applies to:
 - github.com/rivo/uniseg@v0.4.7 (LICENSE.txt)
 
@@ -2988,7 +3648,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 75 — SHA-256 adb3ac2e3e382989de6befdd489f4714785af8aca47c01193a9892e8b26b3860
+License text 83 — SHA-256 adb3ac2e3e382989de6befdd489f4714785af8aca47c01193a9892e8b26b3860
 Applies to:
 - github.com/samber/lo@v1.49.1 (LICENSE)
 
@@ -3014,7 +3674,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 76 — SHA-256 b6fc1f7f1d96a48bc97176f3dcef959e364c5c17ba44167511de421500a86c6c
+License text 84 — SHA-256 b6fc1f7f1d96a48bc97176f3dcef959e364c5c17ba44167511de421500a86c6c
 Applies to:
 - points-on-path@0.2.1 (LICENSE)
 
@@ -3040,7 +3700,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 77 — SHA-256 b8265327ab678f554800e71188b1cc6b1ff57522e292d2b1c0be66f27cf328b6
+License text 85 — SHA-256 b8265327ab678f554800e71188b1cc6b1ff57522e292d2b1c0be66f27cf328b6
 Applies to:
 - d3-path@1.0.9 (LICENSE)
 
@@ -3072,7 +3732,7 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-License text 78 — SHA-256 b87653fff2d44426ab5cd4723cee3b1364dc8d35a0acdf098c54689543123bf8
+License text 86 — SHA-256 b87653fff2d44426ab5cd4723cee3b1364dc8d35a0acdf098c54689543123bf8
 Applies to:
 - core-js@3.49.0 (LICENSE)
 
@@ -3097,7 +3757,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-License text 79 — SHA-256 b989d9085148d21ff64a75e14462aefa06b2589a55553b07b1460c70081c7d08
+License text 87 — SHA-256 b989d9085148d21ff64a75e14462aefa06b2589a55553b07b1460c70081c7d08
 Applies to:
 - d3-ease@3.0.1 (LICENSE)
 
@@ -3130,7 +3790,7 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-License text 80 — SHA-256 bd1c70786d165cc05faa10569e13905318f5a75a0281d960038231521148d082
+License text 88 — SHA-256 bd1c70786d165cc05faa10569e13905318f5a75a0281d960038231521148d082
 Applies to:
 - iobuffer@5.4.0 (LICENSE)
 
@@ -3156,7 +3816,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 81 — SHA-256 beaa6b04fb82e41dd2ad679e19e27953afb5999b1abbb455b6564e78ebfeb332
+License text 89 — SHA-256 beaa6b04fb82e41dd2ad679e19e27953afb5999b1abbb455b6564e78ebfeb332
 Applies to:
 - uuid@14.0.1 (LICENSE.md)
 
@@ -3170,7 +3830,7 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-License text 82 — SHA-256 c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383
+License text 90 — SHA-256 c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383
 Applies to:
 - @types/d3-array@3.2.2 (LICENSE)
 - @types/d3-axis@3.0.6 (LICENSE)
@@ -3233,7 +3893,7 @@ Applies to:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE
 
-License text 83 — SHA-256 cb992345949ccd6e8394b2cd6c465f7b897c864f845937dbf64e8997f389e164
+License text 91 — SHA-256 cb992345949ccd6e8394b2cd6c465f7b897c864f845937dbf64e8997f389e164
 Applies to:
 - entities@7.0.1 (LICENSE)
 - entities@8.0.0 (LICENSE)
@@ -3250,7 +3910,7 @@ Redistributions in binary form must reproduce the above copyright notice, this l
 THIS IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS,
 EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-License text 84 — SHA-256 cc11ae75fa400984b244cf246384a55b99a3174c1184d7f1362e71a870d1c919
+License text 92 — SHA-256 cc11ae75fa400984b244cf246384a55b99a3174c1184d7f1362e71a870d1c919
 Applies to:
 - cytoscape-cose-bilkent@4.1.0 (LICENSE)
 
@@ -3276,7 +3936,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 85 — SHA-256 cd05e8e2516f46a2cd79494bbabdea76f874e8d049dbc19a76b367534a4e013e
+License text 93 — SHA-256 cd05e8e2516f46a2cd79494bbabdea76f874e8d049dbc19a76b367534a4e013e
 Applies to:
 - svg-pathdata@6.0.3 (LICENSE)
 
@@ -3301,7 +3961,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-License text 86 — SHA-256 cede95c28e6e9d67d1c1e49e8ba3c20250c7d4080c3faca1579b6732327ae40d
+License text 94 — SHA-256 cede95c28e6e9d67d1c1e49e8ba3c20250c7d4080c3faca1579b6732327ae40d
 Applies to:
 - github.com/wailsapp/wails/v2@v2.13.0 (LICENSE)
 
@@ -3327,7 +3987,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 87 — SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
+License text 95 — SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Applies to:
 - @chevrotain/types@11.1.2 (LICENSE.txt)
 - dompurify@3.4.13 (LICENSE)
@@ -3535,7 +4195,7 @@ Applies to:
    See the License for the specific language governing permissions and
    limitations under the License.
 
-License text 88 — SHA-256 d01eb84ccce437dbf5fd40853bceea0f287930920acea066597a4a25ead63858
+License text 96 — SHA-256 d01eb84ccce437dbf5fd40853bceea0f287930920acea066597a4a25ead63858
 Applies to:
 - dagre-d3-es@7.0.14 (LICENSE.md)
 
@@ -3563,7 +4223,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-License text 89 — SHA-256 d0817a3112cb46c57b987f58db0d8c71ca99f26d448a351073e3d69b6702e541
+License text 97 — SHA-256 d0817a3112cb46c57b987f58db0d8c71ca99f26d448a351073e3d69b6702e541
 Applies to:
 - github.com/leaanthony/go-ansi-parser@v1.6.1 (LICENSE)
 
@@ -3589,7 +4249,34 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 90 — SHA-256 d374061c40bfb6f99c5033290caefda97a9b3e7e477e5ee02f487143ef2177e8
+License text 98 — SHA-256 d0eb7408375109c017a09619af805c160be9179fa84f53536023cc1d92a1411d
+Applies to:
+- markdown-it-emoji@3.1.0 (LICENSE)
+
+Copyright (c) 2014 Vitaly Puzrin.
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+License text 99 — SHA-256 d374061c40bfb6f99c5033290caefda97a9b3e7e477e5ee02f487143ef2177e8
 Applies to:
 - @mermaid-js/parser@1.2.0 (LICENSE)
 
@@ -3615,7 +4302,33 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 91 — SHA-256 d883dbca28769ff23dd4368a8edb7ad9f9f23a8f86adde2875c6e41a828aac62
+License text 100 — SHA-256 d7bdcd152b978adee22a2f9b92a4d72c4ec2c20a86512766c7c210b462b54702
+Applies to:
+- abcjs@6.7.0 (LICENSE.md)
+
+Copyright (c) 2009-2026 Paul Rosen and Gregory Dyke
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+**This text is from: http://opensource.org/licenses/MIT**
+
+License text 101 — SHA-256 d883dbca28769ff23dd4368a8edb7ad9f9f23a8f86adde2875c6e41a828aac62
 Applies to:
 - github.com/go-ole/go-ole@v1.3.0 (LICENSE)
 
@@ -3641,7 +4354,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 92 — SHA-256 da4db1480d9beea3483a2eda5c53b22238d0827d57da162b48f122e04d2d9987
+License text 102 — SHA-256 da4db1480d9beea3483a2eda5c53b22238d0827d57da162b48f122e04d2d9987
 Applies to:
 - nanoid@3.3.17 (LICENSE)
 
@@ -3666,7 +4379,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-License text 93 — SHA-256 dbce1df8ee5bd72544721386ec2a0e55ab7b5ab2167b2ef3e1a807b51f503a16
+License text 103 — SHA-256 dbce1df8ee5bd72544721386ec2a0e55ab7b5ab2167b2ef3e1a807b51f503a16
 Applies to:
 - @mdit/helper@1.0.1 (LICENSE)
 
@@ -3692,7 +4405,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-License text 94 — SHA-256 dc388ec35ff463288cdde3588a36fd4ed12a45deff053243b37309acc9ef583b
+License text 104 — SHA-256 dc388ec35ff463288cdde3588a36fd4ed12a45deff053243b37309acc9ef583b
 Applies to:
 - jspdf@4.2.1 (LICENSE)
 
@@ -3719,7 +4432,7 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-License text 95 — SHA-256 dc63692c70bf95b67d9059b0fa660a9189a0cfa054e9d5fda89ed35aca262901
+License text 105 — SHA-256 dc63692c70bf95b67d9059b0fa660a9189a0cfa054e9d5fda89ed35aca262901
 Applies to:
 - estree-walker@2.0.2 (LICENSE)
 
@@ -3731,7 +4444,7 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-License text 96 — SHA-256 dca9a392272606ac748ac0976a2a1133f14eef841c27beaa51a844d53c56a09d
+License text 106 — SHA-256 dca9a392272606ac748ac0976a2a1133f14eef841c27beaa51a844d53c56a09d
 Applies to:
 - roughjs@4.6.6 (LICENSE)
 
@@ -3757,7 +4470,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 97 — SHA-256 de4d1f2d2ad5ad0cfd1657a106476b31cb5db5ef9d1ff842b237c0c81f0c8a23
+License text 107 — SHA-256 de4d1f2d2ad5ad0cfd1657a106476b31cb5db5ef9d1ff842b237c0c81f0c8a23
 Applies to:
 - argparse@3.0.0 (LICENSE)
 
@@ -4016,7 +4729,7 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-License text 98 — SHA-256 e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee
+License text 108 — SHA-256 e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee
 Applies to:
 - d3-axis@3.0.0 (LICENSE)
 - d3-brush@3.0.0 (LICENSE)
@@ -4050,7 +4763,39 @@ OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
 TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 
-License text 99 — SHA-256 e273680c43c2ab5bb3b50af28de6a08000b333396834db7bf6129cd6f130c9cd
+License text 109 — SHA-256 e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304
+Applies to:
+- echarts@6.1.0 (licenses/LICENSE-d3)
+
+Copyright 2010-2016 Mike Bostock
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of the author nor the names of contributors may be used to
+  endorse or promote products derived from this software without specific prior
+  written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License text 110 — SHA-256 e273680c43c2ab5bb3b50af28de6a08000b333396834db7bf6129cd6f130c9cd
 Applies to:
 - rw@1.3.3 (LICENSE)
 
@@ -4081,7 +4826,7 @@ OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-License text 100 — SHA-256 e2c9290019954c3c3664428b73b34186b2bb8faad9b2c50605d7cdd9df5c7177
+License text 111 — SHA-256 e2c9290019954c3c3664428b73b34186b2bb8faad9b2c50605d7cdd9df5c7177
 Applies to:
 - github.com/wailsapp/go-webview2@v1.0.22 (webviewloader/LICENSE)
 
@@ -4102,7 +4847,7 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 
-License text 101 — SHA-256 e51cba0e4fa1d8c078e15319868f2b90188f413f9ce9dac1043b62db32901e93
+License text 112 — SHA-256 e51cba0e4fa1d8c078e15319868f2b90188f413f9ce9dac1043b62db32901e93
 Applies to:
 - d3-contour@4.0.2 (LICENSE)
 
@@ -4120,7 +4865,7 @@ OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
 TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 
-License text 102 — SHA-256 e7cefb44454d371c9eddb390fb829d34fc6ffa79e63776873c34f8413bf3268b
+License text 113 — SHA-256 e7cefb44454d371c9eddb390fb829d34fc6ffa79e63776873c34f8413bf3268b
 Applies to:
 - markdown-it-task-lists@2.1.1 (LICENSE)
 
@@ -4138,7 +4883,7 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-License text 103 — SHA-256 e9754a00aebde654e80f40bcf41dab667d6a41dfbbd2912bcf14fb07d468bf71
+License text 114 — SHA-256 e9754a00aebde654e80f40bcf41dab667d6a41dfbbd2912bcf14fb07d468bf71
 Applies to:
 - path-data-parser@0.1.0 (LICENSE)
 - points-on-curve@0.2.0 (LICENSE)
@@ -4165,7 +4910,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 104 — SHA-256 eabb762d8a95109a39c9be3247325529a5239a7aca327d909c3ccdc41f3a06bf
+License text 115 — SHA-256 eabb762d8a95109a39c9be3247325529a5239a7aca327d909c3ccdc41f3a06bf
 Applies to:
 - layout-base@1.0.2 (LICENSE)
 - layout-base@2.0.1 (LICENSE)
@@ -4192,7 +4937,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 105 — SHA-256 ec8a0d1f65c31ca6e85b002830c7db6cb6f19981189e17437f2a7a76a6af2e7c
+License text 116 — SHA-256 ec8a0d1f65c31ca6e85b002830c7db6cb6f19981189e17437f2a7a76a6af2e7c
 Applies to:
 - css-line-break@2.1.0 (LICENSE)
 
@@ -4219,7 +4964,7 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-License text 106 — SHA-256 ec9fb67dcb25eccc416ed56e1aab819222c805a2a4bfe4cb19e7556bf2ffde80
+License text 117 — SHA-256 ec9fb67dcb25eccc416ed56e1aab819222c805a2a4bfe4cb19e7556bf2ffde80
 Applies to:
 - mermaid@11.16.1 (LICENSE)
 
@@ -4245,7 +4990,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 107 — SHA-256 eff13095d9d762c3bd9dda74370c81e2130c28f2691bc455603abf973bac25b9
+License text 118 — SHA-256 eff13095d9d762c3bd9dda74370c81e2130c28f2691bc455603abf973bac25b9
 Applies to:
 - ts-dedent@2.3.0 (LICENSE)
 
@@ -4271,7 +5016,33 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 108 — SHA-256 f3eca6ff762533fa5a77caf954a143e48afa204668cf97dce758c45a9e006be3
+License text 119 — SHA-256 f1fb91bf7cbcb42b2af56949e4fa909e1979d5b57c2826cabacdb4b631457720
+Applies to:
+- @viz-js/viz@3.29.0 (scripts/licenses/viz-js-3.29.0-MIT.txt (official license: https://github.com/mdaines/viz-js/blob/release-viz-3.29.0/LICENSE))
+
+MIT License
+
+Copyright (c) Michael Daines
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+License text 120 — SHA-256 f3eca6ff762533fa5a77caf954a143e48afa204668cf97dce758c45a9e006be3
 Applies to:
 - base64-arraybuffer@1.0.2 (LICENSE)
 - html2canvas@1.4.1 (LICENSE)
@@ -4299,7 +5070,7 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-License text 109 — SHA-256 f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc
+License text 121 — SHA-256 f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc
 Applies to:
 - lodash-es@4.18.1 (LICENSE)
 
@@ -4351,7 +5122,7 @@ maintained libraries used by this software which have their own
 licenses; we recommend you read them, as their terms may differ from the
 terms above.
 
-License text 110 — SHA-256 f7d7409c091d9d5c09a8bafbc4a27dc30ce2da6e19b7c0f91c59754a7c4b195b
+License text 122 — SHA-256 f7d7409c091d9d5c09a8bafbc4a27dc30ce2da6e19b7c0f91c59754a7c4b195b
 Applies to:
 - typescript@5.7.3 (ThirdPartyNoticeText.txt)
 
@@ -4548,7 +5319,7 @@ MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
 
 ------------- End of ThirdPartyNotices ------------------------------------------- */
 
-License text 111 — SHA-256 f7ebdc2a36c48b5413fe0b60f7a16b6163ff171d5bb35f27dfda432962dd4f49
+License text 123 — SHA-256 f7ebdc2a36c48b5413fe0b60f7a16b6163ff171d5bb35f27dfda432962dd4f49
 Applies to:
 - cytoscape@3.34.0 (LICENSE)
 
@@ -4572,7 +5343,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 112 — SHA-256 f95f668fe64081ddb4153b322e34fdd719b991285ed08177d5ad7133b7988d92
+License text 124 — SHA-256 f95f668fe64081ddb4153b322e34fdd719b991285ed08177d5ad7133b7988d92
 Applies to:
 - tinyexec@1.3.0 (LICENSE)
 
@@ -4598,7 +5369,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 113 — SHA-256 f9c6da891840e8951696e472b3c7d6f6d3ab2c7325f1dd30c0813244c15b288c
+License text 125 — SHA-256 f9c6da891840e8951696e472b3c7d6f6d3ab2c7325f1dd30c0813244c15b288c
 Applies to:
 - iconv-lite@0.6.3 (LICENSE)
 
@@ -4623,7 +5394,7 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-License text 114 — SHA-256 faa682e3e430941f958d26180458f5934a62f58dac4d70ccdd15608c15d0f884
+License text 126 — SHA-256 faa682e3e430941f958d26180458f5934a62f58dac4d70ccdd15608c15d0f884
 Applies to:
 - d3-color@3.1.0 (LICENSE)
 - d3-shape@3.2.0 (LICENSE)
@@ -4643,7 +5414,7 @@ OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
 TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 
-License text 115 — SHA-256 ff3448b5ffd013b261466bb5d7898094a845756f8a69773331ebbf66518f4109
+License text 127 — SHA-256 ff3448b5ffd013b261466bb5d7898094a845756f8a69773331ebbf66518f4109
 Applies to:
 - github.com/leaanthony/u@v1.1.1 (LICENSE)
 
@@ -4669,7 +5440,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-License text 116 — SHA-256 ffdc17dc9040006bddeb891c95bfbb492e86d6bc64a4a4233666febab1be35e0
+License text 128 — SHA-256 ffdc17dc9040006bddeb891c95bfbb492e86d6bc64a4a4233666febab1be35e0
 Applies to:
 - d3-fetch@3.0.1 (LICENSE)
 
