@@ -19,8 +19,7 @@ export interface ScrollMapping {
 
 const scrollTolerance = 0.5
 
-export const maximumScrollAnchors = 256
-export const maximumMeasuredEditorCharacters = 512 * 1024
+export const maximumScrollAnchors = 8192
 
 export function sampleAnchorIndices(length: number, limit = maximumScrollAnchors) {
   const count = Math.max(0, Math.floor(length))
@@ -36,8 +35,13 @@ export function sampleAnchorIndices(length: number, limit = maximumScrollAnchors
   return indices
 }
 
-export function shouldMeasureEditorAnchors(sourceLength: number, anchorCount: number) {
-  return sourceLength <= maximumMeasuredEditorCharacters && anchorCount <= maximumScrollAnchors
+export function editorLineAnchors(lines: readonly number[], lineHeight: number, paddingTop: number) {
+  if (!Number.isFinite(lineHeight) || lineHeight <= 0 || !Number.isFinite(paddingTop)) return []
+  return [...new Set(lines)]
+    .filter((line) => Number.isFinite(line) && line >= 0)
+    .sort((left, right) => left - right)
+    .slice(0, maximumScrollAnchors)
+    .map((line) => ({ line, top: Math.max(0, paddingTop) + line * lineHeight }))
 }
 
 function clamp(value: number, minimum: number, maximum: number) {

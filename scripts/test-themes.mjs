@@ -89,3 +89,12 @@ test('candidate themes style application chrome and rendered Markdown surfaces',
   ]) assert.ok(styles.includes(token), `missing themed surface ${token}`)
   assert.match(styles, /body\.export-document:is\([^}]+background:\s*var\(--theme-preview\)/s)
 })
+
+test('native select popups remain readable in Windows light and dark color schemes', async () => {
+  const styles = await readFile(new URL('../frontend/src/styles.css', import.meta.url), 'utf8')
+  assert.match(styles, /:root\s*\{[^}]*color-scheme:\s*light;/s)
+  assert.match(styles, /button,\s*textarea,\s*input,\s*select\s*\{\s*font:\s*inherit;/)
+  assert.match(styles, /select option\s*\{[^}]*color:\s*#212826;[^}]*background-color:\s*#fff;/s)
+  assert.match(styles, /\[data-color-scheme="dark"\]\s*\{\s*color-scheme:\s*dark;\s*\}/)
+  assert.match(styles, /\[data-color-scheme="dark"\] select option\s*\{[^}]*color:\s*#e6efec;[^}]*background-color:\s*#111718;/s)
+})

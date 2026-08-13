@@ -2,14 +2,19 @@
   font-family: var(--inkmark-ui-font, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif);
   color: #202624;
   background: #c9ceca;
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
 
 * { box-sizing: border-box; }
 html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-button, textarea, input { font: inherit; }
+button, textarea, input, select { font: inherit; }
 button { color: inherit; }
+
+[data-color-scheme="dark"] { color-scheme: dark; }
+select option { color: #212826; background-color: #fff; }
+[data-color-scheme="dark"] select option { color: #e6efec; background-color: #111718; }
 
 .app-shell {
   --chrome-dark: #163f43;

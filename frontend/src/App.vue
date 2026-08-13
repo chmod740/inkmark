@@ -26,9 +26,9 @@ import {
 } from './export-document'
 import { runGuardedDocumentTransition, type DocumentTransition, type UnsavedDecision } from './document-guard'
 import {
+  editorLineAnchors,
   ScrollSyncController,
   sampleAnchorIndices,
-  shouldMeasureEditorAnchors,
   type ScrollAnchor,
   type ScrollMapping,
   type ScrollPane,
@@ -4096,79 +4096,13 @@ function runFormat(action: string) {
 
 function measureEditorScrollAnchors(lines: readonly number[]): ScrollAnchor[] {
   const target = editor.value
-  const uniqueLines = [...new Set(lines)]
-    .filter((line) => Number.isFinite(line) && line >= 0)
-    .sort((left, right) => left - right)
-  if (!target || !uniqueLines.length || !shouldMeasureEditorAnchors(source.value.length, uniqueLines.length)) return []
-
+  if (!target || !lines.length) return []
   const computed = window.getComputedStyle(target)
-  const mirror = document.createElement('div')
-  Object.assign(mirror.style, {
-    position: 'fixed',
-    left: '-100000px',
-    top: '0',
-    visibility: 'hidden',
-    pointerEvents: 'none',
-    boxSizing: computed.boxSizing,
-    width: `${target.clientWidth}px`,
-    paddingTop: computed.paddingTop,
-    paddingRight: computed.paddingRight,
-    paddingBottom: computed.paddingBottom,
-    paddingLeft: computed.paddingLeft,
-    border: '0',
-    font: computed.font,
-    fontFamily: computed.fontFamily,
-    fontSize: computed.fontSize,
-    fontWeight: computed.fontWeight,
-    lineHeight: computed.lineHeight,
-    letterSpacing: computed.letterSpacing,
-    tabSize: computed.tabSize,
-    whiteSpace: 'pre-wrap',
-    overflowWrap: 'break-word',
-    wordBreak: computed.wordBreak,
-    contain: 'layout style paint',
-  })
-
-  const offsets = new Map<number, number>()
-  let currentLine = 0
-  let currentOffset = 0
-  let lineIndex = 0
-  while (lineIndex < uniqueLines.length) {
-    const requestedLine = uniqueLines[lineIndex]
-    while (currentLine < requestedLine) {
-      const nextBreak = source.value.indexOf('\n', currentOffset)
-      if (nextBreak === -1) break
-      currentOffset = nextBreak + 1
-      currentLine += 1
-    }
-    if (currentLine !== requestedLine) break
-    offsets.set(requestedLine, currentOffset)
-    lineIndex += 1
-  }
-
-  const markers: Array<{ line: number; element: HTMLSpanElement }> = []
-  let textOffset = 0
-  offsets.forEach((offset, line) => {
-    mirror.append(document.createTextNode(source.value.slice(textOffset, offset)))
-    const marker = document.createElement('span')
-    Object.assign(marker.style, {
-      display: 'inline-block',
-      width: '0',
-      height: '1px',
-      margin: '0',
-      padding: '0',
-      overflow: 'hidden',
-      verticalAlign: 'top',
-    })
-    mirror.append(marker)
-    markers.push({ line, element: marker })
-    textOffset = offset
-  })
-  mirror.append(document.createTextNode(source.value.slice(textOffset) || '\u200b'))
-  document.body.append(mirror)
-  const anchors = markers.map(({ line, element }) => ({ line, top: element.offsetTop }))
-  mirror.remove()
-  return anchors
+  return editorLineAnchors(
+    lines,
+    Number.parseFloat(computed.lineHeight),
+    Number.parseFloat(computed.paddingTop),
+  )
 }
 
 function measurePreviewScrollAnchors(): ScrollAnchor[] {

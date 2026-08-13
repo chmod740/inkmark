@@ -2,12 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  editorLineAnchors,
   mapAnchoredScrollTop,
-  maximumMeasuredEditorCharacters,
   maximumScrollAnchors,
   sampleAnchorIndices,
   ScrollSyncController,
-  shouldMeasureEditorAnchors,
 } from '../frontend/src/scroll-sync.ts'
 
 function viewport(scrollTop, scrollHeight, clientHeight = 200) {
@@ -124,14 +123,36 @@ test('render reconciliation restores the active editor after asynchronous previe
   assert.equal(preview.scrollTop, 900)
 })
 
-test('semantic anchor measurement is bounded and large documents use proportional fallback', () => {
+test('semantic anchor sampling is bounded', () => {
   const indices = sampleAnchorIndices(1_000_000)
   assert.equal(indices.length, maximumScrollAnchors)
   assert.equal(indices[0], 0)
   assert.equal(indices.at(-1), 999_999)
   assert.equal(new Set(indices).size, maximumScrollAnchors)
 
-  assert.equal(shouldMeasureEditorAnchors(maximumMeasuredEditorCharacters, maximumScrollAnchors), true)
-  assert.equal(shouldMeasureEditorAnchors(maximumMeasuredEditorCharacters + 1, 1), false)
-  assert.equal(shouldMeasureEditorAnchors(1, maximumScrollAnchors + 1), false)
+})
+
+test('large no-wrap editors derive exact line anchors without a document-size cutoff', () => {
+  const anchors = editorLineAnchors([0, 51, 923, 1_253, 11_849], 24.08, 24)
+  assert.deepEqual(anchors, [
+    { line: 0, top: 24 },
+    { line: 51, top: 1_252.08 },
+    { line: 923, top: 22_249.84 },
+    { line: 1_253, top: 30_196.239999999998 },
+    { line: 11_849, top: 285_347.92 },
+  ])
+  assert.deepEqual(editorLineAnchors([3, 3, -1, Number.NaN, 1], 20, 12), [
+    { line: 1, top: 32 },
+    { line: 3, top: 72 },
+  ])
+  assert.deepEqual(editorLineAnchors([1], 0, 12), [])
+  assert.equal(editorLineAnchors(Array.from({ length: 10_000 }, (_, line) => line), 20, 0).length, maximumScrollAnchors)
+})
+
+test('application uses analytical no-wrap line geometry instead of a wrapping DOM mirror', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const app = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
+  assert.match(app, /function measureEditorScrollAnchors[\s\S]*editorLineAnchors\([\s\S]*computed\.lineHeight[\s\S]*computed\.paddingTop/)
+  assert.doesNotMatch(app, /whiteSpace:\s*'pre-wrap'/)
+  assert.doesNotMatch(app, /maximumMeasuredEditorCharacters/)
 })
