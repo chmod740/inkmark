@@ -20,10 +20,11 @@ InkMark is a Markdown editor for macOS and Windows with local and WebDAV documen
 - Save, Don't Save, and Cancel choices before replacing or closing a modified document
 - One-click swapping of editor and preview sides, persisted across launches
 - GitHub, Clean, WeChat, and Dark preview themes
+- Independent interface, prose, and code fonts: system sans, reading serif, system monospace, and offline-bundled Fusion Pixel 12 Simplified/Traditional Chinese presets
 - Native macOS and Windows menus for files, editing, views, formatting, help, and updates
 - Automatic language detection plus explicit Simplified Chinese and English settings; automatic detection is the default
 - A localized welcome page on normal launch; Finder or Explorer file launches open the requested document directly
-- A built-in bilingual rendering test, available from Welcome and Help, covering tables, math, code, alerts, safe HTML, and ten Mermaid diagram types
+- A built-in bilingual rendering test, available from Welcome and Help, covering extended dialects, tables, math, code, emoji, footnotes, alerts, safe HTML, Mermaid, mind maps, ECharts, ABC notation, and Graphviz
 - One consistent icon for the app, file associations, desktop shortcuts, and in-app branding
 - An About page with version, author, and update status
 - GitHub Releases update checks with in-app download and checksum verification; after unsaved work is resolved, InkMark closes the old version and opens the system installer
@@ -31,9 +32,16 @@ InkMark is a Markdown editor for macOS and Windows with local and WebDAV documen
 ## Markdown and Preview Support
 
 - CommonMark and GitHub Flavored Markdown
-- Tables, task lists, strikethrough, autolinks, and alerts
+- Tables, task lists, strikethrough, autolinks, emoji shortcodes, footnotes, and both GitHub and `NOTE:`-style alerts
+- Definition lists, abbreviation definitions, `==mark==`, `H~2~O` subscripts, and `x^2^` superscripts
+- A standalone `[TOC]` marker and trailing `{#custom-id .custom-class}` heading attributes; IDs are deterministically de-duplicated and user classes receive an isolated prefix
+- `[[target]]` and `[[target|label]]` Wiki markers render as unresolved local visual markers; they never read workspace files or navigate to the network
+- Bounded flat `key: value` Front Matter at the start of a document; YAML tags, anchors, nested structures, and external references are not executed
+- Lightweight citations with `[@key]` plus a top-level `[@key]: reference text` definition. This is InkMark citation-lite, not a full Pandoc/CSL engine, and it never loads an external bibliography
+- Plain-text `@username` tokens may be decorated visually; they do not query a user directory, send notifications, or create external links
 - Inline and display KaTeX formulas
-- Mermaid flowcharts, sequence diagrams, and other diagrams
+- Mermaid flowcharts, sequence diagrams, and other diagrams, plus two-space-indented `mindmap` lists converted into mind maps
+- Restricted JSON ECharts line charts, static ABC music notation, and Graphviz SVG generated in a timeout-bounded Worker; all three are sanitized and cannot load external resources
 - Highlighting for JavaScript, TypeScript, Python, Go, Rust, JSON, Shell, and other common languages
 - Sanitization of raw HTML, blocking scripts, iframes, objects, embeds, and raw SVG injection
 - Static PNG, JPEG, GIF, and WebP images rendered from local relative paths, Data URIs, private WebDAV-relative paths, or public HTTPS addresses
@@ -49,11 +57,13 @@ InkMark is a Markdown editor for macOS and Windows with local and WebDAV documen
 | TXT | Plain Markdown source text |
 | Word-compatible document | UTF-8 HTML `.doc` with Office metadata that Microsoft Word can open and edit |
 
+When Fusion Pixel is selected, HTML and Word-compatible exports embed the offline WOFF2 assets. Word versions without Data URI font support fall back to system fonts. Fusion Pixel currently supplies Regular 400 only, so bold and italic are synthesized; Mermaid text continues to use its restricted built-in font configuration.
+
 ## Download and Install
 
 Download the appropriate installer from [GitHub Releases](https://github.com/chmod740/inkmark/releases/latest):
 
-- macOS 11 or later: use `macos-universal.pkg` for in-place upgrades; Universal DMG and ZIP packages are also provided for Apple Silicon and Intel
+- macOS 11 or later (install current system updates for complete Graphviz WebView/WASM compatibility): use `macos-universal.pkg` for in-place upgrades; Universal DMG and ZIP packages are also provided for Apple Silicon and Intel
 - Windows 10/11 x64: `windows-amd64-setup.exe`
 
 The macOS and Windows packages are not currently signed with commercial distribution certificates. Gatekeeper or SmartScreen may therefore show a warning on first launch. Confirm that the file came from this repository's Release page and verify it with the accompanying `SHA256SUMS` file.
@@ -67,12 +77,12 @@ The macOS and Windows packages are not currently signed with commercial distribu
 4. Write Markdown in the editor and inspect the live result in the preview.
 5. Use the View menu for editing layouts and themes, and the Format menu for common Markdown markup or images.
 6. Save from the File menu or export to PDF, HTML, PNG, TXT, or a Word-compatible document. Save As creates a local copy of a WebDAV document.
-7. Choose Automatic, Simplified Chinese, or English in Settings.
+7. Choose Automatic, Simplified Chinese, or English in Settings, and configure interface, prose, and code fonts independently. Preferences store only fixed presets, never arbitrary CSS font values.
 8. Use Help → Check for Updates to download, verify, and start the system installer; About also reports download and installation status.
 
 ## Offline and Network Behaviour
 
-The editor never loads JavaScript, CSS, fonts, KaTeX, Mermaid, or highlighting assets from a CDN. Local-relative and Data URI images can be previewed and exported completely offline.
+The editor never loads JavaScript, CSS, fonts, KaTeX, Mermaid, ECharts, ABC, Graphviz, or highlighting assets from a CDN. Simplified and Traditional Fusion Pixel fonts ship with the app; HTML and Word-compatible exports embed the selected offline font assets. Local-relative images, Data URI images, and built-in diagrams can be previewed and exported completely offline inside the app; a standalone HTML document containing KaTeX or highlighted code may still reference its existing external stylesheet URLs.
 
 Network access occurs only for user-requested actions:
 
@@ -114,6 +124,9 @@ pnpm --dir frontend test:i18n
 pnpm --dir frontend test:export
 pnpm --dir frontend test:scroll
 pnpm --dir frontend test:preview
+pnpm --dir frontend test:markdown
+pnpm --dir frontend test:dialects
+pnpm --dir frontend test:diagrams
 pnpm --dir frontend test:update
 pnpm --dir frontend test:ui
 pnpm --dir frontend test:workspace
@@ -121,10 +134,12 @@ pnpm --dir frontend test:webdav
 pnpm --dir frontend test:saved-webdav
 pnpm --dir frontend test:image
 pnpm --dir frontend test:installer
+pnpm --dir frontend test:notices
+pnpm --dir frontend test:fonts
 node scripts/verify-offline.mjs
 ```
 
-The suite covers local file I/O, WebDAV authentication and directory parsing, operating-system credential-vault connection management, path encoding, ETag conflicts, remote saves, local and WebDAV workspace creation/rename/recursive deletion, safe image-entry preview, local and WebDAV image import, all four image rendering modes, public-image network boundaries, capability-bound workspace access, lazy sidebar expansion and context menus, recent items, unsaved-document transitions and the native close guard, language settings, native menus, verified update downloads and installer orchestration, atomic preview commits, version comparison and Release responses, export structure, external-resource policy, scroll synchronization, bounded large-document anchors, and offline asset integrity. Live WebDAV tests run only when a test endpoint and credentials are injected at runtime, and they remove their randomly named temporary resources.
+The suite covers local file I/O, WebDAV authentication and directory parsing, operating-system credential-vault connection management, path encoding, ETag conflicts, remote saves, local and WebDAV workspace creation/rename/recursive deletion, safe image-entry preview, local and WebDAV image import, all four image rendering modes, emoji/footnotes/alerts/mentions, definition lists/abbreviations/mark/subscript/superscript, TOC/heading attributes/Wiki/Front Matter/citation-lite boundaries and malicious inputs, font-preset persistence and offline embedding, mind maps and the input limits plus malicious-payload rejection for three static diagram engines, public-image network boundaries, capability-bound workspace access, lazy sidebar expansion and context menus, recent items, unsaved-document transitions and the native close guard, language settings, native menus, verified update downloads and installer orchestration, atomic preview commits, version comparison and Release responses, export structure, external-resource policy, scroll synchronization, bounded large-document anchors, and offline asset integrity. Live WebDAV tests run only when a test endpoint and credentials are injected at runtime, and they remove their randomly named temporary resources.
 
 ## Project Layout
 
@@ -145,6 +160,9 @@ The suite covers local file I/O, WebDAV authentication and directory parsing, op
 - `frontend/src/export-document.ts`: HTML, PDF, PNG, TXT, and Word-compatible exports
 - `frontend/src/scroll-sync.ts`: stable bidirectional scroll synchronization
 - `frontend/src/preview-render.ts`: atomic preview commits and Mermaid caching
+- `frontend/src/markdown-extensions.ts`: emoji, footnotes, callouts, mentions, mind maps, and extended Markdown dialect adaptation
+- `frontend/src/font-preferences.ts` and `font-preferences.css`: three independent font scopes, fixed safe stacks, offline Fusion Pixel assets, and export embedding
+- `frontend/src/extended-diagrams.ts` and `graphviz-worker.ts`: restricted ECharts, ABC, and isolated Graphviz static rendering
 - `frontend/src/image-resources.ts`: four image-source classes, preview-resource lifecycle, and export materialization
 - `samples/markdown-rendering-test.md`: built-in bilingual comprehensive rendering sample
 - `scripts/`: build, packaging, and regression-test scripts

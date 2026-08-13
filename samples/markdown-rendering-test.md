@@ -1,14 +1,23 @@
-# Markdown 综合渲染测试 / Comprehensive Rendering Test
+---
+title: "Markdown 综合渲染测试 / Comprehensive Rendering Test"
+category: documentation
+offline: true
+revision: 2
+---
 
-这是一份用于验证常见 CommonMark、GitHub 风格扩展、KaTeX 与 Mermaid 的内置双语文档。
+# Markdown 综合渲染测试 / Comprehensive Rendering Test {#rendering-test .bilingual}
 
-This built-in bilingual document exercises common CommonMark syntax, GitHub-style extensions, KaTeX, and Mermaid.
+这是一份用于验证常见 CommonMark、GitHub 风格扩展、表情、脚注、KaTeX 与多种图表的内置双语文档。
+
+This built-in bilingual document exercises common CommonMark syntax, GitHub-style extensions, emoji, footnotes, KaTeX, and multiple diagram formats.
 
 [返回欢迎页 / Back to Welcome](#inkmark-welcome)
 
+[TOC]
+
 ## 基础文本 / Basic Text
 
-普通文本支持 *斜体 / italic*、**粗体 / bold**、***粗斜体 / bold italic***、~~删除线 / strikethrough~~、<mark>高亮 / highlight</mark>、`inline code`、上标 H<sup>2</sup>O 与下标 CO<sub>2</sub>。
+普通文本支持 *斜体 / italic*、**粗体 / bold**、***粗斜体 / bold italic***、~~删除线 / strikethrough~~、==高亮 / highlight==、`inline code`、上标 x^2^ 与下标 H~2~O。
 
 连续两个空格产生硬换行。  
 This line follows a hard line break.
@@ -19,6 +28,25 @@ This line follows a hard line break.
 
 [commonmark]: https://spec.commonmark.org/ "CommonMark Spec"
 [mermaid]: https://mermaid.js.org/ "Mermaid Documentation"
+
+### 通用方言扩展 / General Dialect Extensions {#dialect-extensions .demo}
+
+HTML 与 CSS 缩写会显示说明；HTML and CSS abbreviations expose their definitions.
+
+Markdown 方言
+: 支持定义列表、缩写、高亮、上下标、目录、标题属性、Wiki 链接、Front Matter 与本地引用文献。
+
+Markdown dialects
+: Definition lists, abbreviations, mark, sub/sup, TOC, heading attributes, wiki links, front matter, and local citations.
+
+Wiki 链接在纯离线预览中显示为待解析文本：[[项目首页|Project Home]]；它不会擅自读取文件或联网。
+
+引用示例 / Citation example：安全渲染必须保持离线[@inkmark-rendering]，扩展语法遵循明确边界[@markdown-dialects]。
+
+*[HTML]: HyperText Markup Language
+*[CSS]: Cascading Style Sheets
+[@inkmark-rendering]: InkMark 团队，《安全的离线 Markdown 渲染》，2026。
+[@markdown-dialects]: InkMark Team, “Bounded Markdown Dialect Extensions,” 2026.
 
 ---
 
@@ -50,6 +78,31 @@ This line follows a hard line break.
 
 > [!CAUTION]
 > 注意可能造成损失的操作。Use caution before a destructive action.
+
+## 表情、提及与脚注 / Emoji, Mentions, and Footnotes
+
+表情别名 / Emoji aliases: :smile: :+1: :rocket: :tada:
+
+普通文本中的提及会以标签显示：@Vanessa 与 @inkmark-team；代码 `@not-a-mention` 和链接 [@linked-user](https://example.com/users/linked-user) 保持原样。
+
+Plain-text mentions are shown as labels: @Vanessa and @inkmark-team; code `@not-a-mention` and the link [@linked-user](https://example.com/users/linked-user) remain unchanged.
+
+脚注支持简短说明[^short-note]，也支持包含多个段落的长说明[^long-note]。
+
+Footnotes support a short note[^short-note] and a longer, multi-paragraph note[^long-note].
+
+[^short-note]: 这是简短的中英双语脚注。This is a short bilingual footnote.
+[^long-note]: 第一段保留 **粗体 / bold**、`inline code` 与 [链接 / link](https://example.com).
+
+    第二段验证缩进续写。The second paragraph verifies an indented continuation.
+
+## 兼容提示块 / Legacy Callouts
+
+> NOTE: 旧式说明支持 **粗体**、`inline code` 和 [外部链接](https://example.com)，这些行内节点不会在识别标题时丢失。
+
+> Tip: A legacy tip keeps **strong text**, `code`, and an [external link](https://example.com).
+>
+> 第二段仍属于同一个提示块。The second paragraph remains inside the same callout.
 
 ## 引用与嵌套引用 / Blockquotes
 
@@ -168,6 +221,64 @@ fn main() {
 ~~~bash
 set -euo pipefail
 printf 'Code fence using tildes: %s\n' 'OK'
+~~~
+
+## 扩展图表 / Extended Diagrams
+
+### 缩进列表思维导图 / Indented-list Mind Map
+
+~~~mindmap
+- 教程 / Tutorials
+- 语法指导 / Syntax Guide
+  - 普通内容 / Plain Content
+  - 提及用户 @Vanessa / Mention a User
+    - 表情符号 :smile: / Emoji
+      - 四级节点 / Level 4
+        - 五级节点 / Level 5
+          - 六级节点 / Level 6
+- 快捷键 / Shortcuts
+  - 保存 / Save
+  - 预览 / Preview
+~~~
+
+### ECharts 折线图 / ECharts Line Chart
+
+~~~echarts
+{
+  "title": { "text": "月度预览 / Monthly Previews" },
+  "tooltip": { "trigger": "axis" },
+  "legend": { "data": ["文档 / Documents", "导出 / Exports"] },
+  "xAxis": { "type": "category", "data": ["一月 / Jan", "二月 / Feb", "三月 / Mar", "四月 / Apr"] },
+  "yAxis": { "type": "value" },
+  "series": [
+    { "name": "文档 / Documents", "type": "line", "smooth": true, "data": [42, 65, 88, 103] },
+    { "name": "导出 / Exports", "type": "line", "smooth": true, "data": [18, 34, 55, 79] }
+  ]
+}
+~~~
+
+### ABC 乐谱 / ABC Music Notation
+
+~~~abc
+X:1
+T:InkMark Test Tune
+C:Traditional
+M:4/4
+L:1/8
+K:C
+|: C2 E2 G2 c2 | B2 G2 A4 | F2 A2 G2 E2 | D2 C2 C4 :|
+~~~
+
+### Graphviz 关系图 / Graphviz Relationship Diagram
+
+~~~graphviz
+digraph InkMark {
+  rankdir=LR;
+  node [shape=box, style="rounded"];
+  Markdown -> Parse [label="解析 / Parse"];
+  Parse -> Preview [label="渲染 / Render"];
+  Preview -> Export [label="导出 / Export"];
+}
 ~~~
 
 ## 流程图 / Flowchart
@@ -353,8 +464,11 @@ mindmap
 
 - [x] CommonMark 基础语法 / Basic syntax
 - [x] GitHub 风格扩展 / GitHub-style extensions
+- [x] 表情、提及与脚注 / Emoji, mentions, and footnotes
+- [x] 兼容提示块 / Legacy callouts
 - [x] KaTeX 数学公式 / Mathematics
 - [x] Mermaid 十类图表 / Ten diagram types
+- [x] 思维导图、ECharts、ABC 与 Graphviz / Mind map, ECharts, ABC, and Graphviz
 - [x] 中文与 English 混排 / Bilingual typography
 - [x] 多主题与暗色模式 / Themes and dark mode
 - [x] 宽表格滚动 / Wide table scrolling

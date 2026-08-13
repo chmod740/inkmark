@@ -356,7 +356,7 @@ test('App resolves images off-screen and atomically commits one prepared generat
   assert.match(prepare, /imageDecodeGate\.run\([\s\S]*waitForImageDecode\(image\)/)
   assert.match(prepare, /placeholder\.dataset\.inkmarkPublicImage = originalSource/)
   assert.match(render, /const staging = target\.cloneNode\(false\)/)
-  assert.match(render, /FORBID_TAGS:[^\n]*'img'[^\n]*'picture'[^\n]*'source'/)
+  assert.match(render, /FORBID_TAGS:[\s\S]{0,350}'img'[\s\S]{0,120}'picture'[\s\S]{0,120}'source'/)
   assert.match(render, /FORBID_ATTR:[\s\S]*?'src'[\s\S]*?'srcset'[\s\S]*?'style'[\s\S]*?'data-inkmark-public-image'/)
   assert.match(render, /await Promise\.all\(\[[\s\S]*renderDiagrams[\s\S]*preparePreviewImages/)
   assert.match(render, /target\.replaceChildren/)

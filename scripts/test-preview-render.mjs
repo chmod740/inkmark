@@ -6,6 +6,7 @@ import {
   BoundedCache,
   LatestPreviewCommit,
   maximumMermaidCacheEntries,
+  maximumMermaidDiagramsPerPreview,
   mermaidCacheKey,
 } from '../frontend/src/preview-render.ts'
 
@@ -75,6 +76,7 @@ test('Mermaid cache is theme-aware, definition-aware, bounded, and LRU', () => {
   assert.notEqual(mermaidCacheKey('dark', 'flowchart LR; A-->B'), mermaidCacheKey('github', 'flowchart LR; A-->B'))
   assert.notEqual(mermaidCacheKey('github', 'flowchart LR; A-->C'), mermaidCacheKey('github', 'flowchart LR; A-->B'))
   assert.equal(maximumMermaidCacheEntries, 64)
+  assert.equal(maximumMermaidDiagramsPerPreview, 16)
 
   const cache = new BoundedCache(2)
   cache.set('first', '<svg>first</svg>')
@@ -96,6 +98,7 @@ test('App renders into a detached root and atomically swaps only completed conte
   assert.match(app, /previewCommit\.stageAndCommit\(sequence, async \(\) => \{[\s\S]*target\.cloneNode\(false\)[\s\S]*staging\.innerHTML = cleanHTML/)
   assert.match(app, /decoratePreview\(staging\)[\s\S]*renderMath\(staging\)[\s\S]*highlightCode\(staging\)/)
   assert.match(app, /await Promise\.all\(\[[\s\S]*renderDiagrams\(staging[\s\S]*preparePreviewImages\(staging/)
+  assert.match(app, /diagrams\.slice\(maximumMermaidDiagramsPerPreview\)[\s\S]*diagram count exceeds the limit/)
   assert.match(app, /target\.replaceChildren\([\s\S]*refreshScrollAnchors\(\)[\s\S]*reconcileActiveScroll\(\)/)
   assert.doesNotMatch(app, /target\.innerHTML\s*=\s*cleanHTML/)
   assert.match(app, /mermaidRenderCache\.get\(cacheKey\)/)

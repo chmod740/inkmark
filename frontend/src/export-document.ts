@@ -82,7 +82,7 @@ export function buildStandaloneHTML(input: StandaloneHTMLInput): string {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src data: https:; img-src data: blob: file: http: https:; media-src data: blob: file: http: https:; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src data: https:; img-src data: blob: file: http: https:; media-src data: blob: file: http: https:; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'" />
     ${officeMetadata}
     <title>${title}</title>
     <style>

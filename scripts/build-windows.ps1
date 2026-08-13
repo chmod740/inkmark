@@ -51,10 +51,18 @@ pnpm --dir frontend test:scroll
 Assert-LastExitCode "Run scroll sync tests"
 pnpm --dir frontend test:preview
 Assert-LastExitCode "Run atomic preview rendering tests"
+pnpm --dir frontend test:markdown
+Assert-LastExitCode "Run Markdown extension tests"
+pnpm --dir frontend test:dialects
+Assert-LastExitCode "Run Markdown dialect tests"
+pnpm --dir frontend test:diagrams
+Assert-LastExitCode "Run extended diagram safety tests"
 pnpm --dir frontend test:update
 Assert-LastExitCode "Run update workflow tests"
 pnpm --dir frontend test:ui
 Assert-LastExitCode "Run UI state tests"
+pnpm --dir frontend test:fonts
+Assert-LastExitCode "Run font preference tests"
 pnpm --dir frontend test:workspace
 Assert-LastExitCode "Run workspace tree tests"
 pnpm --dir frontend test:webdav

@@ -1,4 +1,5 @@
 export const maximumMermaidCacheEntries = 64
+export const maximumMermaidDiagramsPerPreview = 16
 
 export class BoundedCache<Key, Value> {
   private readonly entries = new Map<Key, Value>()
