@@ -4,6 +4,19 @@ import test from 'node:test'
 
 import { guardUnsavedChanges, runGuardedDocumentTransition } from '../frontend/src/document-guard.ts'
 import {
+  createLineNumberModel,
+  defaultEditorPreferences,
+  editorPreferencesStorageKey,
+  normalizeEditorPreferences,
+  parseEditorPreferences,
+  parseSourceHeadings,
+  readEditorPreferences,
+  sourceLineFromScroll,
+  stickyHeadingTrail,
+  updateEditorPreference,
+  writeEditorPreferences,
+} from '../frontend/src/editor-features.ts'
+import {
   normalizePreviewFirst,
   previewFirstStorageKey,
   resolveDocumentHeaderState,
@@ -90,6 +103,75 @@ test('preview-first preference is strict, persistent, and reversible', () => {
   assert.equal(togglePreviewFirst(togglePreviewFirst(false)), false)
 })
 
+test('editor display preferences are strict, local, and independently switchable', () => {
+  assert.equal(editorPreferencesStorageKey, 'inkmark-editor-preferences-v1')
+  assert.deepEqual(parseEditorPreferences(null), defaultEditorPreferences)
+  assert.deepEqual(parseEditorPreferences('{"version":1,"lineNumbers":false,"stickyHeadings":true}'), {
+    version: 1,
+    lineNumbers: false,
+    stickyHeadings: true,
+  })
+  assert.deepEqual(normalizeEditorPreferences({
+    version: 1,
+    lineNumbers: true,
+    stickyHeadings: true,
+    arbitraryCSS: 'url(https://example.test)',
+  }), defaultEditorPreferences)
+  assert.deepEqual(updateEditorPreference(defaultEditorPreferences, 'lineNumbers', false), {
+    version: 1,
+    lineNumbers: false,
+    stickyHeadings: true,
+  })
+
+  const values = new Map()
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  }
+  const next = updateEditorPreference(defaultEditorPreferences, 'stickyHeadings', false)
+  writeEditorPreferences(storage, next)
+  assert.deepEqual(readEditorPreferences(storage), next)
+})
+
+test('line numbers and sticky Markdown heading trails stay bounded and deterministic', () => {
+  assert.deepEqual(createLineNumberModel('alpha\nbeta\n'), {
+    count: 3,
+    digits: 1,
+    text: '1\n2\n3',
+    available: true,
+  })
+  assert.deepEqual(createLineNumberModel('1\n2\n3', 2), {
+    count: 3,
+    digits: 1,
+    text: '',
+    available: false,
+  })
+
+  const source = [
+    '# Root',
+    'text',
+    '## Section',
+    '```md',
+    '# Not a heading',
+    '```',
+    '### Detail',
+    'body',
+    '## Sibling',
+  ].join('\n')
+  const model = parseSourceHeadings(source)
+  assert.equal(model.available, true)
+  assert.deepEqual(model.headings.map(({ line, level, raw, parent }) => ({ line, level, raw, parent })), [
+    { line: 0, level: 1, raw: '# Root', parent: -1 },
+    { line: 2, level: 2, raw: '## Section', parent: 0 },
+    { line: 6, level: 3, raw: '### Detail', parent: 1 },
+    { line: 8, level: 2, raw: '## Sibling', parent: 0 },
+  ])
+  assert.deepEqual(stickyHeadingTrail(model.headings, 7).map(({ raw }) => raw), ['# Root', '## Section', '### Detail'])
+  assert.deepEqual(stickyHeadingTrail(model.headings, 8).map(({ raw }) => raw), ['# Root', '## Sibling'])
+  assert.equal(sourceLineFromScroll(0, 24, 24), 0)
+  assert.equal(sourceLineFromScroll(72, 24, 24), 2)
+})
+
 test('app wires pane swapping, built-in navigation, and collision-safe header CSS', async () => {
   const app = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
   const styles = await readFile(new URL('../frontend/src/styles.css', import.meta.url), 'utf8')
@@ -109,6 +191,11 @@ test('app wires pane swapping, built-in navigation, and collision-safe header CS
   assert.match(app, /answerUnsavedPrompt\('cancel'\)/)
   assert.doesNotMatch(app, /window\.confirm/)
   assert.match(app, /@input="beginScroll\('editor'\)"/)
+  assert.match(app, /class="source-line-numbers"/)
+  assert.match(app, /class="source-sticky-headings"[\s\S]*scrollToSourceHeading/)
+  assert.match(app, /handleEditorPreferenceChange\('lineNumbers'/)
+  assert.match(app, /handleEditorPreferenceChange\('stickyHeadings'/)
+  assert.match(app, /wrap="off"/)
   assert.match(app, /function runFormat\(action: string\) \{[\s\S]*?beginScroll\('editor'\)[\s\S]*?target\.setRangeText/)
   assert.match(app, /async function runEditAction\(action: string\) \{[\s\S]*?beginScroll\('editor'\)[\s\S]*?target\.setRangeText/)
   assert.match(app, /await Promise\.all\(\[[\s\S]*renderDiagrams\(staging[\s\S]*preparePreviewImages\(staging[\s\S]*target\.replaceChildren[\s\S]*refreshScrollAnchors\(\)[\s\S]*reconcileActiveScroll\(\)/)
@@ -116,6 +203,8 @@ test('app wires pane swapping, built-in navigation, and collision-safe header CS
   assert.match(styles, /\.document-title-row \{[^}]*width: fit-content;[^}]*max-width: 100%;/s)
   assert.match(styles, /\.document-identity h1 \{[^}]*flex: 0 1 auto;[^}]*min-width: 0;/s)
   assert.match(styles, /\.document-state \{[^}]*flex: 0 0 auto;[^}]*white-space: nowrap;/s)
+  assert.match(styles, /\.source-line-numbers \{[^}]*position: absolute;[^}]*text-align: right;/s)
+  assert.match(styles, /\.source-sticky-headings \{[^}]*position: absolute;[^}]*z-index: 4;/s)
 })
 
 test('embedded rendering sample covers bilingual Markdown and ten Mermaid diagrams', async () => {

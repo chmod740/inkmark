@@ -126,6 +126,16 @@ import {
   type SearchDirection,
 } from './text-search'
 import {
+  createLineNumberModel,
+  parseSourceHeadings,
+  readEditorPreferences,
+  sourceLineFromScroll,
+  stickyHeadingTrail,
+  updateEditorPreference,
+  writeEditorPreferences,
+  type EditorPreferences,
+} from './editor-features'
+import {
   flattenWorkspaceTree,
   loadedWorkspaceDirectoryKeys,
   normalizeWorkspace,
@@ -356,6 +366,7 @@ const theme = ref<Theme>(normalizeTheme(localStorage.getItem('inkmark-theme')))
 const viewMode = ref<ViewMode>(readPreference<ViewMode>('inkmark-view', 'split'))
 const previewFirst = ref(normalizePreviewFirst(localStorage.getItem(previewFirstStorageKey)))
 const fontPreferences = ref<FontPreferences>(readFontPreferences(localStorage))
+const editorPreferences = ref<EditorPreferences>(readEditorPreferences(localStorage))
 const languageMode = ref<LanguageMode>('auto')
 const locale = ref<Locale>('en')
 const renderState = ref('')
@@ -363,6 +374,8 @@ const busy = ref(false)
 const editor = ref<HTMLTextAreaElement | null>(null)
 const findInput = ref<HTMLInputElement | null>(null)
 const findHighlightLayer = ref<HTMLElement | null>(null)
+const lineNumberGutter = ref<HTMLElement | null>(null)
+const stickySourceLine = ref(0)
 const findOpen = ref(false)
 const findQuery = ref('')
 const findCaseSensitive = ref(false)
@@ -611,7 +624,20 @@ markdown.renderer.rules.fence = (tokens, index, options, env, self) => {
 }
 
 const dirty = computed(() => source.value !== savedSource.value)
-const lineCount = computed(() => source.value ? source.value.split(/\r?\n/).length : 1)
+const sourceLineNumberModel = computed(() => createLineNumberModel(source.value))
+const lineCount = computed(() => sourceLineNumberModel.value.count)
+const lineNumbersVisible = computed(() => editorPreferences.value.lineNumbers && sourceLineNumberModel.value.available)
+const sourceEditorStyle = computed(() => ({
+  '--source-line-number-width': lineNumbersVisible.value
+    ? `calc(${Math.max(3, sourceLineNumberModel.value.digits)}ch + 18px)`
+    : '0px',
+}))
+const sourceHeadingModel = computed(() => parseSourceHeadings(source.value))
+const stickyHeadings = computed(() => {
+  if (!editorPreferences.value.stickyHeadings || !sourceHeadingModel.value.available) return []
+  if (stickySourceLine.value <= 0) return []
+  return stickyHeadingTrail(sourceHeadingModel.value.headings, stickySourceLine.value - 1)
+})
 const characterCount = computed(() => Array.from(source.value).length)
 const documentHeaderState = computed(() => resolveDocumentHeaderState(
   dirty.value,
@@ -826,6 +852,7 @@ function setDocument(document: DocumentData, status: TranslationKey = 'document.
   fileName.value = document.name || t('document.untitledFilename')
   source.value = document.content || ''
   savedSource.value = source.value
+  stickySourceLine.value = 0
   builtInDocument.value = document.builtIn === 'render-test'
     ? 'render-test'
     : document.builtIn === 'welcome' || document.welcome
@@ -3167,6 +3194,22 @@ function restoreDefaultFonts() {
   persistFontPreferences(resetFontPreferences())
 }
 
+function handleEditorPreferenceChange(key: 'lineNumbers' | 'stickyHeadings', event: Event) {
+  const nextPreferences = updateEditorPreference(
+    editorPreferences.value,
+    key,
+    (event.target as HTMLInputElement).checked,
+  )
+  editorPreferences.value = nextPreferences
+  writeEditorPreferences(localStorage, nextPreferences)
+  void nextTick(() => {
+    syncSourceDecorationScroll()
+    updateStickySourceLine()
+    refreshScrollAnchors()
+    scheduleLayoutReconciliation()
+  })
+}
+
 function resetFindPosition() {
   findCurrentStart.value = -1
   findCurrentEnd.value = -1
@@ -3197,17 +3240,43 @@ function closeFindBar() {
   void nextTick(() => editor.value?.focus({ preventScroll: true }))
 }
 
-function syncFindHighlightScroll() {
+function syncSourceDecorationScroll() {
   const target = editor.value
   const highlightLayer = findHighlightLayer.value
-  if (!target || !highlightLayer) return
-  highlightLayer.scrollTop = target.scrollTop
-  highlightLayer.scrollLeft = target.scrollLeft
+  const gutter = lineNumberGutter.value
+  if (!target) return
+  if (highlightLayer) {
+    highlightLayer.scrollTop = target.scrollTop
+    highlightLayer.scrollLeft = target.scrollLeft
+  }
+  if (gutter) gutter.scrollTop = target.scrollTop
+}
+
+function updateStickySourceLine() {
+  const target = editor.value
+  if (!target) return
+  const styles = window.getComputedStyle(target)
+  const lineHeight = Number.parseFloat(styles.lineHeight)
+  const paddingTop = Number.parseFloat(styles.paddingTop)
+  stickySourceLine.value = sourceLineFromScroll(target.scrollTop, lineHeight, paddingTop)
 }
 
 function handleEditorScroll() {
-  syncFindHighlightScroll()
+  syncSourceDecorationScroll()
+  updateStickySourceLine()
   syncFromEditor()
+}
+
+function scrollToSourceHeading(line: number) {
+  const target = editor.value
+  if (!target) return
+  const styles = window.getComputedStyle(target)
+  const lineHeight = Number.parseFloat(styles.lineHeight)
+  const paddingTop = Number.parseFloat(styles.paddingTop)
+  beginScroll('editor')
+  target.scrollTop = Math.max(0, paddingTop + Math.max(0, line) * lineHeight)
+  handleEditorScroll()
+  target.focus({ preventScroll: true })
 }
 
 function scrollCurrentFindMatchIntoView() {
@@ -3218,7 +3287,8 @@ function scrollCurrentFindMatchIntoView() {
   const centeredTop = currentHighlight.offsetTop - ((target.clientHeight - currentHighlight.offsetHeight) / 2)
   beginScroll('editor')
   target.scrollTop = Math.max(0, Math.min(target.scrollHeight - target.clientHeight, centeredTop))
-  syncFindHighlightScroll()
+  syncSourceDecorationScroll()
+  updateStickySourceLine()
   syncFromEditor()
 }
 
@@ -3246,7 +3316,7 @@ function findNext(direction: SearchDirection = 1) {
 
 watch([findQuery, findCaseSensitive, source], () => {
   resetFindPosition()
-  void nextTick(syncFindHighlightScroll)
+  void nextTick(syncSourceDecorationScroll)
 })
 
 function handleSystemLanguageChange() {
@@ -4536,7 +4606,17 @@ onBeforeUnmount(() => {
           <button type="button" :aria-label="t('search.next')" :title="t('search.next')" @click="findNext(1)">↓</button>
           <button type="button" class="find-close" :aria-label="t('search.close')" :title="t('search.close')" @click="closeFindBar">×</button>
         </div>
-        <div class="source-editor-stack">
+        <div
+          class="source-editor-stack"
+          :class="{ 'has-line-numbers': lineNumbersVisible }"
+          :style="sourceEditorStyle"
+        >
+          <pre
+            v-if="lineNumbersVisible"
+            ref="lineNumberGutter"
+            class="source-line-numbers"
+            aria-hidden="true"
+          >{{ sourceLineNumberModel.text }}</pre>
           <pre
             v-if="findHighlightsVisible"
             ref="findHighlightLayer"
@@ -4550,6 +4630,23 @@ onBeforeUnmount(() => {
               'find-highlight-current': segment.current,
             }"
           >{{ segment.text }}</span></pre>
+          <div
+            v-if="stickyHeadings.length"
+            class="source-sticky-headings"
+            :aria-label="t('settings.stickyHeadings')"
+          >
+            <button
+              v-for="heading in stickyHeadings"
+              :key="`${heading.line}-${heading.level}`"
+              type="button"
+              class="source-sticky-heading"
+              :title="heading.raw"
+              @click="scrollToSourceHeading(heading.line)"
+            >
+              <span v-if="lineNumbersVisible" class="source-sticky-line-number">{{ heading.line + 1 }}</span>
+              <span class="source-sticky-heading-text">{{ heading.raw }}</span>
+            </button>
+          </div>
           <textarea
             ref="editor"
             v-model="source"
@@ -4557,6 +4654,7 @@ onBeforeUnmount(() => {
             :aria-label="t('panel.editorAriaLabel')"
             :disabled="busy"
             spellcheck="false"
+            wrap="off"
             @input="beginScroll('editor')"
             @keydown="beginScroll('editor')"
             @pointerdown="beginScroll('editor')"
@@ -4705,6 +4803,34 @@ onBeforeUnmount(() => {
               </p>
             </div>
           </div>
+          <section class="editor-settings" aria-labelledby="editor-settings-title">
+            <header>
+              <h3 id="editor-settings-title">{{ t('settings.editor') }}</h3>
+              <p>{{ t('settings.editorDescription') }}</p>
+            </header>
+            <label class="editor-setting-toggle">
+              <input
+                type="checkbox"
+                :checked="editorPreferences.lineNumbers"
+                @change="handleEditorPreferenceChange('lineNumbers', $event)"
+              >
+              <span>
+                <strong>{{ t('settings.lineNumbers') }}</strong>
+                <small>{{ t('settings.lineNumbersDescription') }}</small>
+              </span>
+            </label>
+            <label class="editor-setting-toggle">
+              <input
+                type="checkbox"
+                :checked="editorPreferences.stickyHeadings"
+                @change="handleEditorPreferenceChange('stickyHeadings', $event)"
+              >
+              <span>
+                <strong>{{ t('settings.stickyHeadings') }}</strong>
+                <small>{{ t('settings.stickyHeadingsDescription') }}</small>
+              </span>
+            </label>
+          </section>
           <section class="font-settings" aria-labelledby="font-settings-title">
             <header>
               <h3 id="font-settings-title">{{ t('settings.fonts') }}</h3>
