@@ -50,6 +50,7 @@ var nativeMenuText = map[string]localizedMenuText{
 	"paste":              {zh: "粘贴", en: "Paste"},
 	"copy-html":          {zh: "复制渲染后的 HTML", en: "Copy Rendered HTML"},
 	"select-all":         {zh: "全选", en: "Select All"},
+	"find":               {zh: "查找…", en: "Find…"},
 	"view-edit":          {zh: "仅编辑", en: "Editor Only"},
 	"view-split":         {zh: "分栏编辑", en: "Split View"},
 	"view-preview":       {zh: "仅预览", en: "Preview Only"},
@@ -189,6 +190,8 @@ func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu 
 	editMenu.AddText(label("copy-html"), nil, a.menuAction("copy-html"))
 	editMenu.AddSeparator()
 	addEditItem("select-all", keys.CmdOrCtrl("a"), "select-all")
+	editMenu.AddSeparator()
+	addEditItem("find", keys.CmdOrCtrl("f"), "find")
 
 	viewMenu := applicationMenu.AddSubmenu(label("view"))
 	viewMenu.AddRadio(label("view-edit"), state.ViewMode == "edit", keys.CmdOrCtrl("1"), a.menuAction("view-edit"))

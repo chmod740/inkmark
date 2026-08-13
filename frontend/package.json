@@ -1,7 +1,7 @@
 {
   "name": "inkmark-frontend",
   "private": true,
-  "version": "1.2.4",
+  "version": "1.2.5",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
@@ -12,6 +12,7 @@
     "test:installer": "node --test ../scripts/test-windows-installer.mjs",
     "test:ui": "node --experimental-strip-types --test ../scripts/test-ui-state.mjs",
     "test:themes": "node --experimental-strip-types --test ../scripts/test-themes.mjs",
+    "test:find": "node --experimental-strip-types --test ../scripts/test-text-search.mjs",
     "test:fonts": "node --experimental-strip-types --test ../scripts/test-font-preferences.mjs",
     "test:scroll": "node --experimental-strip-types --test ../scripts/test-scroll-sync.mjs",
     "test:preview": "node --experimental-strip-types --test ../scripts/test-preview-render.mjs",

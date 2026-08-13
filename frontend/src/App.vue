@@ -119,6 +119,12 @@ import {
 } from './themes'
 import { UpdateDownloadSessionGate } from './update-session'
 import {
+  countTextMatches,
+  findTextMatch,
+  maximumSearchQueryLength,
+  type SearchDirection,
+} from './text-search'
+import {
   flattenWorkspaceTree,
   loadedWorkspaceDirectoryKeys,
   normalizeWorkspace,
@@ -354,6 +360,13 @@ const locale = ref<Locale>('en')
 const renderState = ref('')
 const busy = ref(false)
 const editor = ref<HTMLTextAreaElement | null>(null)
+const findInput = ref<HTMLInputElement | null>(null)
+const findOpen = ref(false)
+const findQuery = ref('')
+const findCaseSensitive = ref(false)
+const findCurrentStart = ref(-1)
+const findCurrentEnd = ref(-1)
+const findMatchOrdinal = ref(0)
 const preview = ref<HTMLElement | null>(null)
 const previewPane = ref<HTMLElement | null>(null)
 const appDialog = ref<HTMLElement | null>(null)
@@ -668,6 +681,15 @@ const themes = computed<Array<{ value: Theme; label: string }>>(() => [
   })),
 ])
 const activeThemeLabel = computed(() => themes.value.find((item) => item.value === theme.value)?.label || theme.value)
+const findMatchCount = computed(() => countTextMatches(source.value, findQuery.value, findCaseSensitive.value))
+const findStatusLabel = computed(() => {
+  if (!findQuery.value) return t('search.enterQuery')
+  if (findMatchCount.value === 0) return t('search.noResults')
+  if (findMatchOrdinal.value > 0) {
+    return t('search.currentResult', { current: findMatchOrdinal.value, total: findMatchCount.value })
+  }
+  return t('search.results', { count: findMatchCount.value })
+})
 
 const formatActions = computed(() => [
   { action: 'bold', label: 'B', title: `${t('format.bold')} (⌘/Ctrl+B)` },
@@ -768,6 +790,7 @@ const shortcutRows = computed(() => [
   ['⌘/Ctrl+B', t('help.shortcut.bold')],
   ['⌘/Ctrl+I', t('help.shortcut.italic')],
   ['⌘/Ctrl+K', t('help.shortcut.link')],
+  ['⌘/Ctrl+F', t('help.shortcut.find')],
   ['⌘/Ctrl+1', t('help.shortcut.viewEdit')],
   ['⌘/Ctrl+2', t('help.shortcut.viewSplit')],
   ['⌘/Ctrl+3', t('help.shortcut.viewPreview')],
@@ -3135,6 +3158,57 @@ function restoreDefaultFonts() {
   persistFontPreferences(resetFontPreferences())
 }
 
+function resetFindPosition() {
+  findCurrentStart.value = -1
+  findCurrentEnd.value = -1
+  findMatchOrdinal.value = 0
+}
+
+function showFindBar() {
+  if (activeDialog.value) return
+  if (viewMode.value === 'preview') chooseView('split')
+  const target = editor.value
+  if (!findOpen.value && target) {
+    const selected = target.value.slice(target.selectionStart, target.selectionEnd)
+    if (selected && selected.length <= maximumSearchQueryLength && !/[\r\n]/u.test(selected)) {
+      findQuery.value = selected
+    }
+  }
+  findOpen.value = true
+  resetFindPosition()
+  void nextTick(() => {
+    findInput.value?.focus({ preventScroll: true })
+    findInput.value?.select()
+  })
+}
+
+function closeFindBar() {
+  findOpen.value = false
+  resetFindPosition()
+  void nextTick(() => editor.value?.focus({ preventScroll: true }))
+}
+
+function findNext(direction: SearchDirection = 1) {
+  const target = editor.value
+  if (!target || !findQuery.value) return
+  const from = direction === 1
+    ? (findCurrentEnd.value >= 0 ? findCurrentEnd.value : target.selectionStart)
+    : (findCurrentStart.value >= 0 ? findCurrentStart.value : target.selectionStart)
+  const match = findTextMatch(source.value, findQuery.value, from, direction, findCaseSensitive.value)
+  if (!match) {
+    resetFindPosition()
+    return
+  }
+  findCurrentStart.value = match.start
+  findCurrentEnd.value = match.end
+  findMatchOrdinal.value = match.ordinal
+  target.focus({ preventScroll: true })
+  target.setSelectionRange(match.start, match.end)
+  findInput.value?.focus({ preventScroll: true })
+}
+
+watch([findQuery, findCaseSensitive, source], resetFindPosition)
+
 function handleSystemLanguageChange() {
   if (languageMode.value === 'auto') void applyLanguageMode('auto').catch(showError)
 }
@@ -3191,6 +3265,7 @@ function handleMenuAction(action: string) {
   else if (action === 'export-txt') void exportDocument('txt')
   else if (action === 'export-doc') void exportDocument('doc')
   else if (action === 'settings') activeDialog.value = 'settings'
+  else if (action === 'find') showFindBar()
   else if (action === 'show-shortcuts') activeDialog.value = 'shortcuts'
   else if (action === 'about') showAboutDialog()
   else if (action === 'check-update') void checkForUpdates()
@@ -4073,6 +4148,11 @@ function onKeydown(event: KeyboardEvent) {
     dismissActiveDialog()
     return
   }
+  if (event.key === 'Escape' && findOpen.value) {
+    event.preventDefault()
+    closeFindBar()
+    return
+  }
   if (trapActiveDialogFocus(event)) return
   if (busy.value) return
   if (!(event.metaKey || event.ctrlKey)) return
@@ -4086,6 +4166,9 @@ function onKeydown(event: KeyboardEvent) {
   } else if (key === 'k') {
     event.preventDefault()
     runFormat('link')
+  } else if (key === 'f') {
+    event.preventDefault()
+    showFindBar()
   }
 }
 
@@ -4388,10 +4471,30 @@ onBeforeUnmount(() => {
       />
 
       <main class="editor-layout">
-        <section class="source-panel" :aria-label="t('panel.sourceAriaLabel')">
+        <section class="source-panel" :class="{ 'has-find-bar': findOpen }" :aria-label="t('panel.sourceAriaLabel')">
         <div class="panel-caption">
           <span>{{ t('panel.source') }}</span>
           <small>UTF-8</small>
+        </div>
+        <div v-if="findOpen" class="find-bar" role="search" :aria-label="t('search.ariaLabel')">
+          <input
+            ref="findInput"
+            v-model="findQuery"
+            type="search"
+            :maxlength="maximumSearchQueryLength"
+            :placeholder="t('search.placeholder')"
+            :aria-label="t('search.placeholder')"
+            @keydown.enter.prevent="findNext($event.shiftKey ? -1 : 1)"
+            @keydown.escape.prevent="closeFindBar"
+          >
+          <span class="find-status" role="status" aria-live="polite">{{ findStatusLabel }}</span>
+          <label class="find-case-option">
+            <input v-model="findCaseSensitive" type="checkbox">
+            <span>{{ t('search.caseSensitive') }}</span>
+          </label>
+          <button type="button" :aria-label="t('search.previous')" :title="t('search.previous')" @click="findNext(-1)">↑</button>
+          <button type="button" :aria-label="t('search.next')" :title="t('search.next')" @click="findNext(1)">↓</button>
+          <button type="button" class="find-close" :aria-label="t('search.close')" :title="t('search.close')" @click="closeFindBar">×</button>
         </div>
         <textarea
           ref="editor"

@@ -91,7 +91,7 @@ func TestSelectReleaseAsset(t *testing.T) {
 
 func TestAppInfoIsReleaseMetadata(t *testing.T) {
 	info := NewApp().GetAppInfo()
-	if info.Version != appVersion || info.Author != "PengHu" || info.RepositoryURL != sourceRepositoryURL {
+	if info.Version != appVersion || info.Author != "Codex" || info.RepositoryURL != sourceRepositoryURL {
 		t.Fatalf("unexpected app info: %#v", info)
 	}
 }

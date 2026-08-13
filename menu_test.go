@@ -171,6 +171,7 @@ func TestWindowsEditMenuUsesDisplayOnlyShortcutsAndCallbacksRemainAvailable(t *t
 				"Copy":       {label: "Copy", accelerator: "Cmd+C"},
 				"Paste":      {label: "Paste", accelerator: "Cmd+V"},
 				"Select All": {label: "Select All", accelerator: "Cmd+A"},
+				"Find…":      {label: "Find…", accelerator: "Cmd+F"},
 			},
 		},
 		{
@@ -185,6 +186,7 @@ func TestWindowsEditMenuUsesDisplayOnlyShortcutsAndCallbacksRemainAvailable(t *t
 				"Copy":       {label: "Copy\tCtrl+C"},
 				"Paste":      {label: "Paste\tCtrl+V"},
 				"Select All": {label: "Select All\tCtrl+A"},
+				"Find…":      {label: "Find…\tCtrl+F"},
 			},
 		},
 		{
@@ -199,6 +201,7 @@ func TestWindowsEditMenuUsesDisplayOnlyShortcutsAndCallbacksRemainAvailable(t *t
 				"复制": {label: "复制\tCtrl+C"},
 				"粘贴": {label: "粘贴\tCtrl+V"},
 				"全选": {label: "全选\tCtrl+A"},
+				"查找…": {label: "查找…\tCtrl+F"},
 			},
 		},
 	}

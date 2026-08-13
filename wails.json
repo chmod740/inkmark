@@ -7,10 +7,10 @@
   "frontend:dev:watcher": "pnpm dev",
   "frontend:dev:serverUrl": "auto",
   "info": {
-	"companyName": "PengHu",
+	"companyName": "Codex",
 	"productName": "InkMark Markdown",
-	"productVersion": "1.2.4",
-	"copyright": "Copyright © 2026 PengHu",
+	"productVersion": "1.2.5",
+	"copyright": "Copyright © 2026 Codex",
 	"comments": "Local Markdown editor",
     "fileAssociations": [
       {
@@ -30,7 +30,7 @@
     ]
   },
   "author": {
-    "name": "PengHu",
+    "name": "Codex",
     "email": ""
   }
 }
