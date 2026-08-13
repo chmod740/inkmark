@@ -1,5 +1,7 @@
+import { isDarkTheme, type Theme } from './themes.ts'
+
 export type ExportFormat = 'pdf' | 'html' | 'png' | 'txt' | 'doc'
-export type ExportTheme = 'github' | 'clean' | 'wechat' | 'dark'
+export type ExportTheme = Theme
 
 export const externalExportStyles = {
   katex: 'https://cdn.jsdelivr.net/npm/katex@0.18.1/dist/katex.min.css',
@@ -28,8 +30,8 @@ body.export-document {
   padding: 32px;
   background: #eef0ed;
 }
-body.export-document.theme-dark {
-  background: #0d1117;
+html[data-color-scheme="dark"] body.export-document {
+  background: var(--theme-preview, #0d1117);
 }
 .export-document .markdown-body {
   min-height: 0;
@@ -66,7 +68,7 @@ export function buildStandaloneHTML(input: StandaloneHTMLInput): string {
 	  const title = escapeHTML(input.title || (input.language === 'zh-CN' ? '未命名' : 'Untitled'))
   const articleHTML = normalizeProtocolRelativeResources(input.articleHTML)
   const safeStyles = input.embeddedStyles.replace(/<\/style/gi, '<\\/style')
-  const highlightStyle = input.theme === 'dark'
+  const highlightStyle = isDarkTheme(input.theme)
     ? externalExportStyles.highlightDark
     : externalExportStyles.highlightLight
   const officeNamespaces = input.wordCompatible
@@ -78,7 +80,7 @@ export function buildStandaloneHTML(input: StandaloneHTMLInput): string {
   const bom = input.wordCompatible ? '\uFEFF' : ''
 
   return `${bom}<!doctype html>
-	<html${officeNamespaces} lang="${input.language || 'en'}" data-color-scheme="${input.theme === 'dark' ? 'dark' : 'light'}">
+	<html${officeNamespaces} lang="${input.language || 'en'}" data-color-scheme="${isDarkTheme(input.theme) ? 'dark' : 'light'}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />

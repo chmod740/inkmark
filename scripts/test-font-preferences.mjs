@@ -37,11 +37,11 @@ function sha256(bytes) {
 test('font catalog exposes only suitable presets for each independent scope', () => {
   assert.deepEqual(
     getFontPresetsForScope('ui').map(({ id }) => id),
-    ['system', 'modern-sans', 'reading-serif', 'fusion-pixel-12-sc', 'fusion-pixel-12-tc'],
+    ['system', 'heiti', 'modern-sans', 'reading-serif', 'fusion-pixel-12-sc', 'fusion-pixel-12-tc'],
   )
   assert.deepEqual(
     getFontPresetsForScope('content').map(({ id }) => id),
-    ['system', 'modern-sans', 'reading-serif', 'fusion-pixel-12-sc', 'fusion-pixel-12-tc'],
+    ['system', 'heiti', 'modern-sans', 'reading-serif', 'fusion-pixel-12-sc', 'fusion-pixel-12-tc'],
   )
   assert.deepEqual(
     getFontPresetsForScope('code').map(({ id }) => id),
@@ -130,6 +130,17 @@ test('font stacks cover macOS and Windows and expose explicit simplified/traditi
   assert.match(variables['--inkmark-content-font'], /Iowan Old Style/)
   assert.match(variables['--inkmark-content-font'], /Songti SC/)
   assert.match(variables['--inkmark-content-font'], /SimSun/)
+
+  const heiti = fontPreferenceCSSVariables({
+    ...validPreferences,
+    ui: 'heiti',
+    content: 'heiti',
+  }, 'zh-CN')
+  assert.match(heiti['--inkmark-ui-font'], /Heiti SC/)
+  assert.match(heiti['--inkmark-ui-font'], /STHeiti/)
+  assert.match(heiti['--inkmark-content-font'], /PingFang SC/)
+  assert.match(heiti['--inkmark-content-font'], /Microsoft YaHei/)
+  assert.match(heiti['--inkmark-content-font'], /SimHei/)
 
   const simplified = fontPreferenceCSSVariables({
     ...validPreferences,
@@ -321,6 +332,7 @@ test('the font stylesheet is loaded and contains no network source', async () =>
   const main = await readFile(new URL('../frontend/src/main.ts', import.meta.url), 'utf8')
   const app = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
   const stylesheet = await readFile(new URL('../frontend/src/font-preferences.css', import.meta.url), 'utf8')
+  const appStyles = await readFile(new URL('../frontend/src/styles.css', import.meta.url), 'utf8')
   const packageJSON = JSON.parse(await readFile(new URL('../frontend/package.json', import.meta.url), 'utf8'))
   const macBuild = await readFile(new URL('./build-macos.sh', import.meta.url), 'utf8')
   const windowsBuild = await readFile(new URL('./build-windows.ps1', import.meta.url), 'utf8')
@@ -330,6 +342,9 @@ test('the font stylesheet is loaded and contains no network source', async () =>
   assert.match(stylesheet, /fusion-pixel-12px-monospaced-zh_hant\.otf\.woff2/)
   assert.doesNotMatch(stylesheet, /https?:\/\//)
   assert.match(stylesheet, /font-synthesis: weight style/)
+  assert.match(appStyles, /\.font-settings-preview \{[^}]*color:\s*#26312e[^}]*background:\s*#f5f2e8/s)
+  assert.match(appStyles, /\[data-color-scheme="dark"\] \.font-settings-preview \{[^}]*color:\s*#e4ece9[^}]*background:\s*#182321/s)
+  assert.match(appStyles, /\[data-color-scheme="dark"\] \.font-settings-preview code \{[^}]*color:\s*#bcd7d0/s)
   assert.match(packageJSON.scripts['test:fonts'], /test-font-preferences\.mjs/)
   assert.match(macBuild, /pnpm --dir frontend test:fonts/)
   assert.match(windowsBuild, /pnpm --dir frontend test:fonts/)

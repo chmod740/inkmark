@@ -108,7 +108,22 @@ import {
   type FontPresetId,
   type FontScope,
 } from './font-preferences'
+import {
+  hexColorChannels,
+  isDarkTheme,
+  normalizeTheme,
+  themeBackground,
+  themeDefinitions,
+  themePalette,
+  type Theme,
+} from './themes'
 import { UpdateDownloadSessionGate } from './update-session'
+import {
+  countTextMatches,
+  findTextMatch,
+  maximumSearchQueryLength,
+  type SearchDirection,
+} from './text-search'
 import {
   flattenWorkspaceTree,
   loadedWorkspaceDirectoryKeys,
@@ -209,7 +224,6 @@ import {
   WindowUnfullscreen,
 } from '../wailsjs/runtime/runtime'
 
-type Theme = 'github' | 'clean' | 'wechat' | 'dark'
 type ViewMode = 'edit' | 'split' | 'preview'
 type ImageInsertMode = 'local' | 'data' | 'webdav' | 'public'
 type WebDAVConnectionFormMode = 'connect' | 'new' | 'edit'
@@ -337,7 +351,7 @@ const remoteDocumentId = ref('')
 const remoteWorkspaceId = ref('')
 const remoteDocumentETag = ref('')
 const fileName = ref('README.md')
-const theme = ref<Theme>(readPreference<Theme>('inkmark-theme', 'github'))
+const theme = ref<Theme>(normalizeTheme(localStorage.getItem('inkmark-theme')))
 const viewMode = ref<ViewMode>(readPreference<ViewMode>('inkmark-view', 'split'))
 const previewFirst = ref(normalizePreviewFirst(localStorage.getItem(previewFirstStorageKey)))
 const fontPreferences = ref<FontPreferences>(readFontPreferences(localStorage))
@@ -346,6 +360,13 @@ const locale = ref<Locale>('en')
 const renderState = ref('')
 const busy = ref(false)
 const editor = ref<HTMLTextAreaElement | null>(null)
+const findInput = ref<HTMLInputElement | null>(null)
+const findOpen = ref(false)
+const findQuery = ref('')
+const findCaseSensitive = ref(false)
+const findCurrentStart = ref(-1)
+const findCurrentEnd = ref(-1)
+const findMatchOrdinal = ref(0)
 const preview = ref<HTMLElement | null>(null)
 const previewPane = ref<HTMLElement | null>(null)
 const appDialog = ref<HTMLElement | null>(null)
@@ -654,11 +675,21 @@ const updatePublishedAt = computed(() => {
 })
 
 const themes = computed<Array<{ value: Theme; label: string }>>(() => [
-  { value: 'github', label: t('theme.github') },
-  { value: 'clean', label: t('theme.clean') },
-  { value: 'wechat', label: t('theme.wechat') },
-  { value: 'dark', label: t('theme.dark') },
+  ...themeDefinitions.map((definition) => ({
+    value: definition.id,
+    label: t(definition.labelKey),
+  })),
 ])
+const activeThemeLabel = computed(() => themes.value.find((item) => item.value === theme.value)?.label || theme.value)
+const findMatchCount = computed(() => countTextMatches(source.value, findQuery.value, findCaseSensitive.value))
+const findStatusLabel = computed(() => {
+  if (!findQuery.value) return t('search.enterQuery')
+  if (findMatchCount.value === 0) return t('search.noResults')
+  if (findMatchOrdinal.value > 0) {
+    return t('search.currentResult', { current: findMatchOrdinal.value, total: findMatchCount.value })
+  }
+  return t('search.results', { count: findMatchCount.value })
+})
 
 const formatActions = computed(() => [
   { action: 'bold', label: 'B', title: `${t('format.bold')} (⌘/Ctrl+B)` },
@@ -759,6 +790,7 @@ const shortcutRows = computed(() => [
   ['⌘/Ctrl+B', t('help.shortcut.bold')],
   ['⌘/Ctrl+I', t('help.shortcut.italic')],
   ['⌘/Ctrl+K', t('help.shortcut.link')],
+  ['⌘/Ctrl+F', t('help.shortcut.find')],
   ['⌘/Ctrl+1', t('help.shortcut.viewEdit')],
   ['⌘/Ctrl+2', t('help.shortcut.viewSplit')],
   ['⌘/Ctrl+3', t('help.shortcut.viewPreview')],
@@ -2559,7 +2591,8 @@ async function capturePreviewCanvas(
   const captureWidth = 920
   const stage = document.createElement('div')
   stage.className = `export-capture theme-${exportTheme}`
-  stage.dataset.colorScheme = exportTheme === 'dark' ? 'dark' : 'light'
+  stage.dataset.colorScheme = isDarkTheme(exportTheme) ? 'dark' : 'light'
+  const exportBackground = themeBackground(exportTheme)
   stage.style.cssText = [
     'position:fixed',
     'left:-12000px',
@@ -2568,7 +2601,7 @@ async function capturePreviewCanvas(
     'height:auto',
     'overflow:visible',
     'pointer-events:none',
-    `background:${exportTheme === 'dark' ? '#0d1117' : '#ffffff'}`,
+    `background:${exportBackground}`,
   ].join(';')
 
   const clone = target.cloneNode(true) as HTMLElement
@@ -2616,7 +2649,7 @@ async function capturePreviewCanvas(
     const { default: html2canvas } = await import('html2canvas')
     const canvas = await html2canvas(clone, {
       allowTaint: false,
-      backgroundColor: exportTheme === 'dark' ? '#0d1117' : '#ffffff',
+      backgroundColor: exportBackground,
       height,
       imageTimeout: 0,
       logging: false,
@@ -2739,11 +2772,14 @@ async function buildPDFBase64(capture: PreviewCapture, exportTheme: Theme): Prom
   const slices = planPDFSlices(canvas.height, slicePixelHeight, breakpoints)
   const pageCount = slices.length
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true })
+  const exportBackground = themeBackground(exportTheme)
+  const [backgroundRed, backgroundGreen, backgroundBlue] = hexColorChannels(exportBackground)
+  const darkExport = isDarkTheme(exportTheme)
 
   for (let pageIndex = 0; pageIndex < slices.length; pageIndex += 1) {
     if (pageIndex > 0) pdf.addPage('a4', 'portrait')
-    if (exportTheme === 'dark') {
-      pdf.setFillColor(13, 17, 23)
+    if (darkExport) {
+      pdf.setFillColor(backgroundRed, backgroundGreen, backgroundBlue)
       pdf.rect(0, 0, pageWidth, pageHeight, 'F')
     }
 
@@ -2753,7 +2789,7 @@ async function buildPDFBase64(capture: PreviewCapture, exportTheme: Theme): Prom
     pageCanvas.height = sourceHeight
     const context = pageCanvas.getContext('2d')
     if (!context) throw new Error(t('error.pdfCanvasUnavailable'))
-    context.fillStyle = exportTheme === 'dark' ? '#0d1117' : '#ffffff'
+    context.fillStyle = exportBackground
     context.fillRect(0, 0, pageCanvas.width, pageCanvas.height)
     context.drawImage(
       canvas,
@@ -2764,7 +2800,7 @@ async function buildPDFBase64(capture: PreviewCapture, exportTheme: Theme): Prom
     const renderedHeight = sourceHeight * contentWidth / canvas.width
     pdf.addImage(pageCanvas, 'PNG', margin, margin, contentWidth, renderedHeight, undefined, 'FAST')
     pdf.setFontSize(8)
-    pdf.setTextColor(exportTheme === 'dark' ? 150 : 120)
+    pdf.setTextColor(darkExport ? 150 : 120)
     pdf.text(`${pageIndex + 1} / ${pageCount}`, pageWidth / 2, pageHeight - 4, { align: 'center' })
   }
 
@@ -3122,6 +3158,57 @@ function restoreDefaultFonts() {
   persistFontPreferences(resetFontPreferences())
 }
 
+function resetFindPosition() {
+  findCurrentStart.value = -1
+  findCurrentEnd.value = -1
+  findMatchOrdinal.value = 0
+}
+
+function showFindBar() {
+  if (activeDialog.value) return
+  if (viewMode.value === 'preview') chooseView('split')
+  const target = editor.value
+  if (!findOpen.value && target) {
+    const selected = target.value.slice(target.selectionStart, target.selectionEnd)
+    if (selected && selected.length <= maximumSearchQueryLength && !/[\r\n]/u.test(selected)) {
+      findQuery.value = selected
+    }
+  }
+  findOpen.value = true
+  resetFindPosition()
+  void nextTick(() => {
+    findInput.value?.focus({ preventScroll: true })
+    findInput.value?.select()
+  })
+}
+
+function closeFindBar() {
+  findOpen.value = false
+  resetFindPosition()
+  void nextTick(() => editor.value?.focus({ preventScroll: true }))
+}
+
+function findNext(direction: SearchDirection = 1) {
+  const target = editor.value
+  if (!target || !findQuery.value) return
+  const from = direction === 1
+    ? (findCurrentEnd.value >= 0 ? findCurrentEnd.value : target.selectionStart)
+    : (findCurrentStart.value >= 0 ? findCurrentStart.value : target.selectionStart)
+  const match = findTextMatch(source.value, findQuery.value, from, direction, findCaseSensitive.value)
+  if (!match) {
+    resetFindPosition()
+    return
+  }
+  findCurrentStart.value = match.start
+  findCurrentEnd.value = match.end
+  findMatchOrdinal.value = match.ordinal
+  target.focus({ preventScroll: true })
+  target.setSelectionRange(match.start, match.end)
+  findInput.value?.focus({ preventScroll: true })
+}
+
+watch([findQuery, findCaseSensitive, source], resetFindPosition)
+
 function handleSystemLanguageChange() {
   if (languageMode.value === 'auto') void applyLanguageMode('auto').catch(showError)
 }
@@ -3178,6 +3265,7 @@ function handleMenuAction(action: string) {
   else if (action === 'export-txt') void exportDocument('txt')
   else if (action === 'export-doc') void exportDocument('doc')
   else if (action === 'settings') activeDialog.value = 'settings'
+  else if (action === 'find') showFindBar()
   else if (action === 'show-shortcuts') activeDialog.value = 'shortcuts'
   else if (action === 'about') showAboutDialog()
   else if (action === 'check-update') void checkForUpdates()
@@ -3429,6 +3517,7 @@ async function renderNow(sourceText = source.value, renderTheme = theme.value): 
           echartsRenderer: 'svg',
           chartWidth: target.clientWidth,
           chartHeight: 420,
+          palette: themePalette(renderTheme),
         }).then((result) => {
           if (!acceptExtendedDiagramResult || !previewCommit.isCurrent(sequence)) result.dispose()
           else nextExtendedDiagram.dispose = result.dispose
@@ -3765,7 +3854,16 @@ async function renderDiagrams(root: HTMLElement, sequence: number, renderTheme: 
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'strict',
-    theme: renderTheme === 'dark' ? 'dark' : 'base',
+    theme: isDarkTheme(renderTheme) ? 'dark' : 'base',
+    themeVariables: {
+      background: themePalette(renderTheme).background,
+      primaryColor: themePalette(renderTheme).surface,
+      primaryTextColor: themePalette(renderTheme).ink,
+      primaryBorderColor: themePalette(renderTheme).accent,
+      lineColor: themePalette(renderTheme).muted,
+      secondaryColor: themePalette(renderTheme).secondary,
+      tertiaryColor: themePalette(renderTheme).background,
+    },
     htmlLabels: false,
     fontFamily: '-apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei, sans-serif',
     flowchart: { useMaxWidth: true, htmlLabels: false },
@@ -3798,13 +3896,19 @@ async function renderDiagrams(root: HTMLElement, sequence: number, renderTheme: 
   }
 }
 
-function chooseTheme(value: Theme) {
+function chooseTheme(value: Theme | string) {
   if (busy.value) return
-  theme.value = value
-  localStorage.setItem('inkmark-theme', value)
-  document.documentElement.dataset.colorScheme = value === 'dark' ? 'dark' : 'light'
+  const nextTheme = normalizeTheme(value)
+  theme.value = nextTheme
+  localStorage.setItem('inkmark-theme', nextTheme)
+  document.documentElement.dataset.colorScheme = isDarkTheme(nextTheme) ? 'dark' : 'light'
   updateNativeMenu()
   void renderNow()
+}
+
+function chooseThemeFromEvent(event: Event) {
+  const target = event.target
+  if (target instanceof HTMLSelectElement) chooseTheme(target.value)
 }
 
 function chooseView(value: ViewMode) {
@@ -4044,6 +4148,11 @@ function onKeydown(event: KeyboardEvent) {
     dismissActiveDialog()
     return
   }
+  if (event.key === 'Escape' && findOpen.value) {
+    event.preventDefault()
+    closeFindBar()
+    return
+  }
   if (trapActiveDialogFocus(event)) return
   if (busy.value) return
   if (!(event.metaKey || event.ctrlKey)) return
@@ -4057,6 +4166,9 @@ function onKeydown(event: KeyboardEvent) {
   } else if (key === 'k') {
     event.preventDefault()
     runFormat('link')
+  } else if (key === 'f') {
+    event.preventDefault()
+    showFindBar()
   }
 }
 
@@ -4192,7 +4304,7 @@ watch([imageInsertMode, publicImageURL, imageAltText], () => {
 watch([fileName, dirty], () => { void SetWindowTitle(fileName.value, dirty.value) })
 
 onMounted(async () => {
-  document.documentElement.dataset.colorScheme = theme.value === 'dark' ? 'dark' : 'light'
+  document.documentElement.dataset.colorScheme = isDarkTheme(theme.value) ? 'dark' : 'light'
   applyFontPreferences(document.documentElement, fontPreferences.value, locale.value)
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
@@ -4326,14 +4438,9 @@ onBeforeUnmount(() => {
 
       <div class="theme-picker" :aria-label="t('toolbar.previewStyle')">
         <span>{{ t('toolbar.layout') }}</span>
-        <button
-          v-for="item in themes"
-          :key="item.value"
-          type="button"
-          :class="{ active: theme === item.value }"
-          :disabled="busy"
-          @click="chooseTheme(item.value)"
-        >{{ item.label }}</button>
+        <select :value="theme" :aria-label="t('toolbar.previewStyle')" :disabled="busy" @change="chooseThemeFromEvent">
+          <option v-for="item in themes" :key="item.value" :value="item.value">{{ item.label }}</option>
+        </select>
       </div>
 
       <button type="button" class="copy-button" :disabled="busy" @click="copyHTML">{{ t('toolbar.copyHTML') }}</button>
@@ -4364,10 +4471,30 @@ onBeforeUnmount(() => {
       />
 
       <main class="editor-layout">
-        <section class="source-panel" :aria-label="t('panel.sourceAriaLabel')">
+        <section class="source-panel" :class="{ 'has-find-bar': findOpen }" :aria-label="t('panel.sourceAriaLabel')">
         <div class="panel-caption">
           <span>{{ t('panel.source') }}</span>
           <small>UTF-8</small>
+        </div>
+        <div v-if="findOpen" class="find-bar" role="search" :aria-label="t('search.ariaLabel')">
+          <input
+            ref="findInput"
+            v-model="findQuery"
+            type="search"
+            :maxlength="maximumSearchQueryLength"
+            :placeholder="t('search.placeholder')"
+            :aria-label="t('search.placeholder')"
+            @keydown.enter.prevent="findNext($event.shiftKey ? -1 : 1)"
+            @keydown.escape.prevent="closeFindBar"
+          >
+          <span class="find-status" role="status" aria-live="polite">{{ findStatusLabel }}</span>
+          <label class="find-case-option">
+            <input v-model="findCaseSensitive" type="checkbox">
+            <span>{{ t('search.caseSensitive') }}</span>
+          </label>
+          <button type="button" :aria-label="t('search.previous')" :title="t('search.previous')" @click="findNext(-1)">↑</button>
+          <button type="button" :aria-label="t('search.next')" :title="t('search.next')" @click="findNext(1)">↓</button>
+          <button type="button" class="find-close" :aria-label="t('search.close')" :title="t('search.close')" @click="closeFindBar">×</button>
         </div>
         <textarea
           ref="editor"
@@ -4388,7 +4515,7 @@ onBeforeUnmount(() => {
         <section class="preview-panel" :aria-label="t('panel.previewAriaLabel')">
         <div class="panel-caption preview-caption">
           <span>{{ t('panel.preview') }}</span>
-          <small>{{ theme === 'wechat' ? 'WECHAT' : theme.toUpperCase() }}</small>
+          <small>{{ activeThemeLabel }}</small>
         </div>
         <div
           ref="previewPane"

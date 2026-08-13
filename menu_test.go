@@ -98,13 +98,18 @@ func TestMenuSelectionDefaults(t *testing.T) {
 		t.Errorf("preview-first should be unchecked by default: %#v", previewItem)
 	}
 	styleMenu := findMenuItem(t, viewMenu, "Preview Style").SubMenu
-	if styleMenu == nil || len(styleMenu.Items) != 4 {
+	if styleMenu == nil || len(styleMenu.Items) != 12 {
 		t.Fatalf("preview style submenu is incomplete")
 	}
-	for index, checked := range []bool{true, false, false, false} {
+	for index, checked := range []bool{true, false, false, false, false, false, false, false, false, false, false, false} {
 		item := styleMenu.Items[index]
 		if item.Type != menu.RadioType || item.Checked != checked {
 			t.Errorf("preview style item %d: expected radio checked=%t, got type=%v checked=%t", index, checked, item.Type, item.Checked)
+		}
+	}
+	for _, label := range []string{"Mist", "Rice Paper", "Pine Ink", "Sakura Gray", "Ocean Salt", "Midnight Indigo", "Polar Night", "Obsidian"} {
+		if item := findMenuItem(t, styleMenu, label); item.Type != menu.RadioType || item.Click == nil {
+			t.Errorf("new preview theme %q must be a clickable radio item: %#v", label, item)
 		}
 	}
 }
@@ -166,6 +171,7 @@ func TestWindowsEditMenuUsesDisplayOnlyShortcutsAndCallbacksRemainAvailable(t *t
 				"Copy":       {label: "Copy", accelerator: "Cmd+C"},
 				"Paste":      {label: "Paste", accelerator: "Cmd+V"},
 				"Select All": {label: "Select All", accelerator: "Cmd+A"},
+				"Find…":      {label: "Find…", accelerator: "Cmd+F"},
 			},
 		},
 		{
@@ -180,6 +186,7 @@ func TestWindowsEditMenuUsesDisplayOnlyShortcutsAndCallbacksRemainAvailable(t *t
 				"Copy":       {label: "Copy\tCtrl+C"},
 				"Paste":      {label: "Paste\tCtrl+V"},
 				"Select All": {label: "Select All\tCtrl+A"},
+				"Find…":      {label: "Find…\tCtrl+F"},
 			},
 		},
 		{
@@ -194,6 +201,7 @@ func TestWindowsEditMenuUsesDisplayOnlyShortcutsAndCallbacksRemainAvailable(t *t
 				"复制": {label: "复制\tCtrl+C"},
 				"粘贴": {label: "粘贴\tCtrl+V"},
 				"全选": {label: "全选\tCtrl+A"},
+				"查找…": {label: "查找…\tCtrl+F"},
 			},
 		},
 	}

@@ -2,6 +2,7 @@ export type FontScope = 'ui' | 'content' | 'code'
 
 export type FontPresetId =
   | 'system'
+  | 'heiti'
   | 'modern-sans'
   | 'reading-serif'
   | 'system-mono'
@@ -24,6 +25,7 @@ export interface FontPresetOption {
   readonly id: FontPresetId
   readonly labelKey:
     | 'settings.fontSystem'
+    | 'settings.fontHeiti'
     | 'settings.fontModernSans'
     | 'settings.fontReadingSerif'
     | 'settings.fontSystemMono'
@@ -57,6 +59,7 @@ export const fontPreferencesStorageKey = 'inkmark-font-preferences-v1'
 export const maximumStoredFontPreferencesLength = 512
 
 const systemUIStack = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif'
+const heitiStack = '"Heiti SC", STHeiti, "PingFang SC", "Microsoft YaHei", SimHei, "Noto Sans CJK SC", sans-serif'
 const modernSansStack = '"Avenir Next", Avenir, "Segoe UI Variable", "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif'
 const readingSerifStack = '"Iowan Old Style", Baskerville, "Songti SC", STSong, SimSun, "Times New Roman", serif'
 const systemMonoStack = 'ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", "PingFang SC", "Microsoft YaHei", monospace'
@@ -71,6 +74,13 @@ export const fontPresetOptions: readonly FontPresetOption[] = Object.freeze([
     labelKey: 'settings.fontSystem',
     category: 'system',
     family: systemUIStack,
+    scopes: proseScopes,
+  }),
+  Object.freeze({
+    id: 'heiti',
+    labelKey: 'settings.fontHeiti',
+    category: 'sans-serif',
+    family: heitiStack,
     scopes: proseScopes,
   }),
   Object.freeze({
@@ -267,6 +277,7 @@ function fusionPixelStack(traditional: boolean): string {
 
 export function resolveFontFamily(presetId: FontPresetId, _language?: unknown): string {
   switch (presetId) {
+    case 'heiti': return heitiStack
     case 'modern-sans': return modernSansStack
     case 'reading-serif': return readingSerifStack
     case 'system-mono': return systemMonoStack

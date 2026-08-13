@@ -61,6 +61,10 @@ pnpm --dir frontend test:update
 Assert-LastExitCode "Run update workflow tests"
 pnpm --dir frontend test:ui
 Assert-LastExitCode "Run UI state tests"
+pnpm --dir frontend test:themes
+Assert-LastExitCode "Run theme palette tests"
+pnpm --dir frontend test:find
+Assert-LastExitCode "Run text search tests"
 pnpm --dir frontend test:fonts
 Assert-LastExitCode "Run font preference tests"
 pnpm --dir frontend test:workspace

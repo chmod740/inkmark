@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify'
 import type { EChartsOption } from 'echarts'
+import type { ThemePalette } from './themes.ts'
 
 export type ExtendedDiagramKind = 'echarts' | 'abc' | 'graphviz'
 export type EChartsRenderer = 'svg' | 'canvas'
@@ -58,6 +59,7 @@ export interface ExtendedDiagramRenderOptions {
   echartsRenderer?: EChartsRenderer
   chartWidth?: number
   chartHeight?: number
+  palette?: ThemePalette
 }
 
 export interface ExtendedDiagramRenderResult {
@@ -386,7 +388,7 @@ function renderFailure(node: HTMLElement, kind: string, error: unknown): void {
 
 async function renderECharts(node: HTMLElement, source: string, options: ExtendedDiagramRenderOptions, disposers: Array<() => void>): Promise<void> {
   const option = parseSafeEChartsOption(source)
-  const engineOption = option as EChartsOption
+  const engineOption = applyEChartsPalette(option, options.palette)
   ensureActive(options)
   const echarts = await import('echarts')
   ensureActive(options)
@@ -414,6 +416,30 @@ async function renderECharts(node: HTMLElement, source: string, options: Extende
       chart.dispose()
     }
   }
+}
+
+function applyEChartsPalette(option: SafeEChartsLineOption, palette?: ThemePalette): EChartsOption {
+  if (!palette) return option as EChartsOption
+  const axisLine = { lineStyle: { color: palette.border } }
+  const axisLabel = { color: palette.muted }
+  return {
+    ...option,
+    backgroundColor: 'transparent',
+    color: [palette.accent, palette.secondary, palette.muted, palette.ink],
+    textStyle: { color: palette.ink },
+    title: option.title ? { ...option.title, textStyle: { color: palette.ink } } : undefined,
+    legend: option.legend ? { ...option.legend, textStyle: { color: palette.muted } } : undefined,
+    xAxis: { ...option.xAxis, axisLabel, axisLine: { ...option.xAxis.axisLine, ...axisLine } },
+    yAxis: {
+      ...option.yAxis,
+      axisLabel,
+      axisLine: { ...option.yAxis.axisLine, ...axisLine },
+      splitLine: {
+        ...option.yAxis.splitLine,
+        lineStyle: { ...option.yAxis.splitLine?.lineStyle, color: palette.border },
+      },
+    },
+  } as EChartsOption
 }
 
 async function renderABC(node: HTMLElement, source: string, options: ExtendedDiagramRenderOptions): Promise<void> {

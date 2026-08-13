@@ -50,6 +50,7 @@ var nativeMenuText = map[string]localizedMenuText{
 	"paste":              {zh: "粘贴", en: "Paste"},
 	"copy-html":          {zh: "复制渲染后的 HTML", en: "Copy Rendered HTML"},
 	"select-all":         {zh: "全选", en: "Select All"},
+	"find":               {zh: "查找…", en: "Find…"},
 	"view-edit":          {zh: "仅编辑", en: "Editor Only"},
 	"view-split":         {zh: "分栏编辑", en: "Split View"},
 	"view-preview":       {zh: "仅预览", en: "Preview Only"},
@@ -60,6 +61,14 @@ var nativeMenuText = map[string]localizedMenuText{
 	"theme-clean":        {zh: "清爽", en: "Clean"},
 	"theme-wechat":       {zh: "公众号", en: "WeChat"},
 	"theme-dark":         {zh: "深色", en: "Dark"},
+	"theme-mist":         {zh: "晨雾", en: "Mist"},
+	"theme-paper":        {zh: "米纸", en: "Rice Paper"},
+	"theme-pine":         {zh: "松墨", en: "Pine Ink"},
+	"theme-sakura":       {zh: "樱灰", en: "Sakura Gray"},
+	"theme-ocean":        {zh: "海盐", en: "Ocean Salt"},
+	"theme-indigo":       {zh: "暮蓝", en: "Midnight Indigo"},
+	"theme-nord":         {zh: "极夜", en: "Polar Night"},
+	"theme-obsidian":     {zh: "黑曜", en: "Obsidian"},
 	"fullscreen":         {zh: "全屏", en: "Full Screen"},
 	"bold":               {zh: "粗体", en: "Bold"},
 	"italic":             {zh: "斜体", en: "Italic"},
@@ -181,6 +190,8 @@ func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu 
 	editMenu.AddText(label("copy-html"), nil, a.menuAction("copy-html"))
 	editMenu.AddSeparator()
 	addEditItem("select-all", keys.CmdOrCtrl("a"), "select-all")
+	editMenu.AddSeparator()
+	addEditItem("find", keys.CmdOrCtrl("f"), "find")
 
 	viewMenu := applicationMenu.AddSubmenu(label("view"))
 	viewMenu.AddRadio(label("view-edit"), state.ViewMode == "edit", keys.CmdOrCtrl("1"), a.menuAction("view-edit"))
@@ -194,6 +205,14 @@ func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu 
 	styleMenu.AddRadio(label("theme-clean"), state.Theme == "clean", nil, a.menuAction("theme-clean"))
 	styleMenu.AddRadio(label("theme-wechat"), state.Theme == "wechat", nil, a.menuAction("theme-wechat"))
 	styleMenu.AddRadio(label("theme-dark"), state.Theme == "dark", nil, a.menuAction("theme-dark"))
+	styleMenu.AddRadio(label("theme-mist"), state.Theme == "mist", nil, a.menuAction("theme-mist"))
+	styleMenu.AddRadio(label("theme-paper"), state.Theme == "paper", nil, a.menuAction("theme-paper"))
+	styleMenu.AddRadio(label("theme-pine"), state.Theme == "pine", nil, a.menuAction("theme-pine"))
+	styleMenu.AddRadio(label("theme-sakura"), state.Theme == "sakura", nil, a.menuAction("theme-sakura"))
+	styleMenu.AddRadio(label("theme-ocean"), state.Theme == "ocean", nil, a.menuAction("theme-ocean"))
+	styleMenu.AddRadio(label("theme-indigo"), state.Theme == "indigo", nil, a.menuAction("theme-indigo"))
+	styleMenu.AddRadio(label("theme-nord"), state.Theme == "nord", nil, a.menuAction("theme-nord"))
+	styleMenu.AddRadio(label("theme-obsidian"), state.Theme == "obsidian", nil, a.menuAction("theme-obsidian"))
 	viewMenu.AddSeparator()
 	fullscreenAccelerator := keys.Key("f11")
 	if platform == "darwin" {

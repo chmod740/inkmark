@@ -19,8 +19,9 @@ InkMark is a Markdown editor for macOS and Windows with local and WebDAV documen
 - Source-aware two-way scroll synchronization that reconciles after math and diagram reflow without idle drift
 - Save, Don't Save, and Cancel choices before replacing or closing a modified document
 - One-click swapping of editor and preview sides, persisted across launches
-- GitHub, Clean, WeChat, and Dark preview themes
-- Independent interface, prose, and code fonts: system sans, reading serif, system monospace, and offline-bundled Fusion Pixel 12 Simplified/Traditional Chinese presets
+- Find Markdown source with `⌘/Ctrl+F`, including previous/next navigation, wrapping, match counts, and case-sensitive search
+- Twelve preview themes: GitHub, Clean, WeChat, Dark, Mist, Rice Paper, Pine Ink, Sakura Gray, Ocean Salt, Midnight Indigo, Polar Night, and Obsidian
+- Independent interface, prose, and code fonts: a cross-platform Heiti preset for interface/prose, system sans, reading serif, system monospace, and offline-bundled Fusion Pixel 12 Simplified/Traditional Chinese presets
 - Native macOS and Windows menus for files, editing, views, formatting, help, and updates
 - Automatic language detection plus explicit Simplified Chinese and English settings; automatic detection is the default
 - A localized welcome page on normal launch; Finder or Explorer file launches open the requested document directly
@@ -136,6 +137,7 @@ pnpm --dir frontend test:image
 pnpm --dir frontend test:installer
 pnpm --dir frontend test:notices
 pnpm --dir frontend test:fonts
+pnpm --dir frontend test:find
 node scripts/verify-offline.mjs
 ```
 
@@ -171,4 +173,4 @@ The suite covers local file I/O, WebDAV authentication and directory parsing, op
 
 Releases use `vMAJOR.MINOR.PATCH` tags. InkMark queries the latest Release only when the About dialog is opened or you explicitly choose Check for Updates. When a newer version exists, it selects an installer matching the current operating system and architecture.
 
-Author: PengHu · Source: [github.com/chmod740/inkmark](https://github.com/chmod740/inkmark)
+Author: Codex · Source: [github.com/chmod740/inkmark](https://github.com/chmod740/inkmark)
