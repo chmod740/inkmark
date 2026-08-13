@@ -11,6 +11,7 @@
     "test:i18n": "node --experimental-strip-types --test ../scripts/test-i18n.mjs",
     "test:installer": "node --test ../scripts/test-windows-installer.mjs",
     "test:ui": "node --experimental-strip-types --test ../scripts/test-ui-state.mjs",
+    "test:themes": "node --experimental-strip-types --test ../scripts/test-themes.mjs",
     "test:fonts": "node --experimental-strip-types --test ../scripts/test-font-preferences.mjs",
     "test:scroll": "node --experimental-strip-types --test ../scripts/test-scroll-sync.mjs",
     "test:preview": "node --experimental-strip-types --test ../scripts/test-preview-render.mjs",
