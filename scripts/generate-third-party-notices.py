@@ -48,6 +48,49 @@ VIZ_EMBEDDED_COMPONENTS = (
         "license_source": "https://github.com/libexpat/libexpat/blob/R_2_8_1/expat/COPYING",
     },
 )
+FUSION_PIXEL_FONT = {
+    "component": "Fusion Pixel Font 12px Monospaced 2026.07.20 (Simplified and Traditional Chinese)",
+    "license": "SIL Open Font License 1.1",
+    "source": "https://github.com/TakWolf/fusion-pixel-font/releases/tag/2026.07.20",
+    "archive": "fusion-pixel-font-12px-monospaced-otf.woff2-v2026.07.20.zip",
+    "archive_sha256": "83ff3c1fa8dd0ecd1b010c4bb256a7318ca4fb2dcaadbfdfc0ea560da219a565",
+    "licenses": (
+        {
+            "path": ROOT / "scripts/licenses/FusionPixelFont-2026.07.20-OFL-1.1.txt",
+            "archive_path": "OFL.txt",
+            "sha256": "bc518cf64b8032c07690f33cc270c35c179255a6ac8efa7c165ebae7e8f76a63",
+        },
+        {
+            "path": ROOT / "scripts/licenses/FusionPixelFont-2026.07.20-ArkPixel-OFL-1.1.txt",
+            "archive_path": "LICENSES/ark-pixel/OFL.txt",
+            "sha256": "3ab41567e68e3988ba1ef16dd2644eca95ca5648ea12e7d46e6287fc0bbe5aee",
+        },
+        {
+            "path": ROOT / "scripts/licenses/FusionPixelFont-2026.07.20-Cubic11-OFL-1.1.txt",
+            "archive_path": "LICENSES/cubic-11/OFL.txt",
+            # The archive file has one trailing space; the vendored notice is
+            # normalized without changing its license text.
+            "sha256": "bdd640c94530f5845de621089875aefcaec17585dbd4dab191c97118539bf92f",
+        },
+        {
+            "path": ROOT / "scripts/licenses/FusionPixelFont-2026.07.20-Galmuri-OFL-1.1.txt",
+            "archive_path": "LICENSES/galmuri/LICENSE.txt",
+            "sha256": "86a3ee9495f942f0243f18c103da9faca27adb88142613edb8bb852e56c892c1",
+        },
+    ),
+    "assets": (
+        {
+            "path": ROOT / "frontend/src/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.otf.woff2",
+            "size": 659_528,
+            "sha256": "7a08aa2bf8970d10bc0f902e9256b86628f17e119efcd9bbcd6c4a169290d867",
+        },
+        {
+            "path": ROOT / "frontend/src/assets/fonts/fusion-pixel-12px-monospaced-zh_hant.otf.woff2",
+            "size": 666_996,
+            "sha256": "b42690df31fa8d0aa7b61f1508ddf3416c36c914e8329bd664a8878d29a7056d",
+        },
+    ),
+}
 
 
 def run(*args: str, env: dict[str, str] | None = None) -> str:
@@ -83,6 +126,18 @@ def verified_license_text(path: Path, expected_sha256: str) -> str:
             f"(expected {expected_sha256}, got {digest})"
         )
     return text
+
+
+def verified_binary_asset(path: Path, expected_size: int, expected_sha256: str) -> None:
+    if not path.is_file():
+        raise RuntimeError(f"vendored binary asset is missing: {path.relative_to(ROOT)}")
+    size = path.stat().st_size
+    digest = manifest_digest(path)
+    if size != expected_size or digest != expected_sha256:
+        raise RuntimeError(
+            f"vendored binary asset changed: {path.relative_to(ROOT)} "
+            f"(expected {expected_size} bytes / {expected_sha256}, got {size} bytes / {digest})"
+        )
 
 
 def license_files(root: Path) -> list[Path]:
@@ -261,6 +316,21 @@ def render() -> str:
         source = f"; {item['source']}" if item["source"] else ""
         output.append(f"- {item['component']} ({item['license']}{source})")
 
+    output.extend(["", "BUNDLED APPLICATION FONT ASSETS", "-------------------------------"])
+    output.append(
+        f"- {FUSION_PIXEL_FONT['component']} ({FUSION_PIXEL_FONT['license']}; "
+        f"{FUSION_PIXEL_FONT['source']})"
+    )
+    output.append(
+        f"  Audited release archive: {FUSION_PIXEL_FONT['archive']} "
+        f"SHA-256 {FUSION_PIXEL_FONT['archive_sha256']}"
+    )
+    for asset in FUSION_PIXEL_FONT["assets"]:
+        verified_binary_asset(asset["path"], asset["size"], asset["sha256"])
+        output.append(
+            f"  - {asset['path'].relative_to(ROOT)} ({asset['size']} bytes; SHA-256 {asset['sha256']})"
+        )
+
     output.extend([
         "",
         "KATEX FONT AND STRETCHY-GLYPH NOTICE",
@@ -278,7 +348,13 @@ def render() -> str:
     ])
 
     grouped: dict[str, dict[str, object]] = {}
-    for component, filename, text in go_texts + node_texts:
+    font_texts = [(
+        FUSION_PIXEL_FONT["component"],
+        f"{license_item['path'].relative_to(ROOT)} "
+        f"(release archive {license_item['archive_path']}; {FUSION_PIXEL_FONT['source']})",
+        verified_license_text(license_item["path"], license_item["sha256"]),
+    ) for license_item in FUSION_PIXEL_FONT["licenses"]]
+    for component, filename, text in go_texts + node_texts + font_texts:
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
         entry = grouped.setdefault(digest, {"text": text, "uses": []})
         entry["uses"].append(f"{component} ({filename})")

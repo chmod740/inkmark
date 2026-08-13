@@ -1,5 +1,5 @@
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--inkmark-ui-font, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif);
   color: #202624;
   background: #c9ceca;
   font-synthesis: none;
@@ -25,6 +25,7 @@ button { color: inherit; }
   grid-template-rows: 72px 52px minmax(0, 1fr) 30px;
   width: 100%;
   height: 100%;
+  font-family: var(--inkmark-ui-font);
   background: #d6d9d6;
 }
 
@@ -59,7 +60,7 @@ button { color: inherit; }
 .document-identity { min-width: 0; padding-left: 18px; border-left: 1px solid rgba(255,255,255,.18); }
 .document-title-row { display: flex; align-items: center; gap: 9px; width: fit-content; max-width: 100%; min-width: 0; }
 .document-identity h1 { flex: 0 1 auto; min-width: 0; max-width: 520px; margin: 0; overflow: hidden; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
-.document-identity p { max-width: 650px; margin: 5px 0 0; overflow: hidden; color: #bdd0cc; font: 11px/1.2 "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.document-identity p { max-width: 650px; margin: 5px 0 0; overflow: hidden; color: #bdd0cc; font: 11px/1.2 var(--inkmark-code-font); text-overflow: ellipsis; white-space: nowrap; }
 .document-state { flex: 0 0 auto; padding: 2px 6px; color: #dce9e6; border: 1px solid rgba(220,233,230,.28); border-radius: 3px; font-size: 10px; white-space: nowrap; }
 .dirty-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: #f0b35e; box-shadow: 0 0 0 2px rgba(240,179,94,.18); }
 
@@ -96,7 +97,7 @@ button { color: inherit; }
 .button.secondary { color: #edf5f2; background: linear-gradient(#31686c, #28575b); box-shadow: inset 0 1px rgba(255,255,255,.12); }
 .button.primary { color: #20332c; border-color: #bcad7e; background: linear-gradient(#fff3c5, #dacb9e); box-shadow: inset 0 1px #fff8dd; font-weight: 700; }
 .button:disabled { cursor: default; opacity: .48; }
-kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace; opacity: .72; }
+kbd { margin-left: 5px; color: inherit; font: 10px/1 var(--inkmark-code-font); opacity: .72; }
 
 .command-bar {
   display: flex;
@@ -120,7 +121,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   border-radius: 3px;
   background: transparent;
   cursor: pointer;
-  font: 600 13px/1 "SFMono-Regular", Consolas, monospace;
+  font: 600 13px/1 var(--inkmark-code-font);
 }
 .format-toolbar button:hover, .copy-button:hover { border-color: #9ea6a2; background: #f8faf8; box-shadow: inset 1px 1px #fff; }
 .format-toolbar .italic { font-style: italic; }
@@ -287,7 +288,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   overflow: hidden;
   color: #6b7773;
   border-bottom: 1px solid #c1c7c4;
-  font: 9px/1.25 "SFMono-Regular", Consolas, monospace;
+  font: 9px/1.25 var(--inkmark-code-font);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -365,7 +366,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   inset: 3px 1px auto;
   color: #24676a;
   content: "M";
-  font: 700 7px/1 "SFMono-Regular", Consolas, monospace;
+  font: 700 7px/1 var(--inkmark-code-font);
   text-align: center;
 }
 .workspace-entry-icon.image {
@@ -426,7 +427,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   border-radius: 4px;
   background: transparent;
   cursor: default;
-  font: 12px/1.25 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  font: 12px/1.25 var(--inkmark-ui-font);
   text-align: start;
 }
 .workspace-context-menu button:hover,
@@ -434,24 +435,24 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .workspace-context-menu button.danger { color: #9d332e; }
 .workspace-context-menu button.danger:hover,
 .workspace-context-menu button.danger:focus-visible { color: #fff; background: #9d403a; }
-.workspace-context-menu button > span { color: #53716d; font: 700 10px/1 "SFMono-Regular", Consolas, monospace; text-align: center; }
+.workspace-context-menu button > span { color: #53716d; font: 700 10px/1 var(--inkmark-code-font); text-align: center; }
 .workspace-context-menu button:hover > span,
 .workspace-context-menu button:focus-visible > span { color: inherit; }
 .workspace-context-separator { height: 1px; margin: 4px 5px; background: #ccd2cf; }
 
 .editor-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-width: 0; min-height: 0; gap: 3px; padding: 3px; background: #858d8a; }
 .source-panel, .preview-panel { display: grid; grid-template-rows: 34px minmax(0, 1fr); min-width: 0; min-height: 0; border: 1px solid #66706c; background: var(--paper); box-shadow: inset 1px 1px #fff; }
-.panel-caption { display: flex; align-items: center; justify-content: space-between; padding: 0 12px; color: #33403d; border-bottom: 1px solid #9fa8a4; background: linear-gradient(#f1f3f0, #d8dcda); font: 700 10px/1 "SFMono-Regular", Consolas, monospace; letter-spacing: .12em; }
+.panel-caption { display: flex; align-items: center; justify-content: space-between; padding: 0 12px; color: #33403d; border-bottom: 1px solid #9fa8a4; background: linear-gradient(#f1f3f0, #d8dcda); font: 700 10px/1 var(--inkmark-code-font); letter-spacing: .12em; }
 .panel-caption small { color: #71807b; font-size: 9px; }
 .preview-caption { color: #174e52; }
-.source-editor { width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 24px 26px 80px; resize: none; border: 0; outline: 0; color: #2e3633; background: var(--editor-paper); caret-color: #8c241d; font: 14px/1.72 "SFMono-Regular", Menlo, Consolas, "PingFang SC", monospace; overflow-anchor: none; tab-size: 4; }
+.source-editor { width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 24px 26px 80px; resize: none; border: 0; outline: 0; color: #2e3633; background: var(--editor-paper); caret-color: #8c241d; font: 14px/1.72 var(--inkmark-code-font); overflow-anchor: none; tab-size: 4; }
 .source-editor::selection { color: #102322; background: #b9d8d5; }
 .preview-viewport { min-width: 0; min-height: 0; overflow: auto; outline: 0; background: #fff; overflow-anchor: none; scrollbar-gutter: stable; }
 .view-edit .editor-layout, .view-preview .editor-layout { grid-template-columns: minmax(0, 1fr); }
 .view-edit .preview-panel, .view-preview .source-panel { display: none; }
 .preview-first .preview-panel { order: -1; }
 
-.status-bar { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0 12px; color: #e7eeeb; border-top: 1px solid #082d31; background: linear-gradient(#24565a, #174449); font: 10px/1 "SFMono-Regular", Consolas, monospace; }
+.status-bar { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0 12px; color: #e7eeeb; border-top: 1px solid #082d31; background: linear-gradient(#24565a, #174449); font: 10px/1 var(--inkmark-code-font); }
 .ready-light { flex: 0 0 auto; }
 .status-divider { width: 1px; height: 14px; background: rgba(255,255,255,.22); }
 
@@ -476,7 +477,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   background: var(--paper);
   box-shadow: 0 18px 55px rgba(4, 20, 22, .38), inset 0 1px #fff;
 }
-.app-dialog h2 { margin: 0 0 18px; font: 700 22px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+.app-dialog h2 { margin: 0 0 18px; font: 700 22px/1.2 var(--inkmark-ui-font); }
 .app-dialog > p { color: var(--muted); line-height: 1.65; }
 .workspace-dialog { width: min(560px, calc(100vw - 48px)); }
 .workspace-entry-form { display: grid; gap: 8px; }
@@ -490,10 +491,10 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   border-radius: 5px;
   outline: 0;
   background: var(--paper-soft);
-  font: 13px/1.3 "SFMono-Regular", Consolas, monospace;
+  font: 13px/1.3 var(--inkmark-code-font);
 }
 .workspace-entry-form input:focus { border-color: #28777a; box-shadow: 0 0 0 2px rgba(40,119,122,.18); }
-.workspace-entry-parent, .workspace-preview-location { margin: 0; overflow-wrap: anywhere; color: var(--muted); font: 10px/1.5 "SFMono-Regular", Consolas, monospace; }
+.workspace-entry-parent, .workspace-preview-location { margin: 0; overflow-wrap: anywhere; color: var(--muted); font: 10px/1.5 var(--inkmark-code-font); }
 .workspace-delete-message { margin-bottom: 10px; color: var(--ink) !important; font-size: 14px; }
 .workspace-lock-status { margin: -8px 0 16px; padding: 8px 10px; color: #225c5f !important; border: 1px solid #9bbdb8; border-radius: 5px; background: #edf8f5; font-size: 11px; line-height: 1.45 !important; }
 .workspace-preserve-message { padding: 9px 11px; color: #79550d !important; border: 1px solid #d7bd79; border-radius: 5px; background: #fff8df; font-size: 12px; }
@@ -607,7 +608,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .saved-connection-details { display: grid; gap: 3px; min-width: 0; }
 .saved-connection-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; min-width: 0; }
 .saved-connection-title-row > strong, .saved-connection-details > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.saved-connection-details > span { color: var(--muted); font: 10px/1.4 "SFMono-Regular", Consolas, monospace; }
+.saved-connection-details > span { color: var(--muted); font: 10px/1.4 var(--inkmark-code-font); }
 .saved-connection-details > small { color: var(--muted); font-size: 10px; }
 .saved-connection-details > .saved-credential-warning { color: #9a5a14; }
 .saved-connection-badge {
@@ -748,6 +749,15 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .settings-row > label { padding-top: 8px; font-weight: 700; }
 .settings-row select { width: 100%; min-height: 38px; padding: 6px 34px 6px 10px; color: var(--ink); border: 1px solid var(--border); border-radius: 5px; background: var(--paper); }
 .settings-row p { margin: 9px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.settings-dialog { width: min(640px, calc(100vw - 48px)); }
+.font-settings { display: grid; gap: 13px; margin-top: 22px; padding-top: 19px; border-top: 1px solid var(--border); }
+.font-settings > header h3 { margin: 0; font-size: 15px; }
+.font-settings > header p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.font-settings-preview { display: grid; gap: 6px; margin-left: 128px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--paper-soft); }
+.font-settings-preview strong { font-family: var(--inkmark-ui-font); font-size: 13px; }
+.font-settings-preview span { font-family: var(--inkmark-content-font); font-size: 15px; line-height: 1.55; }
+.font-settings-preview code { font-family: var(--inkmark-code-font); font-size: 12px; overflow-wrap: anywhere; }
+.font-reset-button { width: fit-content; margin-left: 128px; }
 .detected-language { color: #267069 !important; }
 .shortcut-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 9px 22px; margin: 18px 0 4px; }
 .shortcut-list dt, .shortcut-list dd { margin: 0; }
@@ -776,7 +786,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .about-licenses-heading h2 { margin: 0 0 8px; }
 .about-licenses-heading p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .about-licenses-status { align-self: start; margin: 24px; }
-.third-party-notices { min-width: 0; min-height: 0; margin: 20px 24px; padding: 14px 16px; resize: none; overflow: auto; color: var(--ink); border: 1px solid var(--border); border-radius: 5px; outline: 0; background: var(--paper-soft); font: 12px/1.55 "SFMono-Regular", Menlo, Consolas, monospace; tab-size: 4; }
+.third-party-notices { min-width: 0; min-height: 0; margin: 20px 24px; padding: 14px 16px; resize: none; overflow: auto; color: var(--ink); border: 1px solid var(--border); border-radius: 5px; outline: 0; background: var(--paper-soft); font: 12px/1.55 var(--inkmark-code-font); tab-size: 4; }
 .third-party-notices:focus { border-color: #49878a; box-shadow: 0 0 0 2px rgba(43,119,123,.14); }
 .about-licenses-dialog > .dialog-actions { min-height: 68px; margin: 0; padding: 14px 24px 17px; background: var(--paper); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; padding-top: 15px; border-top: 1px solid var(--border); }
@@ -792,7 +802,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   padding: 38px 44px 100px;
   color: #1f2328;
   background: #fff;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--inkmark-content-font);
   font-size: 16px;
   line-height: 1.7;
   overflow-wrap: break-word;
@@ -816,7 +826,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .markdown-body hr { height: .25em; margin: 28px 0; padding: 0; border: 0; background: #d8dee4; }
 .markdown-body blockquote { padding: 0 1em; color: #59636e; border-left: .25em solid #d0d7de; }
 .markdown-body blockquote > :last-child { margin-bottom: 0; }
-.markdown-body code { padding: .18em .38em; border-radius: 4px; background: rgba(175,184,193,.2); font: 85%/1.45 "SFMono-Regular", Consolas, monospace; }
+.markdown-body code { padding: .18em .38em; border-radius: 4px; background: rgba(175,184,193,.2); font: 85%/1.45 var(--inkmark-code-font); }
 .markdown-body pre { padding: 16px; overflow: auto; border: 1px solid #d7dde3; border-radius: 6px; background: #f6f8fa; line-height: 1.45; }
 .markdown-body pre code { display: block; padding: 0; overflow: visible; border: 0; background: transparent; font-size: 85%; white-space: pre; }
 .markdown-body img { max-width: 100%; }
@@ -832,6 +842,43 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   overflow-wrap: anywhere;
 }
 .markdown-body mark { padding: .1em .25em; background: #fff0a6; }
+.markdown-body sub, .markdown-body sup { line-height: 0; }
+.markdown-body abbr[title] { cursor: help; text-decoration: underline dotted; text-decoration-thickness: 1px; text-underline-offset: .2em; }
+.markdown-body dl:not(.inkmark-front-matter-list) { padding: 0 0 0 1em; border-left: 3px solid #d8dee4; }
+.markdown-body dl:not(.inkmark-front-matter-list) dt { margin-top: .75em; font-weight: 700; }
+.markdown-body dl:not(.inkmark-front-matter-list) dt:first-child { margin-top: 0; }
+.markdown-body dl:not(.inkmark-front-matter-list) dd { margin: .28em 0 .8em 1.25em; color: #59636e; }
+.markdown-body .inkmark-toc {
+  margin: 0 0 24px;
+  padding: 16px 18px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #f6f8fa;
+}
+.markdown-body .inkmark-toc > h2 { margin: 0 0 8px; padding: 0; color: #57606a; border: 0; font-size: .82em; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.markdown-body .inkmark-toc ol { margin: 0; padding-left: 1.45em; }
+.markdown-body .inkmark-toc li + li { margin-top: .2em; }
+.markdown-body .inkmark-toc-level-2 { margin-left: 1em; }
+.markdown-body .inkmark-toc-level-3 { margin-left: 2em; }
+.markdown-body .inkmark-toc-level-4,
+.markdown-body .inkmark-toc-level-5,
+.markdown-body .inkmark-toc-level-6 { margin-left: 3em; }
+.markdown-body .inkmark-wiki-link[aria-disabled="true"] { color: #6e40c9; border-bottom: 1px dashed currentColor; cursor: default; }
+.markdown-body .inkmark-front-matter { padding: 0; overflow: hidden; background: #f6f8fa; }
+.markdown-body .inkmark-front-matter > h2 { margin: 0; padding: 10px 14px; color: #57606a; border: 0; font-size: .92em; }
+.markdown-body .inkmark-front-matter > dl { display: grid; grid-template-columns: minmax(8em, max-content) minmax(0, 1fr); margin: 0; padding: 0 14px 14px; border-top: 1px solid #d8dee4; }
+.markdown-body .inkmark-front-matter > dl dt,
+.markdown-body .inkmark-front-matter > dl dd { margin: 0; padding: 7px 8px; border-bottom: 1px solid #d8dee4; }
+.markdown-body .inkmark-front-matter > dl dt { font-weight: 700; overflow-wrap: anywhere; }
+.markdown-body .inkmark-front-matter > dl dd { min-width: 0; color: #59636e; overflow-wrap: anywhere; }
+.markdown-body .inkmark-citation { white-space: nowrap; }
+.markdown-body .inkmark-citation-unresolved { color: #8b3430; }
+.markdown-body .inkmark-citation-backrefs { margin-left: .45em; white-space: nowrap; }
+.markdown-body .inkmark-citation-backrefs a { margin-left: .22em; font-size: .85em; }
+.markdown-body .inkmark-references { margin-top: 36px; padding-top: 18px; border-top: 1px solid #d0d7de; }
+.markdown-body .inkmark-references > h2 { margin: 0 0 10px; padding: 0; color: #57606a; border: 0; font-size: 1.1em; font-weight: 700; }
+.markdown-body .inkmark-references ol { padding-left: 1.7em; }
+.markdown-body .inkmark-references li { scroll-margin-top: 18px; }
 .markdown-body details { padding: 12px 14px; border: 1px solid #d0d7de; border-radius: 6px; }
 .markdown-body summary { cursor: pointer; font-weight: 650; }
 .table-scroll { width: 100%; margin: 16px 0; overflow-x: auto; }
@@ -898,7 +945,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
   border-radius: 999px;
   background: #f6f8fa;
   content: attr(data-kind);
-  font: 700 10px/1.4 "SFMono-Regular", Consolas, monospace;
+  font: 700 10px/1.4 var(--inkmark-code-font);
   letter-spacing: .06em;
   text-transform: uppercase;
 }
@@ -910,8 +957,8 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .render-error { color: #a40e26; white-space: pre-wrap; }
 
 .theme-clean .preview-viewport { background: #edf0ed; }
-.theme-clean .markdown-body { max-width: 860px; min-height: calc(100% - 32px); margin: 16px auto; padding: 52px 58px 110px; color: #293330; box-shadow: 0 2px 10px rgba(24,40,34,.09); font-family: "Iowan Old Style", "Songti SC", Georgia, serif; font-size: 17px; line-height: 1.9; }
-.theme-clean .markdown-body h1, .theme-clean .markdown-body h2 { border-bottom: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+.theme-clean .markdown-body { max-width: 860px; min-height: calc(100% - 32px); margin: 16px auto; padding: 52px 58px 110px; color: #293330; box-shadow: 0 2px 10px rgba(24,40,34,.09); font-family: var(--inkmark-content-font); font-size: 17px; line-height: 1.9; }
+.theme-clean .markdown-body h1, .theme-clean .markdown-body h2 { border-bottom: 0; font-family: inherit; }
 .theme-clean .markdown-body h2 { padding-left: 13px; border-left: 4px solid #1c6d73; }
 .theme-clean .markdown-body blockquote { color: #586762; border-left-color: #85a9a4; }
 
@@ -997,6 +1044,20 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 .theme-dark .markdown-body hr { background: #30363d; }
 .theme-dark .markdown-body blockquote { border-left-color: #3b434b; }
 .theme-dark .markdown-body code { background: rgba(110,118,129,.4); }
+.theme-dark .markdown-body mark { color: #f0f6fc; background: #6e5a13; }
+.theme-dark .markdown-body dl:not(.inkmark-front-matter-list) { border-left-color: #30363d; }
+.theme-dark .markdown-body dl:not(.inkmark-front-matter-list) dd { color: #8b949e; }
+.theme-dark .markdown-body .inkmark-toc,
+.theme-dark .markdown-body .inkmark-front-matter { border-color: #30363d; background: #161b22; }
+.theme-dark .markdown-body .inkmark-toc > h2,
+.theme-dark .markdown-body .inkmark-front-matter > h2,
+.theme-dark .markdown-body .inkmark-front-matter > dl dd,
+.theme-dark .markdown-body .inkmark-references > h2 { color: #8b949e; }
+.theme-dark .markdown-body .inkmark-front-matter > dl,
+.theme-dark .markdown-body .inkmark-front-matter > dl dt,
+.theme-dark .markdown-body .inkmark-front-matter > dl dd,
+.theme-dark .markdown-body .inkmark-references { border-color: #30363d; }
+.theme-dark .markdown-body .inkmark-wiki-link[aria-disabled="true"] { color: #bc8cff; }
 .theme-dark .markdown-body pre, .theme-dark .markdown-body th, .theme-dark .markdown-body tr:nth-child(2n) { background: #161b22; }
 .theme-dark .markdown-body pre, .theme-dark .markdown-body th, .theme-dark .markdown-body td, .theme-dark .markdown-body details { border-color: #30363d; }
 .theme-dark .markdown-alert { color: #c9d1d9 !important; background: #161b22; }
@@ -1040,6 +1101,10 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 "SFMono-Regular", monospace
 
 @media (max-width: 720px) {
   .modal-backdrop { padding: 12px; }
+  .settings-dialog { width: calc(100vw - 24px); }
+  .settings-row { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  .settings-row > label { padding-top: 0; }
+  .font-settings-preview, .font-reset-button { margin-left: 0; }
   .about-licenses-dialog { width: calc(100vw - 24px); height: calc(100vh - 24px); }
   .about-licenses-heading { padding: 17px 16px 13px; }
   .about-licenses-heading h2 { font-size: 19px; }

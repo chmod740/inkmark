@@ -52,6 +52,21 @@ test('full emoji and footnotes render representative syntax from 未命名.md', 
   assert.match(html, /href="https:\/\/example\.com"/)
 })
 
+test('generated footnote fragment owners carry the per-render trusted marker', () => {
+  const markdown = installMarkdownExtensions(new MarkdownIt())
+  const marker = 'Trusted_Footnote-1234567890'
+  const html = markdown.render('First[^one], repeated[^one].\n\n[^one]: Footnote.', {
+    inkmarkTrustedMarker: marker,
+  })
+  assert.match(html, new RegExp(`<a data-inkmark-trusted="${marker}" href="#fn1" id="fnref1">`))
+  assert.match(html, new RegExp(`<a data-inkmark-trusted="${marker}" href="#fn1" id="fnref1:1">`))
+  assert.match(html, new RegExp(`<li data-inkmark-trusted="${marker}" id="fn1" class="footnote-item">`))
+  const invalid = markdown.render('Text[^one].\n\n[^one]: Footnote.', {
+    inkmarkTrustedMarker: 'bad" onclick="attack',
+  })
+  assert.doesNotMatch(invalid, /data-inkmark-trusted|onclick=/)
+})
+
 test('callout markers accept GitHub and legacy forms without prefix confusion', () => {
   assert.deepEqual(parseCalloutMarker('[!NOTE] 后续内容'), {
     type: 'note',

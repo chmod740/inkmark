@@ -1,4 +1,11 @@
-# Markdown 综合渲染测试 / Comprehensive Rendering Test
+---
+title: "Markdown 综合渲染测试 / Comprehensive Rendering Test"
+category: documentation
+offline: true
+revision: 2
+---
+
+# Markdown 综合渲染测试 / Comprehensive Rendering Test {#rendering-test .bilingual}
 
 这是一份用于验证常见 CommonMark、GitHub 风格扩展、表情、脚注、KaTeX 与多种图表的内置双语文档。
 
@@ -6,9 +13,11 @@ This built-in bilingual document exercises common CommonMark syntax, GitHub-styl
 
 [返回欢迎页 / Back to Welcome](#inkmark-welcome)
 
+[TOC]
+
 ## 基础文本 / Basic Text
 
-普通文本支持 *斜体 / italic*、**粗体 / bold**、***粗斜体 / bold italic***、~~删除线 / strikethrough~~、<mark>高亮 / highlight</mark>、`inline code`、上标 H<sup>2</sup>O 与下标 CO<sub>2</sub>。
+普通文本支持 *斜体 / italic*、**粗体 / bold**、***粗斜体 / bold italic***、~~删除线 / strikethrough~~、==高亮 / highlight==、`inline code`、上标 x^2^ 与下标 H~2~O。
 
 连续两个空格产生硬换行。  
 This line follows a hard line break.
@@ -19,6 +28,25 @@ This line follows a hard line break.
 
 [commonmark]: https://spec.commonmark.org/ "CommonMark Spec"
 [mermaid]: https://mermaid.js.org/ "Mermaid Documentation"
+
+### 通用方言扩展 / General Dialect Extensions {#dialect-extensions .demo}
+
+HTML 与 CSS 缩写会显示说明；HTML and CSS abbreviations expose their definitions.
+
+Markdown 方言
+: 支持定义列表、缩写、高亮、上下标、目录、标题属性、Wiki 链接、Front Matter 与本地引用文献。
+
+Markdown dialects
+: Definition lists, abbreviations, mark, sub/sup, TOC, heading attributes, wiki links, front matter, and local citations.
+
+Wiki 链接在纯离线预览中显示为待解析文本：[[项目首页|Project Home]]；它不会擅自读取文件或联网。
+
+引用示例 / Citation example：安全渲染必须保持离线[@inkmark-rendering]，扩展语法遵循明确边界[@markdown-dialects]。
+
+*[HTML]: HyperText Markup Language
+*[CSS]: Cascading Style Sheets
+[@inkmark-rendering]: InkMark 团队，《安全的离线 Markdown 渲染》，2026。
+[@markdown-dialects]: InkMark Team, “Bounded Markdown Dialect Extensions,” 2026.
 
 ---
 

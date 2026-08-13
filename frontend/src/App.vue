@@ -92,6 +92,22 @@ import {
   type Locale,
   type TranslationKey,
 } from './i18n'
+import {
+  applyFontPreferences,
+  buildEmbeddedFontCSS,
+  clearFontPreferences,
+  getFontPresetsForScope,
+  parseFontPreferences,
+  readFontPreferences,
+  resetFontPreferences,
+  serializeFontPreferences,
+  updateFontPreference,
+  waitForSelectedFonts,
+  writeFontPreferences,
+  type FontPreferences,
+  type FontPresetId,
+  type FontScope,
+} from './font-preferences'
 import { UpdateDownloadSessionGate } from './update-session'
 import {
   flattenWorkspaceTree,
@@ -295,6 +311,8 @@ interface PreviewCapture {
 interface ExportSnapshot {
   source: string
   theme: Theme
+  fontPreferences: string
+  language: Locale
   path: string
   name: string
   title: string
@@ -322,6 +340,7 @@ const fileName = ref('README.md')
 const theme = ref<Theme>(readPreference<Theme>('inkmark-theme', 'github'))
 const viewMode = ref<ViewMode>(readPreference<ViewMode>('inkmark-view', 'split'))
 const previewFirst = ref(normalizePreviewFirst(localStorage.getItem(previewFirstStorageKey)))
+const fontPreferences = ref<FontPreferences>(readFontPreferences(localStorage))
 const languageMode = ref<LanguageMode>('auto')
 const locale = ref<Locale>('en')
 const renderState = ref('')
@@ -513,6 +532,8 @@ markdown.core.ruler.push('inkmark-source-lines', (state) => {
     if (!token.map) return
     if (token.nesting === 1 || ['fence', 'code_block', 'hr', 'html_block', 'math_block'].includes(token.type)) {
       token.attrSet('data-source-line', String(token.map[0]))
+      const trustedMarker = String(state.env?.inkmarkTrustedMarker || '')
+      if (/^[A-Za-z0-9_-]{16,160}$/.test(trustedMarker)) token.attrSet('data-inkmark-trusted', trustedMarker)
     }
   })
 })
@@ -520,39 +541,48 @@ markdown.core.ruler.push('inkmark-source-lines', (state) => {
 // decoding or loading an image as soon as detached HTML is parsed, so the
 // original destination remains inert until preparePreviewImages validates it
 // through the local, WebDAV, Data URI, or public-HTTPS resolver.
-markdown.renderer.rules.image = (tokens, index) => {
+markdown.renderer.rules.image = (tokens, index, _options, env) => {
   const token = tokens[index]
+  const trustedMarker = markdown.utils.escapeHtml(String(env?.inkmarkTrustedMarker || ''))
+  const trustedAttribute = trustedMarker ? ` data-inkmark-trusted="${trustedMarker}"` : ''
   const source = markdown.utils.escapeHtml(String(token.attrGet('src') || ''))
   const alt = markdown.utils.escapeHtml(token.content || '')
   const title = markdown.utils.escapeHtml(String(token.attrGet('title') || ''))
   const titleAttribute = title ? ` data-inkmark-image-title="${title}"` : ''
-  return `<span class="inkmark-image-placeholder" data-inkmark-image-source="${source}" data-inkmark-image-alt="${alt}"${titleAttribute}></span>`
+  return `<span class="inkmark-image-placeholder" data-inkmark-image-source="${source}" data-inkmark-image-alt="${alt}"${titleAttribute}${trustedAttribute}></span>`
 }
-markdown.renderer.rules.math_inline = (tokens, index) =>
-  `<span class="math-source" data-display-mode="inline">${markdown.utils.escapeHtml(tokens[index].content)}</span>`
-markdown.renderer.rules.math_block = (tokens, index) => {
+markdown.renderer.rules.math_inline = (tokens, index, _options, env) => {
+  const marker = markdown.utils.escapeHtml(String(env?.inkmarkTrustedMarker || ''))
+  const trustedAttribute = marker ? ` data-inkmark-trusted="${marker}"` : ''
+  return `<span class="math-source" data-display-mode="inline"${trustedAttribute}>${markdown.utils.escapeHtml(tokens[index].content)}</span>`
+}
+markdown.renderer.rules.math_block = (tokens, index, _options, env) => {
   const sourceLine = tokens[index].map?.[0]
   const sourceAttribute = sourceLine === undefined ? '' : ` data-source-line="${sourceLine}"`
-  return `<div class="math-source" data-display-mode="block"${sourceAttribute}>${markdown.utils.escapeHtml(tokens[index].content.trim())}</div>`
+  const marker = markdown.utils.escapeHtml(String(env?.inkmarkTrustedMarker || ''))
+  const trustedAttribute = marker ? ` data-inkmark-trusted="${marker}"` : ''
+  return `<div class="math-source" data-display-mode="block"${sourceAttribute}${trustedAttribute}>${markdown.utils.escapeHtml(tokens[index].content.trim())}</div>`
 }
 const defaultFence = markdown.renderer.rules.fence || ((tokens, index, options, _env, self) => self.renderToken(tokens, index, options))
 markdown.renderer.rules.fence = (tokens, index, options, env, self) => {
   const token = tokens[index]
+  const trustedMarker = markdown.utils.escapeHtml(String(env?.inkmarkTrustedMarker || ''))
+  const trustedAttribute = trustedMarker ? ` data-inkmark-trusted="${trustedMarker}"` : ''
   const classification = classifyExtendedFence(token.info, token.content)
   if (classification.status !== 'supported') return defaultFence(tokens, index, options, env, self)
 
   const sourceLine = token.map?.[0]
   const sourceAttribute = sourceLine === undefined ? '' : ` data-source-line="${sourceLine}"`
   if (classification.kind === 'mermaid') {
-    return `<pre class="mermaid" data-kind="mermaid"${sourceAttribute}>${markdown.utils.escapeHtml(classification.source)}</pre>`
+    return `<pre class="mermaid" data-kind="mermaid"${sourceAttribute}${trustedAttribute}>${markdown.utils.escapeHtml(classification.source)}</pre>`
   }
   if (classification.kind === 'mindmap') {
     const definition = convertBulletMindmap(classification.source)
     if (!definition) return defaultFence(tokens, index, options, env, self)
-    return `<pre class="mermaid" data-kind="mindmap"${sourceAttribute}>${markdown.utils.escapeHtml(definition)}</pre>`
+    return `<pre class="mermaid" data-kind="mindmap"${sourceAttribute}${trustedAttribute}>${markdown.utils.escapeHtml(definition)}</pre>`
   }
   if (classification.kind === 'echarts' || classification.kind === 'abc' || classification.kind === 'graphviz') {
-    return `<pre class="extended-diagram" data-kind="${classification.kind}" data-extended-diagram="${classification.kind}"${sourceAttribute}>${markdown.utils.escapeHtml(classification.source)}</pre>`
+    return `<pre class="extended-diagram" data-kind="${classification.kind}" data-extended-diagram="${classification.kind}"${sourceAttribute}${trustedAttribute}>${markdown.utils.escapeHtml(classification.source)}</pre>`
   }
   return defaultFence(tokens, index, options, env, self)
 }
@@ -709,6 +739,16 @@ const exportLabels = computed<Record<ExportFormat, string>>(() => ({
   txt: t('export.txt'),
   doc: t('export.doc'),
 }))
+
+function fontOptions(scope: FontScope) {
+  return getFontPresetsForScope(scope)
+}
+
+function fontPresetLabel(id: FontPresetId) {
+  const option = getFontPresetsForScope('ui').find((candidate) => candidate.id === id)
+    || getFontPresetsForScope('code').find((candidate) => candidate.id === id)
+  return option ? t(option.labelKey) : id
+}
 
 const shortcutRows = computed(() => [
   ['⌘/Ctrl+N', t('help.shortcut.new')],
@@ -2429,6 +2469,8 @@ async function exportDocument(format: ExportFormat) {
   const snapshot: ExportSnapshot = {
     source: source.value,
     theme: theme.value,
+    fontPreferences: serializeFontPreferences(fontPreferences.value),
+    language: locale.value,
     path: documentStorageKind.value === 'local' ? localDocumentPath.value : '',
     name: fileName.value,
     title: exportDocumentTitle(fileName.value),
@@ -2447,12 +2489,16 @@ async function exportDocument(format: ExportFormat) {
 
     let payloadBase64: string
     if (format === 'html' || format === 'doc') {
+      const embeddedFontCSS = await buildEmbeddedFontCSS(
+        parseFontPreferences(snapshot.fontPreferences),
+        snapshot.language,
+      )
       const documentHTML = buildStandaloneHTML({
         title: snapshot.title,
         theme: snapshot.theme,
         articleHTML: exportArticleHTML(target, format),
-        embeddedStyles: collectEmbeddedStyles(),
-        language: locale.value,
+        embeddedStyles: `${collectEmbeddedStyles()}\n${embeddedFontCSS}`,
+        language: snapshot.language,
         wordCompatible: format === 'doc',
       })
       payloadBase64 = utf8ToBase64(documentHTML)
@@ -2462,7 +2508,12 @@ async function exportDocument(format: ExportFormat) {
       // would duplicate or omit.
       payloadBase64 = utf8ToBase64(snapshot.source)
     } else {
-      const capture = await capturePreviewCanvas(target, snapshot.theme, format === 'pdf')
+      const capture = await capturePreviewCanvas(
+        target,
+        snapshot.theme,
+        format === 'pdf',
+        parseFontPreferences(snapshot.fontPreferences),
+      )
       payloadBase64 = format === 'png'
         ? capture.canvas.toDataURL('image/png').split(',', 2)[1]
         : await buildPDFBase64(capture, snapshot.theme)
@@ -2490,6 +2541,8 @@ function assertExportSnapshot(snapshot: ExportSnapshot) {
   if (
     source.value !== snapshot.source
     || theme.value !== snapshot.theme
+    || serializeFontPreferences(fontPreferences.value) !== snapshot.fontPreferences
+    || locale.value !== snapshot.language
     || (documentStorageKind.value === 'local' ? localDocumentPath.value : '') !== snapshot.path
     || fileName.value !== snapshot.name
   ) {
@@ -2501,6 +2554,7 @@ async function capturePreviewCanvas(
   target: HTMLElement,
   exportTheme: Theme,
   fitPDFPages = false,
+  captureFonts: FontPreferences = fontPreferences.value,
 ): Promise<PreviewCapture> {
   const captureWidth = 920
   const stage = document.createElement('div')
@@ -2533,7 +2587,7 @@ async function capturePreviewCanvas(
   document.body.append(stage)
 
   try {
-    await document.fonts?.ready
+    await waitForSelectedFonts(document.fonts, captureFonts)
     await waitForLocalImages(clone)
     if (fitPDFPages) fitTallDiagramsForPDF(clone, captureWidth)
     const width = Math.max(1, clone.scrollWidth)
@@ -3026,9 +3080,10 @@ async function applyLanguageMode(mode: LanguageMode, replaceWelcome = true) {
   const nextLocale = resolveLocale(normalized, getSystemLanguages())
   languageMode.value = normalized
   locale.value = nextLocale
+  applyFontPreferences(document.documentElement, fontPreferences.value, nextLocale)
   localStorage.setItem(languageModeStorageKey, normalized)
   document.documentElement.lang = nextLocale
-	  document.title = t('app.fullName')
+  document.title = t('app.fullName')
   await SetLanguage(normalized, nextLocale)
   updateNativeMenu()
   if (replaceWelcome && builtInDocument.value === 'welcome' && !dirty.value) {
@@ -3037,12 +3092,34 @@ async function applyLanguageMode(mode: LanguageMode, replaceWelcome = true) {
   } else {
     await renderNow()
   }
-	  await SetWindowTitle(fileName.value, dirty.value)
+  await SetWindowTitle(fileName.value, dirty.value)
 }
 
 function handleLanguageChange(event: Event) {
   const mode = (event.target as HTMLSelectElement).value as LanguageMode
   void applyLanguageMode(mode).catch(showError)
+}
+
+function persistFontPreferences(nextPreferences: FontPreferences) {
+  fontPreferences.value = nextPreferences
+  writeFontPreferences(localStorage, nextPreferences)
+  applyFontPreferences(document.documentElement, nextPreferences, locale.value)
+  void nextTick(async () => {
+    await waitForSelectedFonts(document.fonts, nextPreferences)
+    refreshScrollAnchors()
+    scheduleLayoutReconciliation()
+    reconcileActiveScroll()
+  }).catch(showError)
+}
+
+function handleFontPreferenceChange(scope: FontScope, event: Event) {
+  const preset = (event.target as HTMLSelectElement).value as FontPresetId
+  persistFontPreferences(updateFontPreference(fontPreferences.value, scope, preset))
+}
+
+function restoreDefaultFonts() {
+  clearFontPreferences(localStorage)
+  persistFontPreferences(resetFontPreferences())
 }
 
 function handleSystemLanguageChange() {
@@ -3312,19 +3389,27 @@ async function renderNow(sourceText = source.value, renderTheme = theme.value): 
   const imageContext = currentImageRenderContext()
   renderState.value = t('status.rendering')
   try {
-    const renderedHTML = markdown.render(sourceText)
+    const trustedMarkerBytes = new Uint32Array(4)
+    crypto.getRandomValues(trustedMarkerBytes)
+    const trustedMarker = `preview-${sequence}-${Array.from(trustedMarkerBytes, (value) => value.toString(16).padStart(8, '0')).join('')}`
+    const renderedHTML = markdown.render(sourceText, { inkmarkTrustedMarker: trustedMarker })
     const cleanHTML = DOMPurify.sanitize(renderedHTML, {
       USE_PROFILES: { html: true },
       ADD_TAGS: ['details', 'summary', 'mark'],
       ADD_ATTR: [
         'target', 'rel', 'checked', 'disabled', 'data-alert', 'data-display-mode', 'data-source-line', 'data-kind',
         'data-extended-diagram', 'data-extended-diagram-state',
+        'data-inkmark-trusted',
+        'data-wiki-target',
         'data-inkmark-image-source', 'data-inkmark-image-alt', 'data-inkmark-image-title',
       ],
       // No resource-bearing HTML reaches the detached staging DOM. Markdown
       // image tokens use inert spans above and receive a validated Blob URL
       // only after the native resolver accepts their bytes.
-      FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'svg', 'img', 'picture', 'source', 'video', 'audio', 'track'],
+      FORBID_TAGS: [
+        'script', 'style', 'iframe', 'object', 'embed', 'svg', 'img', 'picture', 'source', 'video', 'audio', 'track',
+        'form', 'button', 'select', 'textarea', 'fieldset', 'option',
+      ],
       FORBID_ATTR: [
         'src', 'srcset', 'poster', 'background', 'style',
         'data-inkmark-public-image', 'data-inkmark-image-id',
@@ -3333,6 +3418,7 @@ async function renderNow(sourceText = source.value, renderTheme = theme.value): 
     const committed = await previewCommit.stageAndCommit(sequence, async () => {
       const staging = target.cloneNode(false) as HTMLElement
       staging.innerHTML = cleanHTML
+      enforceGeneratedPreviewProvenance(staging, trustedMarker)
       decoratePreview(staging)
       renderMath(staging)
       highlightCode(staging)
@@ -3420,28 +3506,39 @@ function decoratePreview(root: HTMLElement) {
     wrapper.append(table)
   })
 
-  root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((checkbox) => {
-    checkbox.disabled = true
+  root.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
+    if (input.type !== 'checkbox' || !input.classList.contains('task-list-item-checkbox')) {
+      input.remove()
+      return
+    }
+    const checked = input.checked || input.hasAttribute('checked')
+    Array.from(input.attributes).forEach((attribute) => input.removeAttribute(attribute.name))
+    input.className = 'task-list-item-checkbox'
+    input.type = 'checkbox'
+    input.disabled = true
+    input.checked = checked
+    if (checked) input.setAttribute('checked', '')
   })
   root.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((anchor) => {
     anchor.addEventListener('click', (event) => {
+      // The preview is a privileged WebView surface. No rendered Markdown
+      // link may use the browser's default navigation; dispatch only the
+      // explicit internal and external schemes below.
+      event.preventDefault()
       const href = anchor.getAttribute('href') || ''
-      if (href === '#inkmark-render-test') {
-        event.preventDefault()
+      if (href === '#inkmark-render-test' && builtInDocument.value === 'welcome') {
         void showRenderingTest()
         return
       }
-      if (href === '#inkmark-welcome') {
-        event.preventDefault()
+      if (href === '#inkmark-welcome' && builtInDocument.value === 'render-test') {
         void showWelcome()
         return
       }
       if (href.startsWith('#')) {
-        if (scrollToPreviewAnchor(anchor, href)) event.preventDefault()
+        scrollToPreviewAnchor(anchor, href)
         return
       }
       if (/^(https?:|mailto:)/i.test(href)) {
-        event.preventDefault()
         void OpenExternal(href)
       }
     })
@@ -3449,8 +3546,81 @@ function decoratePreview(root: HTMLElement) {
       anchor.rel = 'noopener noreferrer'
     }
   })
-  root.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6').forEach((heading, index) => {
-    heading.id = `heading-${index + 1}`
+  const headings = Array.from(root.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6'))
+  const headingIDs = new Set<string>()
+  headings.forEach((heading, index) => {
+    // The Markdown extension pass assigns deterministic, de-duplicated IDs
+    // shared with its generated TOC. Keep those IDs intact; this is only a
+    // defensive fallback for headings produced by raw/sanitised HTML.
+    const prefix = heading.id || `inkmark-heading-fallback-${index + 1}`
+    let candidate = prefix
+    let suffix = 2
+    while (headingIDs.has(candidate)) candidate = `${prefix}-${suffix++}`
+    heading.id = candidate
+    headingIDs.add(candidate)
+  })
+
+  // A raw HTML element must not steal the target generated for a heading and
+  // its TOC entry. Headings take precedence; duplicate remaining IDs keep only
+  // their first occurrence so every fragment has one deterministic target.
+  const assignedIDs = new Set(headingIDs)
+  root.querySelectorAll<HTMLElement>('[id]:not(h1):not(h2):not(h3):not(h4):not(h5):not(h6)').forEach((element) => {
+    if (!element.id) return
+    if (assignedIDs.has(element.id)) {
+      element.removeAttribute('id')
+      return
+    }
+    assignedIDs.add(element.id)
+  })
+}
+
+function enforceGeneratedPreviewProvenance(root: HTMLElement, trustedMarker: string) {
+  const trusted = (element: Element) => element.getAttribute('data-inkmark-trusted') === trustedMarker
+
+  root.querySelectorAll<HTMLElement>('.math-source').forEach((element) => {
+    if (trusted(element)) return
+    element.classList.remove('math-source')
+    delete element.dataset.displayMode
+  })
+  root.querySelectorAll<HTMLElement>('pre.mermaid').forEach((element) => {
+    if (trusted(element)) return
+    element.classList.remove('mermaid')
+    delete element.dataset.kind
+  })
+  root.querySelectorAll<HTMLElement>('[data-extended-diagram]').forEach((element) => {
+    if (trusted(element)) return
+    element.classList.remove('extended-diagram')
+    delete element.dataset.extendedDiagram
+    delete element.dataset.extendedDiagramState
+    delete element.dataset.kind
+  })
+  root.querySelectorAll<HTMLElement>('.inkmark-image-placeholder').forEach((element) => {
+    if (trusted(element)) return
+    element.classList.remove('inkmark-image-placeholder')
+    delete element.dataset.inkmarkImageSource
+    delete element.dataset.inkmarkImageAlt
+    delete element.dataset.inkmarkImageTitle
+  })
+  root.querySelectorAll<HTMLElement>('[data-source-line]').forEach((element) => {
+    if (!trusted(element)) element.removeAttribute('data-source-line')
+  })
+
+  // Dialect-generated headings, TOCs, citations and reference entries use the
+  // same unguessable marker. Their IDs take precedence over raw HTML IDs so a
+  // document cannot redirect an internal TOC/citation fragment to a forged
+  // earlier element.
+  const protectedIDs = new Map<string, HTMLElement>()
+  root.querySelectorAll<HTMLElement>('[data-inkmark-trusted][id]').forEach((element) => {
+    if (trusted(element) && element.id && !protectedIDs.has(element.id)) protectedIDs.set(element.id, element)
+  })
+  // De-duplicate in one DOM pass. Re-scanning every ID for every generated
+  // heading makes a large all-heading document quadratic.
+  root.querySelectorAll<HTMLElement>('[id]').forEach((candidate) => {
+    const protectedElement = protectedIDs.get(candidate.id)
+    if (protectedElement && candidate !== protectedElement) candidate.removeAttribute('id')
+  })
+  root.querySelectorAll<HTMLElement>('[data-inkmark-trusted]').forEach((element) => {
+    element.removeAttribute('data-inkmark-trusted')
   })
 }
 
@@ -4023,6 +4193,7 @@ watch([fileName, dirty], () => { void SetWindowTitle(fileName.value, dirty.value
 
 onMounted(async () => {
   document.documentElement.dataset.colorScheme = theme.value === 'dark' ? 'dark' : 'light'
+  applyFontPreferences(document.documentElement, fontPreferences.value, locale.value)
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
   window.addEventListener('languagechange', handleSystemLanguageChange)
@@ -4040,6 +4211,7 @@ onMounted(async () => {
   if (preview.value) layoutResizeObserver.observe(preview.value)
   void loadApplicationInfo()
   try {
+    await waitForSelectedFonts(document.fonts, fontPreferences.value)
     const persisted = await GetLanguageSettings()
     const locallyStoredMode = localStorage.getItem(languageModeStorageKey)
     const initialMode = normalizeLanguageMode(locallyStoredMode ?? persisted?.mode)
@@ -4318,6 +4490,7 @@ onBeforeUnmount(() => {
         ref="appDialog"
         class="app-dialog"
         :class="{
+          'settings-dialog': activeDialog === 'settings',
           'webdav-dialog': activeDialog === 'webdav',
           'has-webdav-delete-confirmation': activeDialog === 'webdav' && Boolean(webDAVDeleteCandidate),
           'image-dialog': activeDialog === 'image',
@@ -4350,6 +4523,56 @@ onBeforeUnmount(() => {
               </p>
             </div>
           </div>
+          <section class="font-settings" aria-labelledby="font-settings-title">
+            <header>
+              <h3 id="font-settings-title">{{ t('settings.fonts') }}</h3>
+              <p>{{ t('settings.fontsDescription') }}</p>
+            </header>
+            <div class="settings-row">
+              <label for="ui-font-select">{{ t('settings.interfaceFont') }}</label>
+              <select
+                id="ui-font-select"
+                :value="fontPreferences.ui"
+                @change="handleFontPreferenceChange('ui', $event)"
+              >
+                <option v-for="option in fontOptions('ui')" :key="option.id" :value="option.id">
+                  {{ fontPresetLabel(option.id) }}
+                </option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <label for="content-font-select">{{ t('settings.contentFont') }}</label>
+              <select
+                id="content-font-select"
+                :value="fontPreferences.content"
+                @change="handleFontPreferenceChange('content', $event)"
+              >
+                <option v-for="option in fontOptions('content')" :key="option.id" :value="option.id">
+                  {{ fontPresetLabel(option.id) }}
+                </option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <label for="code-font-select">{{ t('settings.codeFont') }}</label>
+              <select
+                id="code-font-select"
+                :value="fontPreferences.code"
+                @change="handleFontPreferenceChange('code', $event)"
+              >
+                <option v-for="option in fontOptions('code')" :key="option.id" :value="option.id">
+                  {{ fontPresetLabel(option.id) }}
+                </option>
+              </select>
+            </div>
+            <div class="font-settings-preview" :aria-label="t('settings.fontPreview')">
+              <strong>{{ t('settings.fontPreviewUI') }}</strong>
+              <span>{{ t('settings.fontPreviewContent') }}</span>
+              <code>{{ t('settings.fontPreviewCode') }}</code>
+            </div>
+            <button type="button" class="button secondary font-reset-button" @click="restoreDefaultFonts">
+              {{ t('settings.fontReset') }}
+            </button>
+          </section>
         </template>
         <template v-else-if="activeDialog === 'webdav'">
           <header class="webdav-dialog-header" :inert="Boolean(webDAVDeleteCandidate)">

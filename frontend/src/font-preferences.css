@@ -1,0 +1,27 @@
+@font-face {
+  font-family: "InkMark Fusion Pixel 12 SC";
+  src: url("./assets/fonts/fusion-pixel-12px-monospaced-zh_hans.otf.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "InkMark Fusion Pixel 12 TC";
+  src: url("./assets/fonts/fusion-pixel-12px-monospaced-zh_hant.otf.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --inkmark-ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --inkmark-content-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --inkmark-code-font: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", "PingFang SC", "Microsoft YaHei", monospace;
+}
+
+.app-shell,
+.markdown-body,
+.source-editor {
+  font-synthesis: weight style;
+}

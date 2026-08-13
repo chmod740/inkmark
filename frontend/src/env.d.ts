@@ -26,3 +26,33 @@ declare module 'markdown-it-footnote' {
   const footnote: (markdown: MarkdownIt) => void
   export default footnote
 }
+
+declare module 'markdown-it-abbr' {
+  import type MarkdownIt from 'markdown-it'
+  const abbreviation: (markdown: MarkdownIt) => void
+  export default abbreviation
+}
+
+declare module 'markdown-it-deflist' {
+  import type MarkdownIt from 'markdown-it'
+  const definitionList: (markdown: MarkdownIt) => void
+  export default definitionList
+}
+
+declare module 'markdown-it-mark' {
+  import type MarkdownIt from 'markdown-it'
+  const mark: (markdown: MarkdownIt) => void
+  export default mark
+}
+
+declare module 'markdown-it-sub' {
+  import type MarkdownIt from 'markdown-it'
+  const subscript: (markdown: MarkdownIt) => void
+  export default subscript
+}
+
+declare module 'markdown-it-sup' {
+  import type MarkdownIt from 'markdown-it'
+  const superscript: (markdown: MarkdownIt) => void
+  export default superscript
+}
