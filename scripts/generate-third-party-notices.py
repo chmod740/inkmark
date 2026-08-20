@@ -14,7 +14,13 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 NOTICE_PATH = ROOT / "THIRD_PARTY_NOTICES.txt"
-MANIFESTS = (ROOT / "go.mod", ROOT / "go.sum", ROOT / "frontend/package.json", ROOT / "frontend/pnpm-lock.yaml")
+MANIFESTS = (
+    ROOT / "go.mod",
+    ROOT / "go.sum",
+    ROOT / "frontend/package.json",
+    ROOT / "frontend/pnpm-lock.yaml",
+    ROOT / "frontend/pnpm-workspace.yaml",
+)
 GO_TARGETS = (("macOS", "darwin", "arm64"), ("Windows", "windows", "amd64"))
 GO_TAGS = "desktop production wv2runtime.download"
 LICENSE_NAME = re.compile(r"^(?:licen[cs]e|copying|notice|third.?party)", re.IGNORECASE)

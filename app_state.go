@@ -210,7 +210,7 @@ func (a *App) UpdateMenuState(locale string, viewMode string, theme string, sync
 		viewMode = "split"
 	}
 	switch theme {
-	case "github", "clean", "wechat", "dark":
+	case "github", "clean", "wechat", "dark", "mist", "paper", "autumn", "pine", "sakura", "ocean", "indigo", "nord", "obsidian":
 	default:
 		theme = "github"
 	}

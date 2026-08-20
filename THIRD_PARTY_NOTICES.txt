@@ -10,8 +10,9 @@ third-party licenses reproduced below.
 This file is generated from the release dependency manifests. Exact inputs:
 - go.mod SHA-256 de0abf071f9551c8e7d30f7e6bc69c9e5b167a729d2b6c4d7a99b2db83008401
 - go.sum SHA-256 a1962f50dee0646a0c3f7190c88e1e45ae0ddc62bdad9d1b880aaa35831542cc
-- frontend/package.json SHA-256 2887ca1acd4fd0d9fb16ea1e847a020da9700b220463605246cd3f71561f0f33
-- frontend/pnpm-lock.yaml SHA-256 3494e49b23bc45284603b90ba77db8291f999546bc5551d9c21795f9e4e69987
+- frontend/package.json SHA-256 f650c9d6291e9da2e25a1e22ec35fc7737a704fabefec3ec2543f13c2e77121b
+- frontend/pnpm-lock.yaml SHA-256 729a9e684a865267fa4e57a7fccf31d4b14cf591da4d01af463f193ac7a7006d
+- frontend/pnpm-workspace.yaml SHA-256 2cc0e60c3156124b7baf344f4748862c8e11d037e8ba5d1ad31f20ef33104d52
 
 GO COMPONENTS EMBEDDED IN RELEASE BINARIES
 ------------------------------------------
@@ -197,7 +198,7 @@ entries not named above are transitive production dependencies.
 - marked@16.4.2 (MIT; https://marked.js.org)
 - mdurl@2.1.0 (MIT; https://github.com/markdown-it/mdurl#readme)
 - mermaid@11.16.1 (MIT; https://github.com/mermaid-js/mermaid#readme)
-- nanoid@3.3.17 (MIT; https://github.com/ai/nanoid#readme)
+- nanoid@3.3.18 (MIT; https://github.com/ai/nanoid#readme)
 - package-manager-detector@1.8.0 (MIT; https://github.com/antfu-collective/package-manager-detector#readme)
 - pako@2.2.0 ((MIT AND Zlib); https://github.com/nodeca/pako#readme)
 - path-data-parser@0.1.0 (MIT; https://github.com/pshihn/path-data-parser#readme)
@@ -4786,7 +4787,7 @@ SOFTWARE.
 
 License text 106 — SHA-256 da4db1480d9beea3483a2eda5c53b22238d0827d57da162b48f122e04d2d9987
 Applies to:
-- nanoid@3.3.17 (LICENSE)
+- nanoid@3.3.18 (LICENSE)
 
 The MIT License (MIT)
 

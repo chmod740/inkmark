@@ -1160,6 +1160,14 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 var(--inkmark-code-font); o
   --theme-title: #69412e; --theme-accent: #9b5c3d; --theme-accent-2: #6d8b5b; --theme-on-accent: #ffffff;
   --theme-selection: #ead4c3; --theme-mark-ink: #44341e;
 }
+.theme-autumn {
+  --theme-header-top: #f7f4ec; --theme-header-bottom: #ece8de; --theme-header-ink: #26221d; --theme-toolbar: #f3f0e8;
+  --theme-sidebar: #eeebe3; --theme-editor: #f7f4ec; --theme-preview: #efebe2;
+  --theme-paper: #fbf8ef; --theme-ink: #26221d; --theme-muted: #746b61; --theme-border: #d7d0c5;
+  --theme-code: #ece8df; --theme-code-text: #342f29; --theme-note: #f2ece2; --theme-note-ink: #5f5047;
+  --theme-title: #1d1b18; --theme-accent: #7f2f3b; --theme-accent-2: #aa4a1c; --theme-on-accent: #fffaf2;
+  --theme-selection: #ead3c8; --theme-mark-ink: #4b2b18;
+}
 .theme-pine {
   --theme-header-top: #244d40; --theme-header-bottom: #1f4237; --theme-toolbar: #e5ebe6;
   --theme-sidebar: #e3ebe5; --theme-editor: #f2f6f3; --theme-preview: #e3eae5;
@@ -1327,6 +1335,151 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 var(--inkmark-code-font); o
 :is(.theme-mist, .theme-paper, .theme-pine, .theme-sakura, .theme-ocean, .theme-indigo, .theme-nord, .theme-obsidian) .markdown-body pre.extended-diagram::before { color: var(--theme-muted); border-color: var(--theme-border); background: var(--theme-paper); }
 :is(.theme-mist, .theme-paper, .theme-pine, .theme-sakura, .theme-ocean, .theme-indigo, .theme-nord, .theme-obsidian) .markdown-body pre.extended-diagram-rendered { color: var(--theme-ink); background: var(--theme-paper); }
 body.export-document:is(.theme-mist, .theme-paper, .theme-pine, .theme-sakura, .theme-ocean, .theme-indigo, .theme-nord, .theme-obsidian) { background: var(--theme-preview); }
+
+/* Autumn Paper: warm dotted stationery, quiet macOS-like chrome, and wine-red accents.
+   Prose and code keep the user's selected font preferences; only headings use a
+   cross-platform Kai-style display stack with safe system fallbacks. */
+.app-shell.theme-autumn {
+  --paper: var(--theme-paper);
+  --paper-soft: var(--theme-note);
+  --editor-paper: var(--theme-editor);
+  --ink: var(--theme-ink);
+  --muted: var(--theme-muted);
+  --border: var(--theme-border);
+  color: var(--theme-ink);
+  background: var(--theme-preview);
+}
+.app-shell.theme-autumn .document-header {
+  color: var(--theme-header-ink);
+  border-bottom-color: var(--theme-border);
+  background: linear-gradient(90deg, rgba(255,255,255,.72), transparent 42%), linear-gradient(var(--theme-header-top), var(--theme-header-bottom));
+}
+.app-shell.theme-autumn .document-identity { border-left-color: color-mix(in srgb, var(--theme-border) 82%, transparent); }
+.app-shell.theme-autumn .brand span,
+.app-shell.theme-autumn .document-identity p,
+.app-shell.theme-autumn .offline-badge,
+.app-shell.theme-autumn .connection-badge { color: var(--theme-muted); }
+.app-shell.theme-autumn .document-state { color: var(--theme-muted); border-color: var(--theme-border); }
+.app-shell.theme-autumn .settings-button { color: var(--theme-accent); border-color: var(--theme-border); background: color-mix(in srgb, var(--theme-paper) 72%, transparent); }
+.app-shell.theme-autumn .settings-button:hover { background: var(--theme-paper); }
+.app-shell.theme-autumn .command-bar,
+.app-shell.theme-autumn .workspace-sidebar-header,
+.app-shell.theme-autumn .panel-caption {
+  color: var(--theme-ink);
+  border-color: var(--theme-border);
+  background: linear-gradient(color-mix(in srgb, var(--theme-toolbar) 84%, white), var(--theme-toolbar));
+  box-shadow: inset 0 1px rgba(255,255,255,.72);
+}
+.app-shell.theme-autumn .panel-caption small,
+.app-shell.theme-autumn .sync-option,
+.app-shell.theme-autumn .theme-picker > span { color: var(--theme-muted); }
+.app-shell.theme-autumn .format-toolbar { border-color: var(--theme-border); }
+.app-shell.theme-autumn .format-toolbar button:hover,
+.app-shell.theme-autumn .copy-button:hover { border-color: var(--theme-border); background: var(--theme-paper); }
+.app-shell.theme-autumn .segmented,
+.app-shell.theme-autumn .theme-picker { border-color: var(--theme-border); background: color-mix(in srgb, var(--theme-toolbar) 78%, var(--theme-border)); }
+.app-shell.theme-autumn .segmented button.active,
+.app-shell.theme-autumn .theme-picker select,
+.app-shell.theme-autumn .swap-panes-button.active { color: var(--theme-on-accent); border-color: var(--theme-accent); background: linear-gradient(color-mix(in srgb, var(--theme-accent) 84%, white), var(--theme-accent)); }
+.app-shell.theme-autumn .copy-button,
+.app-shell.theme-autumn .swap-panes-button { color: var(--theme-ink); border-color: var(--theme-border); background: var(--theme-toolbar); }
+.app-shell.theme-autumn .workspace-layout,
+.app-shell.theme-autumn .editor-layout { background: var(--theme-border); }
+.app-shell.theme-autumn .workspace-sidebar { color: var(--theme-ink); border-color: var(--theme-border); background: var(--theme-sidebar); }
+.app-shell.theme-autumn .workspace-root-path { color: var(--theme-muted); border-color: var(--theme-border); }
+.app-shell.theme-autumn .workspace-tree-row:not(:disabled):hover { background: color-mix(in srgb, var(--theme-accent) 11%, transparent); }
+.app-shell.theme-autumn .workspace-tree-row.is-active { color: var(--theme-on-accent); border-color: var(--theme-accent); background: var(--theme-accent); }
+.app-shell.theme-autumn .source-panel,
+.app-shell.theme-autumn .preview-panel { border-color: var(--theme-border); background: var(--theme-paper); }
+.app-shell.theme-autumn .source-editor,
+.app-shell.theme-autumn .source-editor-stack { color: var(--theme-ink); background: var(--theme-editor); }
+.app-shell.theme-autumn .source-editor { caret-color: var(--theme-accent); }
+.app-shell.theme-autumn .source-line-numbers { color: var(--theme-muted); border-color: var(--theme-border); background: color-mix(in srgb, var(--theme-editor) 88%, var(--theme-border)); }
+.app-shell.theme-autumn .source-sticky-headings,
+.app-shell.theme-autumn .source-sticky-heading,
+.app-shell.theme-autumn .source-sticky-line-number { border-color: var(--theme-border); }
+.app-shell.theme-autumn .source-sticky-heading { color: var(--theme-title); background: color-mix(in srgb, var(--theme-editor) 92%, var(--theme-border)); }
+.app-shell.theme-autumn .source-sticky-heading:hover { background: var(--theme-paper); }
+.app-shell.theme-autumn .source-sticky-line-number { color: var(--theme-muted); }
+.app-shell.theme-autumn .source-editor::selection { color: var(--theme-ink); background: var(--theme-selection); }
+.app-shell.theme-autumn .preview-viewport { background: var(--theme-preview); }
+.app-shell.theme-autumn .status-bar { color: var(--theme-header-ink); border-color: var(--theme-border); background: linear-gradient(var(--theme-header-top), var(--theme-header-bottom)); }
+.theme-autumn .markdown-body {
+  max-width: 920px;
+  min-height: calc(100% - 32px);
+  margin: 16px auto;
+  padding: 48px 54px 110px;
+  color: var(--theme-ink);
+  background-color: var(--theme-paper);
+  background-image: radial-gradient(circle, rgba(76, 61, 49, .075) .65px, transparent .8px);
+  background-size: 4px 4px;
+  box-shadow: 0 4px 18px rgba(67, 48, 35, .11);
+  line-height: 1.84;
+}
+.theme-autumn .markdown-body h1,
+.theme-autumn .markdown-body h2,
+.theme-autumn .markdown-body h3,
+.theme-autumn .markdown-body h4,
+.theme-autumn .markdown-body h5 { color: var(--theme-title); }
+.theme-autumn .markdown-body h1 {
+  margin-top: 0;
+  padding-bottom: .42em;
+  border-bottom: 2px solid var(--theme-accent);
+  font-family: "Kaiti SC", STKaiti, KaiTi, "楷体", var(--inkmark-content-font);
+  font-size: 2.55em;
+  font-weight: 700;
+  letter-spacing: .055em;
+}
+.theme-autumn .markdown-body h2 {
+  padding-left: 0;
+  border: 0;
+  font-family: "Kaiti SC", STKaiti, KaiTi, "楷体", var(--inkmark-content-font);
+  font-size: 1.55em;
+  font-weight: 700;
+  letter-spacing: .025em;
+}
+.theme-autumn .markdown-body h6,
+.theme-autumn .markdown-body .footnotes,
+.theme-autumn .markdown-body dl:not(.inkmark-front-matter-list) dd { color: var(--theme-muted); }
+.theme-autumn .markdown-body a { color: var(--theme-accent); text-decoration-color: color-mix(in srgb, var(--theme-accent) 45%, transparent); text-underline-offset: .18em; }
+.theme-autumn .markdown-body hr,
+.theme-autumn .markdown-body .footnotes-sep { background: var(--theme-border); }
+.theme-autumn .markdown-body blockquote {
+  padding: 2px 0 2px 18px;
+  color: var(--theme-muted);
+  border-left: 3px solid var(--theme-accent);
+  font-style: italic;
+}
+.theme-autumn .markdown-body dl:not(.inkmark-front-matter-list) { border-left-color: var(--theme-accent); }
+.theme-autumn .markdown-body code { color: var(--theme-accent-2); background: color-mix(in srgb, var(--theme-code) 76%, transparent); }
+.theme-autumn .markdown-body pre,
+.theme-autumn .markdown-body .hljs { color: var(--theme-code-text); border-color: var(--theme-border); border-radius: 10px; background: var(--theme-code); }
+.theme-autumn .markdown-body pre code { color: inherit; background: transparent; }
+.theme-autumn .markdown-body mark { color: var(--theme-mark-ink); background: #ead7a4; }
+.theme-autumn .markdown-body .inkmark-toc,
+.theme-autumn .markdown-body .inkmark-front-matter,
+.theme-autumn .markdown-body th,
+.theme-autumn .markdown-body tr:nth-child(2n),
+.theme-autumn .markdown-alert { color: var(--theme-note-ink) !important; background: var(--theme-note); }
+.theme-autumn .markdown-body .inkmark-toc,
+.theme-autumn .markdown-body .inkmark-front-matter,
+.theme-autumn .markdown-body .inkmark-references,
+.theme-autumn .markdown-body .inkmark-front-matter > dl,
+.theme-autumn .markdown-body .inkmark-front-matter > dl dt,
+.theme-autumn .markdown-body .inkmark-front-matter > dl dd,
+.theme-autumn .markdown-body th,
+.theme-autumn .markdown-body td,
+.theme-autumn .markdown-body details { border-color: var(--theme-border); }
+.theme-autumn .markdown-body .inkmark-toc > h2,
+.theme-autumn .markdown-body .inkmark-front-matter > h2,
+.theme-autumn .markdown-body .inkmark-references > h2,
+.theme-autumn .markdown-body .inkmark-front-matter > dl dd { color: var(--theme-note-ink); }
+.theme-autumn .markdown-mention { color: var(--theme-accent); border-color: var(--theme-border); background: var(--theme-note); }
+.theme-autumn .markdown-body pre.mermaid,
+.theme-autumn .markdown-body pre.extended-diagram { color: var(--theme-ink); border-color: var(--theme-border); background: var(--theme-note); }
+.theme-autumn .markdown-body pre.extended-diagram::before { color: var(--theme-muted); border-color: var(--theme-border); background: var(--theme-paper); }
+.theme-autumn .markdown-body pre.extended-diagram-rendered { color: var(--theme-ink); background: var(--theme-paper); }
+body.export-document.theme-autumn { background: var(--theme-preview); }
 
 .theme-paper .markdown-body h1 { color: var(--theme-title); letter-spacing: .04em; }
 .theme-sakura .markdown-body h2 { border-left-width: 3px; }

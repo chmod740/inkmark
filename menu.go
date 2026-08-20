@@ -63,6 +63,7 @@ var nativeMenuText = map[string]localizedMenuText{
 	"theme-dark":         {zh: "深色", en: "Dark"},
 	"theme-mist":         {zh: "晨雾", en: "Mist"},
 	"theme-paper":        {zh: "米纸", en: "Rice Paper"},
+	"theme-autumn":       {zh: "秋日纸笺", en: "Autumn Paper"},
 	"theme-pine":         {zh: "松墨", en: "Pine Ink"},
 	"theme-sakura":       {zh: "樱灰", en: "Sakura Gray"},
 	"theme-ocean":        {zh: "海盐", en: "Ocean Salt"},
@@ -207,6 +208,7 @@ func (a *App) applicationMenuFor(platform string, locales ...string) *menu.Menu 
 	styleMenu.AddRadio(label("theme-dark"), state.Theme == "dark", nil, a.menuAction("theme-dark"))
 	styleMenu.AddRadio(label("theme-mist"), state.Theme == "mist", nil, a.menuAction("theme-mist"))
 	styleMenu.AddRadio(label("theme-paper"), state.Theme == "paper", nil, a.menuAction("theme-paper"))
+	styleMenu.AddRadio(label("theme-autumn"), state.Theme == "autumn", nil, a.menuAction("theme-autumn"))
 	styleMenu.AddRadio(label("theme-pine"), state.Theme == "pine", nil, a.menuAction("theme-pine"))
 	styleMenu.AddRadio(label("theme-sakura"), state.Theme == "sakura", nil, a.menuAction("theme-sakura"))
 	styleMenu.AddRadio(label("theme-ocean"), state.Theme == "ocean", nil, a.menuAction("theme-ocean"))

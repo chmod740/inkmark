@@ -5,6 +5,7 @@ export const themeIds = [
   'dark',
   'mist',
   'paper',
+  'autumn',
   'pine',
   'sakura',
   'ocean',
@@ -22,6 +23,7 @@ export type ThemeTranslationKey =
   | 'theme.dark'
   | 'theme.mist'
   | 'theme.paper'
+  | 'theme.autumn'
   | 'theme.pine'
   | 'theme.sakura'
   | 'theme.ocean'
@@ -71,6 +73,10 @@ export const themeDefinitions: readonly ThemeDefinition[] = [
   {
     id: 'paper', labelKey: 'theme.paper', dark: false,
     palette: { background: '#fffdf8', surface: '#f8eee3', ink: '#3b3028', muted: '#86786c', accent: '#9b5c3d', secondary: '#6d8b5b', border: '#d3c8bb', code: '#352f2b' },
+  },
+  {
+    id: 'autumn', labelKey: 'theme.autumn', dark: false,
+    palette: { background: '#fbf8ef', surface: '#f2ece2', ink: '#26221d', muted: '#746b61', accent: '#7f2f3b', secondary: '#aa4a1c', border: '#d7d0c5', code: '#ece8df' },
   },
   {
     id: 'pine', labelKey: 'theme.pine', dark: false,

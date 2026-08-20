@@ -5,7 +5,7 @@ import test from 'node:test'
 
 const root = new URL('../', import.meta.url)
 const noticeURL = new URL('../THIRD_PARTY_NOTICES.txt', import.meta.url)
-const manifestNames = ['go.mod', 'go.sum', 'frontend/package.json', 'frontend/pnpm-lock.yaml']
+const manifestNames = ['go.mod', 'go.sum', 'frontend/package.json', 'frontend/pnpm-lock.yaml', 'frontend/pnpm-workspace.yaml']
 const pinnedLicenseFiles = {
   'scripts/licenses/viz-js-3.29.0-MIT.txt': 'f1fb91bf7cbcb42b2af56949e4fa909e1979d5b57c2826cabacdb4b631457720',
   'scripts/licenses/Graphviz-15.1.1-EPL-2.0.txt': '8c349f80764d0648e645f41ef23772a70c995a0924b5235f735f4a3d09df127c',

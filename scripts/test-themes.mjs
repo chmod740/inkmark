@@ -13,11 +13,11 @@ import {
 } from '../frontend/src/themes.ts'
 import { buildStandaloneHTML, externalExportStyles } from '../frontend/src/export-document.ts'
 
-const expectedNewThemes = ['mist', 'paper', 'pine', 'sakura', 'ocean', 'indigo', 'nord', 'obsidian']
+const expectedNewThemes = ['mist', 'paper', 'autumn', 'pine', 'sakura', 'ocean', 'indigo', 'nord', 'obsidian']
 
-test('theme registry contains the four existing and eight new unique themes', () => {
-  assert.equal(themeIds.length, 12)
-  assert.equal(new Set(themeIds).size, 12)
+test('theme registry contains the four original and nine complete palette themes', () => {
+  assert.equal(themeIds.length, 13)
+  assert.equal(new Set(themeIds).size, 13)
   assert.deepEqual(themeIds.slice(4), expectedNewThemes)
   assert.deepEqual(themeDefinitions.map((theme) => theme.id), [...themeIds])
   for (const definition of themeDefinitions) {
@@ -28,6 +28,7 @@ test('theme registry contains the four existing and eight new unique themes', ()
 
 test('persisted theme values are allow-listed and dark themes are explicit', () => {
   assert.equal(normalizeTheme('paper'), 'paper')
+  assert.equal(normalizeTheme('autumn'), 'autumn')
   assert.equal(normalizeTheme('obsidian'), 'obsidian')
   assert.equal(normalizeTheme('theme-dark; color:red'), 'github')
   assert.equal(normalizeTheme(null), 'github')
@@ -50,7 +51,7 @@ test('export backgrounds and chart palettes are available for every theme', () =
   }
 })
 
-test('all eight palettes are wired into the app, menu, translations, and CSS', async () => {
+test('all complete palettes are wired into the app, menu, translations, and CSS', async () => {
   const [app, styles, menu, chineseAndEnglish] = await Promise.all([
     readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8'),
     readFile(new URL('../frontend/src/styles.css', import.meta.url), 'utf8'),
@@ -68,6 +69,21 @@ test('all eight palettes are wired into the app, menu, translations, and CSS', a
     assert.match(menu, new RegExp(`theme-${theme}`))
     assert.match(chineseAndEnglish, new RegExp(`'theme\\.${theme}'`, 'g'))
   }
+})
+
+test('autumn paper exposes the audited warm paper treatment without changing font preferences', async () => {
+  const [styles, fontPreferences] = await Promise.all([
+    readFile(new URL('../frontend/src/styles.css', import.meta.url), 'utf8'),
+    readFile(new URL('../frontend/src/font-preferences.ts', import.meta.url), 'utf8'),
+  ])
+  assert.match(styles, /\.theme-autumn\s*\{[\s\S]*--theme-paper:\s*#fbf8ef;[\s\S]*--theme-accent:\s*#7f2f3b;/)
+  assert.match(styles, /\.theme-autumn \.markdown-body\s*\{[\s\S]*radial-gradient\([\s\S]*4px 4px/s)
+  const headingBlock = styles.match(/\.theme-autumn \.markdown-body h1\s*\{([\s\S]*?)\n\}/)?.[1] || ''
+  assert.match(headingBlock, /Kaiti SC/)
+  assert.match(headingBlock, /border-bottom:\s*2px solid var\(--theme-accent\)/)
+  assert.match(styles, /\.theme-autumn \.markdown-body blockquote\s*\{[\s\S]*border-left:\s*3px solid var\(--theme-accent\)/s)
+  assert.match(styles, /\.theme-autumn \.markdown-body pre[\s\S]*border-radius:\s*10px/s)
+  assert.doesNotMatch(fontPreferences, /theme-autumn|autumn/i)
 })
 
 test('candidate themes style application chrome and rendered Markdown surfaces', async () => {

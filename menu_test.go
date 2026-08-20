@@ -98,18 +98,54 @@ func TestMenuSelectionDefaults(t *testing.T) {
 		t.Errorf("preview-first should be unchecked by default: %#v", previewItem)
 	}
 	styleMenu := findMenuItem(t, viewMenu, "Preview Style").SubMenu
-	if styleMenu == nil || len(styleMenu.Items) != 12 {
+	if styleMenu == nil || len(styleMenu.Items) != 13 {
 		t.Fatalf("preview style submenu is incomplete")
 	}
-	for index, checked := range []bool{true, false, false, false, false, false, false, false, false, false, false, false} {
+	for index, checked := range []bool{true, false, false, false, false, false, false, false, false, false, false, false, false} {
 		item := styleMenu.Items[index]
 		if item.Type != menu.RadioType || item.Checked != checked {
 			t.Errorf("preview style item %d: expected radio checked=%t, got type=%v checked=%t", index, checked, item.Type, item.Checked)
 		}
 	}
-	for _, label := range []string{"Mist", "Rice Paper", "Pine Ink", "Sakura Gray", "Ocean Salt", "Midnight Indigo", "Polar Night", "Obsidian"} {
+	for _, label := range []string{"Mist", "Rice Paper", "Autumn Paper", "Pine Ink", "Sakura Gray", "Ocean Salt", "Midnight Indigo", "Polar Night", "Obsidian"} {
 		if item := findMenuItem(t, styleMenu, label); item.Type != menu.RadioType || item.Click == nil {
 			t.Errorf("new preview theme %q must be a clickable radio item: %#v", label, item)
+		}
+	}
+}
+
+func TestUpdateMenuStateAcceptsEveryRegisteredThemeAndRejectsUnknownValues(t *testing.T) {
+	for _, theme := range []string{"github", "clean", "wechat", "dark", "mist", "paper", "autumn", "pine", "sakura", "ocean", "indigo", "nord", "obsidian"} {
+		app := NewApp()
+		app.UpdateMenuState("en", "split", theme, true, false)
+		if got := app.currentMenuState().Theme; got != theme {
+			t.Errorf("UpdateMenuState rejected registered theme %q: got %q", theme, got)
+		}
+	}
+
+	app := NewApp()
+	app.UpdateMenuState("en", "split", "autumn; background:red", true, false)
+	if got := app.currentMenuState().Theme; got != "github" {
+		t.Fatalf("unknown theme must fail closed to github, got %q", got)
+	}
+}
+
+func TestAutumnPaperNativeMenuIsLocalizedAndChecked(t *testing.T) {
+	for _, test := range []struct {
+		locale string
+		view   string
+		style  string
+		label  string
+	}{
+		{locale: "zh-CN", view: "视图", style: "预览样式", label: "秋日纸笺"},
+		{locale: "en", view: "View", style: "Preview Style", label: "Autumn Paper"},
+	} {
+		app := &App{menuState: MenuState{ViewMode: "split", Theme: "autumn", SyncScroll: true}}
+		viewMenu := findTopLevelMenu(t, app.applicationMenuFor("windows", test.locale), test.view)
+		styleMenu := findMenuItem(t, viewMenu, test.style).SubMenu
+		item := findMenuItem(t, styleMenu, test.label)
+		if item.Type != menu.RadioType || !item.Checked || item.Click == nil {
+			t.Errorf("localized Autumn Paper theme must be the checked clickable radio item: %#v", item)
 		}
 	}
 }
@@ -195,12 +231,12 @@ func TestWindowsEditMenuUsesDisplayOnlyShortcutsAndCallbacksRemainAvailable(t *t
 			locale:    "zh-CN",
 			menuLabel: "编辑",
 			want: map[string]editMenuExpectation{
-				"撤销": {label: "撤销\tCtrl+Z"},
-				"重做": {label: "重做\tCtrl+Y"},
-				"剪切": {label: "剪切\tCtrl+X"},
-				"复制": {label: "复制\tCtrl+C"},
-				"粘贴": {label: "粘贴\tCtrl+V"},
-				"全选": {label: "全选\tCtrl+A"},
+				"撤销":  {label: "撤销\tCtrl+Z"},
+				"重做":  {label: "重做\tCtrl+Y"},
+				"剪切":  {label: "剪切\tCtrl+X"},
+				"复制":  {label: "复制\tCtrl+C"},
+				"粘贴":  {label: "粘贴\tCtrl+V"},
+				"全选":  {label: "全选\tCtrl+A"},
 				"查找…": {label: "查找…\tCtrl+F"},
 			},
 		},
