@@ -76,7 +76,7 @@ export const themeDefinitions: readonly ThemeDefinition[] = [
   },
   {
     id: 'autumn', labelKey: 'theme.autumn', dark: false,
-    palette: { background: '#fbf8ef', surface: '#f2ece2', ink: '#26221d', muted: '#746b61', accent: '#7f2f3b', secondary: '#aa4a1c', border: '#d7d0c5', code: '#ece8df' },
+    palette: { background: '#f7f5f1', surface: '#f0ece6', ink: '#37332d', muted: '#746b61', accent: '#64272d', secondary: '#9b461f', border: '#d8d2c9', code: '#ece9e3' },
   },
   {
     id: 'pine', labelKey: 'theme.pine', dark: false,

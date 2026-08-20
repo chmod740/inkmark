@@ -1162,11 +1162,12 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 var(--inkmark-code-font); o
 }
 .theme-autumn {
   --theme-header-top: #f7f4ec; --theme-header-bottom: #ece8de; --theme-header-ink: #26221d; --theme-toolbar: #f3f0e8;
-  --theme-sidebar: #eeebe3; --theme-editor: #f7f4ec; --theme-preview: #efebe2;
-  --theme-paper: #fbf8ef; --theme-ink: #26221d; --theme-muted: #746b61; --theme-border: #d7d0c5;
-  --theme-code: #ece8df; --theme-code-text: #342f29; --theme-note: #f2ece2; --theme-note-ink: #5f5047;
-  --theme-title: #1d1b18; --theme-accent: #7f2f3b; --theme-accent-2: #aa4a1c; --theme-on-accent: #fffaf2;
+  --theme-sidebar: #f0ede7; --theme-editor: #f7f5f1; --theme-preview: #efede8;
+  --theme-paper: #f7f5f1; --theme-ink: #37332d; --theme-muted: #746b61; --theme-border: #d8d2c9;
+  --theme-code: #ece9e3; --theme-code-text: #312d28; --theme-note: #f0ece6; --theme-note-ink: #5f5047;
+  --theme-title: #1f1d19; --theme-accent: #64272d; --theme-accent-2: #9b461f; --theme-on-accent: #fffaf2;
   --theme-selection: #ead3c8; --theme-mark-ink: #4b2b18;
+  --theme-reading-font: "LXGW WenKai Screen", "LXGW WenKai", "Kaiti SC", STKaiti, KaiTi, "楷体", var(--inkmark-content-font), serif;
 }
 .theme-pine {
   --theme-header-top: #244d40; --theme-header-bottom: #1f4237; --theme-toolbar: #e5ebe6;
@@ -1405,39 +1406,58 @@ body.export-document:is(.theme-mist, .theme-paper, .theme-pine, .theme-sakura, .
 .app-shell.theme-autumn .preview-viewport { background: var(--theme-preview); }
 .app-shell.theme-autumn .status-bar { color: var(--theme-header-ink); border-color: var(--theme-border); background: linear-gradient(var(--theme-header-top), var(--theme-header-bottom)); }
 .theme-autumn .markdown-body {
-  max-width: 920px;
+  max-width: 832px;
   min-height: calc(100% - 32px);
   margin: 16px auto;
-  padding: 48px 54px 110px;
+  padding: 40px clamp(28px, 7.7%, 64px) 110px;
   color: var(--theme-ink);
   background-color: var(--theme-paper);
-  background-image: radial-gradient(circle, rgba(76, 61, 49, .075) .65px, transparent .8px);
+  background-image: radial-gradient(circle, rgba(70, 62, 53, .08) .6px, transparent .8px);
   background-size: 4px 4px;
-  box-shadow: 0 4px 18px rgba(67, 48, 35, .11);
-  line-height: 1.84;
+  box-shadow: 0 2px 12px rgba(67, 48, 35, .08);
+  font-family: var(--theme-reading-font);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.75;
+  letter-spacing: .018em;
 }
 .theme-autumn .markdown-body h1,
 .theme-autumn .markdown-body h2,
 .theme-autumn .markdown-body h3,
 .theme-autumn .markdown-body h4,
-.theme-autumn .markdown-body h5 { color: var(--theme-title); }
+.theme-autumn .markdown-body h5 {
+  color: var(--theme-title);
+  font-family: var(--theme-reading-font);
+}
 .theme-autumn .markdown-body h1 {
-  margin-top: 0;
-  padding-bottom: .42em;
-  border-bottom: 2px solid var(--theme-accent);
-  font-family: "Kaiti SC", STKaiti, KaiTi, "楷体", var(--inkmark-content-font);
-  font-size: 2.55em;
+  margin: 0 0 28px;
+  padding: 0;
+  border: 0;
+  font-size: 22px;
   font-weight: 700;
-  letter-spacing: .055em;
+  line-height: 32px;
+  letter-spacing: .04em;
 }
 .theme-autumn .markdown-body h2 {
-  padding-left: 0;
+  margin-top: 36px;
+  margin-bottom: 22px;
+  padding: 0;
   border: 0;
-  font-family: "Kaiti SC", STKaiti, KaiTi, "楷体", var(--inkmark-content-font);
-  font-size: 1.55em;
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: .025em;
+  line-height: 30px;
+  letter-spacing: .035em;
 }
+.theme-autumn .markdown-body h3 { margin-top: 30px; margin-bottom: 16px; font-size: 18px; line-height: 28px; letter-spacing: .025em; }
+.theme-autumn .markdown-body p,
+.theme-autumn .markdown-body blockquote,
+.theme-autumn .markdown-body ul,
+.theme-autumn .markdown-body ol { margin-bottom: 28px; }
+.theme-autumn .markdown-body ul,
+.theme-autumn .markdown-body ol { padding-left: 28px; }
+.theme-autumn .markdown-body li { line-height: 28px; }
+.theme-autumn .markdown-body li + li { margin-top: 0; }
+.theme-autumn .markdown-body li::marker { color: var(--theme-accent); }
 .theme-autumn .markdown-body h6,
 .theme-autumn .markdown-body .footnotes,
 .theme-autumn .markdown-body dl:not(.inkmark-front-matter-list) dd { color: var(--theme-muted); }

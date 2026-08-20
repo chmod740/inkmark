@@ -71,16 +71,24 @@ test('all complete palettes are wired into the app, menu, translations, and CSS'
   }
 })
 
-test('autumn paper exposes the audited warm paper treatment without changing font preferences', async () => {
+test('autumn paper exposes the audited reading typography without changing font preferences', async () => {
   const [styles, fontPreferences] = await Promise.all([
     readFile(new URL('../frontend/src/styles.css', import.meta.url), 'utf8'),
     readFile(new URL('../frontend/src/font-preferences.ts', import.meta.url), 'utf8'),
   ])
-  assert.match(styles, /\.theme-autumn\s*\{[\s\S]*--theme-paper:\s*#fbf8ef;[\s\S]*--theme-accent:\s*#7f2f3b;/)
-  assert.match(styles, /\.theme-autumn \.markdown-body\s*\{[\s\S]*radial-gradient\([\s\S]*4px 4px/s)
+  assert.match(styles, /\.theme-autumn\s*\{[\s\S]*--theme-paper:\s*#f7f5f1;[\s\S]*--theme-accent:\s*#64272d;[\s\S]*--theme-reading-font:[^;]*LXGW WenKai Screen[^;]*Kaiti SC[^;]*var\(--inkmark-content-font\)/)
+  const bodyBlock = styles.match(/\.theme-autumn \.markdown-body\s*\{([\s\S]*?)\n\}/)?.[1] || ''
+  assert.match(bodyBlock, /max-width:\s*832px/)
+  assert.match(bodyBlock, /padding:\s*40px clamp\(28px, 7\.7%, 64px\) 110px/)
+  assert.match(bodyBlock, /radial-gradient\([\s\S]*background-size:\s*4px 4px/s)
+  assert.match(bodyBlock, /font-family:\s*var\(--theme-reading-font\)/)
+  assert.match(bodyBlock, /font-size:\s*16px/)
+  assert.match(bodyBlock, /line-height:\s*1\.75/)
   const headingBlock = styles.match(/\.theme-autumn \.markdown-body h1\s*\{([\s\S]*?)\n\}/)?.[1] || ''
-  assert.match(headingBlock, /Kaiti SC/)
-  assert.match(headingBlock, /border-bottom:\s*2px solid var\(--theme-accent\)/)
+  assert.match(headingBlock, /font-size:\s*22px/)
+  assert.match(headingBlock, /line-height:\s*32px/)
+  assert.match(headingBlock, /border:\s*0/)
+  assert.match(styles, /\.theme-autumn \.markdown-body li::marker\s*\{\s*color:\s*var\(--theme-accent\)/)
   assert.match(styles, /\.theme-autumn \.markdown-body blockquote\s*\{[\s\S]*border-left:\s*3px solid var\(--theme-accent\)/s)
   assert.match(styles, /\.theme-autumn \.markdown-body pre[\s\S]*border-radius:\s*10px/s)
   assert.doesNotMatch(fontPreferences, /theme-autumn|autumn/i)
