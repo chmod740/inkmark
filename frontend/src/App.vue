@@ -263,13 +263,7 @@ type WebDAVConnectionOperation = 'idle' | 'connecting-saved' | 'saving' | 'delet
 type AboutView = 'overview' | 'third-party'
 type WorkspaceDialogView = 'create-markdown' | 'create-directory' | 'rename' | 'delete' | 'image'
 type WorkspaceMutationOperation = 'rename' | 'delete'
-type WindowControlStyle = 'system' | 'traffic-lights'
-
-const windowControlStyleStorageKey = 'inkmark-window-control-style'
-
-function normalizeWindowControlStyle(value: string | null): WindowControlStyle {
-	return value === 'traffic-lights' ? 'traffic-lights' : 'system'
-}
+type WindowsTopMenu = 'file' | 'edit' | 'view' | 'help'
 
 const inferredRuntimePlatform = /Windows/iu.test(navigator.userAgent)
 	? 'windows'
@@ -433,7 +427,7 @@ const viewMode = ref<ViewMode>(readPreference<ViewMode>('inkmark-view', 'split')
 const previewFirst = ref(normalizePreviewFirst(localStorage.getItem(previewFirstStorageKey)))
 const fontPreferences = ref<FontPreferences>(readFontPreferences(localStorage))
 const editorPreferences = ref<EditorPreferences>(readEditorPreferences(localStorage))
-const windowControlStyle = ref<WindowControlStyle>(normalizeWindowControlStyle(localStorage.getItem(windowControlStyleStorageKey)))
+const windowsTopMenu = ref<WindowsTopMenu | null>(null)
 const languageMode = ref<LanguageMode>('auto')
 const locale = ref<Locale>('en')
 const renderState = computed({ get: () => activeTab.value.renderState, set: (value: string) => { activeTab.value.renderState = value } })
@@ -3843,12 +3837,6 @@ function handleEditorPreferenceChange(key: 'lineNumbers' | 'stickyHeadings', eve
   })
 }
 
-function handleWindowControlStyleChange(event: Event) {
-	const nextStyle = normalizeWindowControlStyle((event.target as HTMLSelectElement).value)
-	windowControlStyle.value = nextStyle
-	localStorage.setItem(windowControlStyleStorageKey, nextStyle)
-}
-
 function resetFindPosition() {
   findCurrentStart.value = -1
   findCurrentEnd.value = -1
@@ -4029,6 +4017,33 @@ function handleMenuAction(action: string) {
   else if (['undo', 'redo', 'cut', 'copy', 'paste', 'select-all'].includes(action)) void runEditAction(action)
   else if (action === 'copy-html') void copyHTML()
   else if (action === 'quit') requestApplicationQuit()
+}
+
+function toggleWindowsTopMenu(menu: WindowsTopMenu) {
+  windowsTopMenu.value = windowsTopMenu.value === menu ? null : menu
+}
+
+function closeWindowsTopMenu() {
+  windowsTopMenu.value = null
+}
+
+function runWindowsTopMenuAction(action: string) {
+  closeWindowsTopMenu()
+  handleMenuAction(action)
+}
+
+function dismissWindowsTopMenuFromPointer(event: PointerEvent) {
+  if (!windowsTopMenu.value) return
+  const target = event.target
+  if (target instanceof Element && target.closest('.windows-top-menu')) return
+  closeWindowsTopMenu()
+}
+
+function handleWindowsTopMenuKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeWindowsTopMenu()
+  }
 }
 
 function scheduleRender() {
@@ -4986,6 +5001,15 @@ function onKeydown(event: KeyboardEvent) {
     return
   }
   if (trapActiveDialogFocus(event)) return
+  if (runtimePlatform.value === 'windows' && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+    const windowsMenuByKey: Partial<Record<string, WindowsTopMenu>> = { f: 'file', e: 'edit', v: 'view', h: 'help' }
+    const menu = windowsMenuByKey[event.key.toLowerCase()]
+    if (menu) {
+      event.preventDefault()
+      toggleWindowsTopMenu(menu)
+      return
+    }
+  }
   if (busy.value) return
   if (!(event.metaKey || event.ctrlKey)) return
   const key = event.key.toLowerCase()
@@ -5165,6 +5189,7 @@ onMounted(async () => {
   window.addEventListener('blur', dismissTabContextMenuFromViewport)
   window.addEventListener('resize', dismissTabContextMenuFromViewport)
   document.addEventListener('pointerdown', dismissTabContextMenuFromPointer, true)
+	 document.addEventListener('pointerdown', dismissWindowsTopMenuFromPointer, true)
   document.addEventListener('scroll', dismissTabContextMenuFromViewport, true)
   document.addEventListener('focusin', rememberFocusedElement, true)
 	// Register at the document capture phase.  WKWebView may otherwise let a
@@ -5229,6 +5254,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('blur', dismissTabContextMenuFromViewport)
   window.removeEventListener('resize', dismissTabContextMenuFromViewport)
   document.removeEventListener('pointerdown', dismissTabContextMenuFromPointer, true)
+	 document.removeEventListener('pointerdown', dismissWindowsTopMenuFromPointer, true)
   document.removeEventListener('scroll', dismissTabContextMenuFromViewport, true)
   document.removeEventListener('focusin', rememberFocusedElement, true)
 	document.removeEventListener('wheel', handleDocumentTabsWheel, { capture: true })
@@ -5280,6 +5306,80 @@ onBeforeUnmount(() => {
 	</aside>
 
 	<section class="app-workbench">
+		<div
+			v-if="runtimePlatform === 'windows'"
+			class="windows-app-menubar"
+			@keydown="handleWindowsTopMenuKeydown"
+		>
+			<nav
+				class="windows-top-menu"
+				:aria-label="t('toolbar.ariaLabel')"
+			>
+				<div class="windows-top-menu-group">
+					<button type="button" class="windows-top-menu-trigger" :aria-expanded="windowsTopMenu === 'file'" aria-haspopup="menu" @click="toggleWindowsTopMenu('file')">{{ t('menu.file') }}</button>
+					<div v-if="windowsTopMenu === 'file'" class="windows-top-menu-popover" role="menu" :aria-label="t('menu.file')">
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('new')">{{ t('menu.new') }}<kbd>Ctrl+N</kbd></button>
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('open')">{{ t('menu.open') }}<kbd>Ctrl+O</kbd></button>
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('open-folder')">{{ t('menu.openFolder') }}<kbd>Ctrl+Shift+O</kbd></button>
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('connect-webdav')">{{ t('menu.connectWebDAV') }}</button>
+						<span class="windows-top-menu-separator" aria-hidden="true"></span>
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('save')">{{ t('menu.save') }}<kbd>Ctrl+S</kbd></button>
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('save-as')">{{ t('menu.saveAs') }}<kbd>Ctrl+Shift+S</kbd></button>
+						<span class="windows-top-menu-separator" aria-hidden="true"></span>
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('export-pdf')">{{ t('menu.exportPDF') }}</button>
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('export-html')">{{ t('menu.exportHTML') }}</button>
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('export-png')">{{ t('menu.exportPNG') }}</button>
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('settings')">{{ t('menu.settings') }}</button>
+						<span class="windows-top-menu-separator" aria-hidden="true"></span>
+						<button type="button" role="menuitem" class="windows-top-menu-exit" @click="runWindowsTopMenuAction('quit')">{{ t('menu.quit') }}<kbd>Alt+F4</kbd></button>
+					</div>
+				</div>
+				<div class="windows-top-menu-group">
+					<button type="button" class="windows-top-menu-trigger" :aria-expanded="windowsTopMenu === 'edit'" aria-haspopup="menu" @click="toggleWindowsTopMenu('edit')">{{ t('menu.edit') }}</button>
+					<div v-if="windowsTopMenu === 'edit'" class="windows-top-menu-popover" role="menu" :aria-label="t('menu.edit')">
+						<button type="button" role="menuitem" @click="runWindowsTopMenuAction('undo')">{{ t('menu.undo') }}<kbd>Ctrl+Z</kbd></button>
+						<button type="button" role="menuitem" @click="runWindowsTopMenuAction('redo')">{{ t('menu.redo') }}<kbd>Ctrl+Y</kbd></button>
+						<span class="windows-top-menu-separator" aria-hidden="true"></span>
+						<button type="button" role="menuitem" @click="runWindowsTopMenuAction('cut')">{{ t('menu.cut') }}<kbd>Ctrl+X</kbd></button>
+						<button type="button" role="menuitem" @click="runWindowsTopMenuAction('copy')">{{ t('menu.copy') }}<kbd>Ctrl+C</kbd></button>
+						<button type="button" role="menuitem" @click="runWindowsTopMenuAction('paste')">{{ t('menu.paste') }}<kbd>Ctrl+V</kbd></button>
+						<button type="button" role="menuitem" @click="runWindowsTopMenuAction('find')">{{ t('menu.find') }}<kbd>Ctrl+F</kbd></button>
+					</div>
+				</div>
+				<div class="windows-top-menu-group">
+					<button type="button" class="windows-top-menu-trigger" :aria-expanded="windowsTopMenu === 'view'" aria-haspopup="menu" @click="toggleWindowsTopMenu('view')">{{ t('menu.view') }}</button>
+					<div v-if="windowsTopMenu === 'view'" class="windows-top-menu-popover" role="menu" :aria-label="t('menu.view')">
+						<button type="button" role="menuitemradio" :aria-checked="viewMode === 'edit'" :class="{ selected: viewMode === 'edit' }" :disabled="busy" @click="runWindowsTopMenuAction('view-edit')">{{ t('menu.editOnly') }}</button>
+						<button type="button" role="menuitemradio" :aria-checked="viewMode === 'split'" :class="{ selected: viewMode === 'split' }" :disabled="busy" @click="runWindowsTopMenuAction('view-split')">{{ t('menu.splitView') }}</button>
+						<button type="button" role="menuitemradio" :aria-checked="viewMode === 'preview'" :class="{ selected: viewMode === 'preview' }" :disabled="busy" @click="runWindowsTopMenuAction('view-preview')">{{ t('menu.previewOnly') }}</button>
+						<span class="windows-top-menu-separator" aria-hidden="true"></span>
+						<button type="button" role="menuitemcheckbox" :aria-checked="syncScroll" :class="{ selected: syncScroll }" :disabled="busy" @click="runWindowsTopMenuAction('toggle-sync-scroll')">{{ t('menu.syncScroll') }}</button>
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('toggle-fullscreen')">{{ t('menu.toggleFullscreen') }}<kbd>F11</kbd></button>
+					</div>
+				</div>
+				<div class="windows-top-menu-group">
+					<button type="button" class="windows-top-menu-trigger" :aria-expanded="windowsTopMenu === 'help'" aria-haspopup="menu" @click="toggleWindowsTopMenu('help')">{{ t('menu.help') }}</button>
+					<div v-if="windowsTopMenu === 'help'" class="windows-top-menu-popover" role="menu" :aria-label="t('menu.help')">
+						<button type="button" role="menuitem" @click="runWindowsTopMenuAction('show-welcome')">{{ t('menu.showWelcome') }}</button>
+						<button type="button" role="menuitem" @click="runWindowsTopMenuAction('show-shortcuts')">{{ t('menu.keyboardShortcuts') }}</button>
+						<button type="button" role="menuitem" @click="runWindowsTopMenuAction('check-update')">{{ t('menu.checkUpdate') }}</button>
+						<span class="windows-top-menu-separator" aria-hidden="true"></span>
+						<button type="button" role="menuitem" @click="runWindowsTopMenuAction('about')">{{ t('menu.about') }}</button>
+					</div>
+				</div>
+			</nav>
+			<div class="windows-window-controls" :aria-label="t('window.controls')">
+				<button type="button" class="windows-window-control minimise" :aria-label="t('window.minimise')" :title="t('window.minimise')" @click="WindowMinimise">
+					<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 7.5h8" /></svg>
+				</button>
+				<button type="button" class="windows-window-control maximise" :aria-label="t('window.maximise')" :title="t('window.maximise')" @click="WindowToggleMaximise">
+					<svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7" /></svg>
+				</button>
+				<button type="button" class="windows-window-control close" :aria-label="t('window.close')" :title="t('window.close')" @click="requestApplicationQuit">
+					<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7m0-7-7 7" /></svg>
+				</button>
+			</div>
+		</div>
 		<header class="document-topbar">
 			<div ref="documentTabsElement" class="document-tabs" role="tablist" :aria-label="t('tabs.ariaLabel')">
 				<div
@@ -5343,21 +5443,6 @@ onBeforeUnmount(() => {
 					</select>
 				</div>
 			</nav>
-			<div
-				v-if="runtimePlatform === 'windows'"
-				:class="['window-controls', `window-controls-${windowControlStyle}`]"
-				:aria-label="t('window.controls')"
-			>
-				<button type="button" class="window-control minimise" :aria-label="t('window.minimise')" :title="t('window.minimise')" @click="WindowMinimise">
-					<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 7.5h8" /></svg>
-				</button>
-				<button type="button" class="window-control maximise" :aria-label="t('window.maximise')" :title="t('window.maximise')" @click="WindowToggleMaximise">
-					<svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7" /></svg>
-				</button>
-				<button type="button" class="window-control close" :aria-label="t('window.close')" :title="t('window.close')" @click="requestApplicationQuit">
-					<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7m0-7-7 7" /></svg>
-				</button>
-			</div>
 		</header>
 
 		<Teleport to="body">
@@ -5630,23 +5715,6 @@ onBeforeUnmount(() => {
               </p>
             </div>
           </div>
-          <section v-if="runtimePlatform === 'windows'" class="window-control-settings" aria-labelledby="window-control-settings-title">
-            <header>
-              <h3 id="window-control-settings-title">{{ t('settings.windowControls') }}</h3>
-              <p>{{ t('settings.windowControlsDescription') }}</p>
-            </header>
-            <div class="settings-row">
-              <label for="window-control-style-select">{{ t('settings.windowControls') }}</label>
-              <select
-                id="window-control-style-select"
-                :value="windowControlStyle"
-                @change="handleWindowControlStyleChange"
-              >
-                <option value="system">{{ t('settings.windowControlsSystem') }}</option>
-                <option value="traffic-lights">{{ t('settings.windowControlsTrafficLights') }}</option>
-              </select>
-            </div>
-          </section>
           <section class="editor-settings" aria-labelledby="editor-settings-title">
             <header>
               <h3 id="editor-settings-title">{{ t('settings.editor') }}</h3>

@@ -57,54 +57,103 @@ select option { color: #212826; background-color: #fff; }
 }
 .platform-darwin .sidebar-brand { padding-left: 76px; }
 .sidebar-brand .brand-mark { width: 34px; height: 34px; border-radius: 7px; box-shadow: 0 1px 3px rgba(39, 34, 29, .18); }
-.window-controls {
+.windows-app-menubar {
+	position: relative;
 	display: flex;
-	height: 50px;
+	height: 34px;
+	min-height: 34px;
+	align-items: stretch;
+	color: var(--ink);
+	border-bottom: 1px solid var(--border);
+	background: var(--paper);
+	--wails-draggable: drag;
+	user-select: none;
+}
+.windows-top-menu {
+	position: relative;
+	display: flex;
+	height: 34px;
 	flex: 0 0 auto;
-	gap: 8px;
-	align-items: center;
-	padding: 0 14px 0 12px;
+	align-items: stretch;
+	padding-left: 3px;
 	--wails-draggable: no-drag;
 }
-.window-control {
+.windows-top-menu-group { position: relative; display: flex; }
+.windows-top-menu-trigger {
+	min-width: 44px;
+	height: 34px;
+	padding: 0 10px;
+	color: inherit;
+	border: 0;
+	background: transparent;
+	cursor: default;
+	font-size: 12px;
+}
+.windows-top-menu-trigger:hover,
+.windows-top-menu-trigger[aria-expanded="true"] { background: color-mix(in srgb, currentColor 10%, transparent); }
+.windows-top-menu-trigger:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
+.windows-top-menu-popover {
+	position: absolute;
+	top: 31px;
+	left: 3px;
+	z-index: 1600;
 	display: grid;
-	width: 14px;
-	height: 14px;
+	min-width: 208px;
+	padding: 5px;
+	color: var(--ink);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--paper);
+	box-shadow: 0 12px 28px rgba(21, 31, 28, .22), 0 2px 7px rgba(21, 31, 28, .14);
+	--wails-draggable: no-drag;
+}
+.windows-top-menu-popover button {
+	display: flex;
+	min-height: 30px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 26px;
+	padding: 5px 9px;
+	color: inherit;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	cursor: default;
+	font-size: 12px;
+	text-align: left;
+	white-space: nowrap;
+}
+.windows-top-menu-popover button:hover,
+.windows-top-menu-popover button:focus-visible,
+.windows-top-menu-popover button.selected { outline: none; background: color-mix(in srgb, var(--theme-accent, #28787c) 16%, transparent); }
+.windows-top-menu-popover button:disabled { color: var(--muted); background: transparent; }
+.windows-top-menu-popover .windows-top-menu-exit:hover,
+.windows-top-menu-popover .windows-top-menu-exit:focus-visible { color: #fff; background: #c42b1c; }
+.windows-top-menu-popover kbd { margin: 0; color: var(--muted); font-size: 10px; }
+.windows-top-menu-separator { height: 1px; margin: 4px 5px; background: color-mix(in srgb, var(--border) 84%, transparent); }
+.windows-window-controls {
+	display: flex;
+	height: 34px;
+	flex: 0 0 auto;
+	margin-left: auto;
+	--wails-draggable: no-drag;
+}
+.windows-window-control {
+	display: grid;
+	width: 46px;
+	height: 34px;
 	place-items: center;
 	padding: 0;
-	color: rgba(35, 40, 38, .7);
-	border: 1px solid rgba(0, 0, 0, .12);
-	border-radius: 999px;
-	cursor: default;
-}
-.window-control svg { width: 8px; height: 8px; fill: none; stroke: currentColor; stroke-width: 1.4; opacity: 0; }
-.window-control.minimise { background: #febc2e; }
-.window-control.maximise { background: #28c840; }
-.window-control.close { background: #ff5f57; }
-.window-control:hover { filter: brightness(.94); }
-.window-control:hover svg,
-.window-control:focus-visible svg { opacity: 1; }
-.window-control:focus-visible { outline: 2px solid #28787c; outline-offset: 3px; }
-.window-controls-system {
-	gap: 0;
-	padding: 0;
-}
-.window-controls-system .window-control {
-	width: 46px;
-	height: 50px;
-	color: #3c4542;
+	color: currentColor;
 	border: 0;
 	border-radius: 0;
 	background: transparent;
+	cursor: default;
 }
-.window-controls-system .window-control svg {
-	width: 10px;
-	height: 10px;
-	opacity: .92;
-}
-.window-controls-system .window-control:hover { background: rgba(47, 59, 55, .10); filter: none; }
-.window-controls-system .window-control.close:hover { color: #fff; background: #c42b1c; }
-.window-controls-system .window-control:focus-visible { outline-offset: -3px; }
+.windows-window-control svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.2; }
+.windows-window-control:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
+.windows-window-control.close:hover { color: #fff; background: #c42b1c; }
+.windows-window-control:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
 .sidebar-empty-state {
 	display: flex;
 	min-height: 0;
@@ -149,6 +198,7 @@ select option { color: #212826; background-color: #fff; }
 	min-width: 0;
 	min-height: 0;
 }
+.platform-windows .app-workbench { grid-template-rows: 34px 50px minmax(0, 1fr) 30px; }
 
 .document-topbar {
 	display: flex;
@@ -1045,9 +1095,9 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 var(--inkmark-code-font); o
 .settings-row select { width: 100%; min-height: 38px; padding: 6px 34px 6px 10px; color: var(--ink); border: 1px solid var(--border); border-radius: 5px; background: var(--paper); }
 .settings-row p { margin: 9px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .settings-dialog { width: min(640px, calc(100vw - 48px)); }
-.editor-settings, .font-settings, .window-control-settings { display: grid; gap: 13px; margin-top: 22px; padding-top: 19px; border-top: 1px solid var(--border); }
-.editor-settings > header h3, .font-settings > header h3, .window-control-settings > header h3 { margin: 0; font-size: 15px; }
-.editor-settings > header p, .font-settings > header p, .window-control-settings > header p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.editor-settings, .font-settings { display: grid; gap: 13px; margin-top: 22px; padding-top: 19px; border-top: 1px solid var(--border); }
+.editor-settings > header h3, .font-settings > header h3 { margin: 0; font-size: 15px; }
+.editor-settings > header p, .font-settings > header p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .editor-setting-toggle { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; margin-left: 128px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--paper); }
 .editor-setting-toggle input { margin-top: 3px; accent-color: #15595e; }
 .editor-setting-toggle span, .editor-setting-toggle strong, .editor-setting-toggle small { display: block; }
@@ -1278,6 +1328,10 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 var(--inkmark-code-font); o
 [data-color-scheme="dark"] .app-shell .sidebar-footer .settings-button { color: #d4dfdc; }
 [data-color-scheme="dark"] .app-shell .sidebar-footer .settings-button:hover { color: #eef5f3; background: rgba(255,255,255,.065); }
 [data-color-scheme="dark"] .document-topbar { border-color: #344447; background: #1c2729; box-shadow: none; }
+[data-color-scheme="dark"] .windows-top-menu-popover { color: #e5ece9; border-color: #465254; background: #182022; box-shadow: 0 14px 30px rgba(0, 0, 0, .45); }
+[data-color-scheme="dark"] .windows-top-menu-popover button:hover,
+[data-color-scheme="dark"] .windows-top-menu-popover button:focus-visible,
+[data-color-scheme="dark"] .windows-top-menu-popover button.selected { background: #293f42; }
 [data-color-scheme="dark"] .document-tab { color: #9fadaa; }
 [data-color-scheme="dark"] .document-tab:hover { background: rgba(255,255,255,.05); }
 [data-color-scheme="dark"] .document-tab.active { color: #eef5f3; border-color: #344447; background: #111718; box-shadow: none; }
@@ -1844,6 +1898,7 @@ body.export-document.theme-autumn { background: var(--theme-preview); }
 @media (max-width: 900px) {
 	.app-shell { grid-template-columns: 190px minmax(0, 1fr); }
 	.app-workbench { grid-template-rows: 48px minmax(0, 1fr) 30px; }
+	.platform-windows .app-workbench { grid-template-rows: 34px 48px minmax(0, 1fr) 30px; }
 	.command-bar { max-width: 64%; }
 	.format-toolbar button { min-width: 28px; padding: 0 5px; }
 	.document-tab { min-width: 48px; flex-basis: 126px; }

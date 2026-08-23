@@ -20,6 +20,12 @@ var appIcon []byte
 
 func main() {
 	app := NewApp()
+	nativeMenu := app.applicationMenu()
+	// Windows uses the in-app menu bar so its File/Edit/View/Help actions can
+	// share the frameless, theme-aware title row with the window controls.
+	if goruntime.GOOS == "windows" {
+		nativeMenu = nil
+	}
 	title := appTitle
 	aboutMessage := "版本 " + appVersion + "\n作者 " + appAuthor
 	if app.currentLocale() == "en" {
@@ -33,7 +39,7 @@ func main() {
 		Frameless: goruntime.GOOS == "windows",
 		MinWidth:  940,
 		MinHeight: 640,
-		Menu:      app.applicationMenu(),
+		Menu:      nativeMenu,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
