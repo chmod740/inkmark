@@ -27,12 +27,13 @@ type WebDAVSaveResult struct {
 }
 
 type webDAVCapability struct {
-	mu        sync.RWMutex
-	id        string
-	client    *WebDAVClient
-	documents map[string]webDAVDocumentCapability
-	mutations map[string]preparedWebDAVMutation
-	closed    bool
+	mu                sync.RWMutex
+	id                string
+	savedConnectionID string
+	client            *WebDAVClient
+	documents         map[string]webDAVDocumentCapability
+	mutations         map[string]preparedWebDAVMutation
+	closed            bool
 }
 
 type webDAVDocumentCapability struct {
@@ -123,10 +124,11 @@ func (a *App) connectWebDAV(config WebDAVConfig, savedConnectionID string) (brid
 		return Workspace{}, &WebDAVError{Kind: WebDAVErrorProtocol, Operation: "connect", Err: errors.New("could not create a workspace capability")}
 	}
 	capability := &webDAVCapability{
-		id:        workspaceID,
-		client:    client,
-		documents: make(map[string]webDAVDocumentCapability),
-		mutations: make(map[string]preparedWebDAVMutation),
+		id:                workspaceID,
+		savedConnectionID: strings.TrimSpace(savedConnectionID),
+		client:            client,
+		documents:         make(map[string]webDAVDocumentCapability),
+		mutations:         make(map[string]preparedWebDAVMutation),
 	}
 	directory := webDAVWorkspaceDirectory(root)
 	workspace := Workspace{

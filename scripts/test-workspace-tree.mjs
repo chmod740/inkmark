@@ -188,10 +188,10 @@ test('active workspace files require the same provider, workspace, and relative 
 
 test('app restores local sidebar identity for picker, recent, save, and save-as paths', async () => {
   const app = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
-  assert.match(app, /const inferredLocalWorkspacePath = \([\s\S]*localWorkspaceRelativePath\(workspace\.value\.path, localDocumentPath\.value\)/)
-  assert.match(app, /documentWorkspaceId\.value = document\.workspaceId[\s\S]*inferredLocalWorkspacePath/)
   assert.ok((app.match(/localWorkspaceRelativePath\(activeLocalWorkspace\.path, result\.path\)/g) || []).length >= 2)
   assert.match(app, /bindLocalDocumentToActiveWorkspace\([\s\S]*localWorkspaceRelativePath\(activeWorkspace\.path, document\.path\)/)
+  assert.match(app, /function workspaceStateForDocument\(document:[\s\S]*normalizeWorkspace\(document\.workspace\)/)
+  assert.match(app, /const tab = createDocumentTab\(newTabID\(\), document, workspaceStateForDocument\(document\)/)
   assert.match(app, /:current-workspace-id="documentWorkspaceId"/)
 })
 
@@ -237,12 +237,9 @@ test('workspace-backed local saves stay inside the active root capability', asyn
   assert.match(pickerSave, /localDocumentId\.value = adopted\.localDocumentId/)
   assert.doesNotMatch(pickerSave, /previousWorkspacePath|previousDocumentWorkspaceId/)
 
-  const setDocumentFunction = app.slice(
-    app.indexOf('function setDocument('),
-    app.indexOf('\nfunction setWorkspace('),
-  )
-  assert.match(setDocumentFunction, /localDocumentId\.value = documentStorageKind\.value === 'local'/)
-  assert.match(setDocumentFunction, /CloseWorkspaceDocument\(previousLocalWorkspaceId, previousLocalDocumentId\)/)
+  const tabState = await readFile(new URL('../frontend/src/document-tabs.ts', import.meta.url), 'utf8')
+  assert.match(tabState, /localDocumentId: storageKind === 'local' \? document\.localDocumentId \|\| '' : ''/)
+  assert.match(app, /async function releaseDocumentCapability\([\s\S]*CloseWorkspaceDocument\(tab\.workspaceId, tab\.localDocumentId\)/)
 
   const saveAsFunction = app.slice(
     app.indexOf('async function saveDocumentAs()'),
@@ -331,12 +328,21 @@ test('sidebar rows use fixed icon columns and font-independent disclosure chevro
   assert.match(styles, /\.workspace-disclosure\.is-collapsed::before[\s\S]*?\.workspace-disclosure\.is-expanded::before[\s\S]*?border-right: 1\.5px solid currentColor;[\s\S]*?border-bottom: 1\.5px solid currentColor;/)
   assert.match(styles, /\.workspace-disclosure\.is-collapsed::before \{ transform: rotate\(-45deg\); \}/)
   assert.match(styles, /\.workspace-disclosure\.is-expanded::before \{ transform: rotate\(45deg\); \}/)
+	assert.match(styles, /\.workspace-tree-row\.is-active \{[\s\S]*background: rgba\(100, 39, 45, \.075\);[\s\S]*box-shadow: inset 3px 0 #64272d;[\s\S]*font-weight: 700;/)
+	assert.doesNotMatch(styles, /\.workspace-tree-row\.is-active \{[^}]*linear-gradient/)
+	assert.match(styles, /\.workspace-entry-icon\.markdown::before \{[\s\S]*box-shadow: 0 4px currentColor, 0 8px currentColor;/)
+	assert.match(styles, /\.app-shell\.theme-autumn \.workspace-tree-row\.is-active \{[\s\S]*background-color: rgba\(100, 39, 45, \.075\);[\s\S]*background-image: none;/)
+	assert.match(styles, /\.app-shell\.theme-autumn \.workspace-tree-row\.is-active \{[\s\S]*box-shadow: inset 3px 0 var\(--theme-accent\);/)
+	assert.match(sidebar, /class="workspace-header-actions"[\s\S]*class="workspace-header-button workspace-refresh-button"[\s\S]*<svg viewBox="0 0 20 20"[\s\S]*class="workspace-header-button workspace-close-button"[\s\S]*<svg viewBox="0 0 20 20"/)
+	assert.match(styles, /\.workspace-header-actions \{[^}]*align-items: center;[^}]*gap: 2px;/)
+	assert.match(styles, /\.workspace-header-button \{[\s\S]*width: 26px;[\s\S]*height: 26px;/)
+	assert.match(styles, /\.workspace-header-button svg \{[^}]*width: 16px;[^}]*height: 16px;/)
 })
 
 test('current document identity is rebased on rename and detached before any possibly partial delete', async () => {
   const app = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
-  assert.match(app, /rebaseWorkspacePath\(currentWorkspacePath\.value, sourcePath, destinationPath\)/)
-  assert.match(app, /localDocumentPath\.value = localWorkspaceAbsolutePath\(activeWorkspace\.path, nextPath\)/)
+  assert.match(app, /for \(const tab of tabs\.value\)[\s\S]*rebaseWorkspacePath\(tab\.workspacePath, sourcePath, destinationPath\)/)
+  assert.match(app, /tab\.localPath = localWorkspaceAbsolutePath\(activeWorkspace\.path, nextPath\)/)
   assert.match(app, /RenameWorkspaceEntry\(\s*activeWorkspace\.id,\s*entry\.path,\s*destinationPath,\s*entry\.kind,\s*entry\.revision/s)
   assert.match(app, /DeleteWorkspaceEntry\(activeWorkspace\.id, entry\.path, recursive, entry\.revision\)/)
   assert.match(app, /renameWorkspaceEntry\(activeWorkspace, entry, destinationPath\)/)
@@ -345,39 +351,31 @@ test('current document identity is rebased on rename and detached before any pos
     app.indexOf('async function confirmDeleteWorkspaceEntry()'),
     app.indexOf('async function openRecentItem'),
   )
-  const detachIndex = deleteFunction.indexOf('preserveCurrentDocumentAfterWorkspaceDelete(activeWorkspace, entry.path)')
+  const detachIndex = deleteFunction.indexOf('preserveDocumentsAfterWorkspaceDelete(activeWorkspace, entry.path)')
   const deleteIndex = deleteFunction.indexOf('await deleteWorkspaceEntry(activeWorkspace, entry)')
   assert.ok(detachIndex >= 0 && deleteIndex >= 0 && detachIndex < deleteIndex)
   assert.match(deleteFunction, /workspaceDeleteBufferPreserved\.value = true/)
-  assert.match(app, /savedSource\.value = `\$\{retainedSource\}\\u0000`/)
+  assert.match(app, /tab\.savedSource = `\$\{tab\.source\}\\u0000`/)
 })
 
 test('closing or replacing a local workspace detaches its editor buffer before the root capability closes', async () => {
   const app = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
   const detachFunction = app.slice(
-    app.indexOf('function detachCurrentLocalWorkspaceDocument('),
+    app.indexOf('function detachWorkspaceTabs('),
     app.indexOf('\nfunction setWorkspace('),
   )
-  assert.match(detachFunction, /documentWorkspaceId\.value !== workspaceId/)
-  assert.match(detachFunction, /setDocument\(\{\s*path: '',[\s\S]*content: retainedSource/)
-  assert.match(detachFunction, /savedSource\.value = `\$\{retainedSource\}\\u0000`/)
-
-  const setWorkspaceFunction = app.slice(
-    app.indexOf('function setWorkspace('),
-    app.indexOf('\nfunction closeWorkspace('),
-  )
-  assert.ok(
-    setWorkspaceFunction.indexOf('detachCurrentLocalWorkspaceDocument(previousWorkspace.id)')
-      < setWorkspaceFunction.indexOf('workspace.value = nextWorkspace'),
-    'workspace replacement must detach the buffer before replacing the active root',
-  )
+  assert.match(detachFunction, /for \(const tab of tabs\.value\)/)
+  assert.match(detachFunction, /tab\.workspaceState\?\.workspace\.id === workspaceId/)
+  assert.match(detachFunction, /tab\.savedSource = `\$\{tab\.source\}\\u0000`/)
+  assert.match(detachFunction, /tab\.localDocumentId = ''/)
+  assert.match(detachFunction, /tab\.remoteDocumentId = ''/)
   const closeWorkspaceFunction = app.slice(
-    app.indexOf('function closeWorkspace('),
+    app.indexOf('async function closeWorkspace('),
     app.indexOf('\nasync function readActiveWorkspaceDirectory('),
   )
   assert.ok(
-    closeWorkspaceFunction.indexOf('detachCurrentLocalWorkspaceDocument(activeWorkspace.id)')
-      < closeWorkspaceFunction.indexOf('workspace.value = null'),
+    closeWorkspaceFunction.indexOf('detachWorkspaceTabs(activeWorkspace.id)')
+      < closeWorkspaceFunction.indexOf('CloseWorkspace(activeWorkspace.id)'),
     'workspace close must detach the buffer before closing the active root',
   )
 })

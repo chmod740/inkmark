@@ -1,7 +1,7 @@
 {
   "name": "inkmark-frontend",
   "private": true,
-  "version": "1.2.8",
+  "version": "1.2.9",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
@@ -16,11 +16,13 @@
     "test:fonts": "node --experimental-strip-types --test ../scripts/test-font-preferences.mjs",
     "test:scroll": "node --experimental-strip-types --test ../scripts/test-scroll-sync.mjs",
     "test:preview": "node --experimental-strip-types --test ../scripts/test-preview-render.mjs",
+    "test:render-performance": "node --experimental-strip-types --test ../scripts/test-render-performance.mjs",
     "test:markdown": "node --experimental-strip-types --test ../scripts/test-markdown-extensions.mjs",
     "test:dialects": "node --experimental-strip-types --test ../scripts/test-markdown-dialects.mjs",
     "test:diagrams": "node --experimental-strip-types --test ../scripts/test-extended-diagrams.mjs",
     "test:update": "node --experimental-strip-types --test ../scripts/test-update-workflow.mjs",
     "test:workspace": "node --experimental-strip-types --test ../scripts/test-workspace-tree.mjs",
+    "test:tabs": "node --experimental-strip-types --test ../scripts/test-document-tabs.mjs",
     "test:webdav": "node --experimental-strip-types --test ../scripts/test-webdav-ui.mjs",
     "test:image": "node --experimental-strip-types --test ../scripts/test-image-resources.mjs",
     "test:saved-webdav": "node --experimental-strip-types --test ../scripts/test-saved-webdav-ui.mjs",

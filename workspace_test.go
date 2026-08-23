@@ -111,7 +111,7 @@ func TestWorkspaceRejectsTraversalSymlinksAndNonMarkdownFiles(t *testing.T) {
 	}
 }
 
-func TestWorkspaceCapabilityReplacementAndClose(t *testing.T) {
+func TestWorkspaceCapabilitiesRemainIndependentUntilClosed(t *testing.T) {
 	app := &App{}
 	first, err := app.activateWorkspace(t.TempDir())
 	if err != nil {
@@ -127,12 +127,15 @@ func TestWorkspaceCapabilityReplacementAndClose(t *testing.T) {
 	if first.ID == second.ID {
 		t.Fatal("workspace capabilities must not be reused")
 	}
-	if _, err := firstRoot.Stat("."); err == nil {
-		t.Fatal("replaced workspace root was not closed")
+	if _, err := firstRoot.Stat("."); err != nil {
+		t.Fatalf("opening a second workspace closed the first capability: %v", err)
 	}
 	app.CloseWorkspace(first.ID)
+	if _, err := firstRoot.Stat("."); err == nil {
+		t.Fatal("closing the first workspace did not revoke its root")
+	}
 	if _, err := app.ReadWorkspaceDirectory(second.ID, "."); err != nil {
-		t.Fatalf("a stale close request closed the active workspace: %v", err)
+		t.Fatalf("closing the first workspace affected the second: %v", err)
 	}
 	app.CloseWorkspace(second.ID)
 	if _, err := app.ReadWorkspaceDirectory(second.ID, "."); err == nil {

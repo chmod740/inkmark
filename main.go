@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"fmt"
+	goruntime "runtime"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -29,6 +30,7 @@ func main() {
 		Title:     title,
 		Width:     1440,
 		Height:    920,
+		Frameless: goruntime.GOOS == "windows",
 		MinWidth:  940,
 		MinHeight: 640,
 		Menu:      app.applicationMenu(),
@@ -49,7 +51,7 @@ func main() {
 			app,
 		},
 		Mac: &mac.Options{
-			TitleBar: mac.TitleBarDefault(),
+			TitleBar: mac.TitleBarHiddenInset(),
 			About: &mac.AboutInfo{
 				Title:   title,
 				Message: aboutMessage,

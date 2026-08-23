@@ -28,10 +28,11 @@ test('the native close guard resolves unsaved work before launching the installe
   const closeEnd = source.indexOf('async function showWelcome()', closeStart)
   const closeWorkflow = source.slice(closeStart, closeEnd)
 
-  const guard = closeWorkflow.indexOf("performDocumentTransition('quit'")
+  const guard = closeWorkflow.indexOf('await resolveAllDirtyTabsBeforeQuit()')
   const launch = closeWorkflow.indexOf('await LaunchUpdateInstaller()', guard)
   const confirm = closeWorkflow.indexOf('await ConfirmQuit()', launch)
   assert.ok(guard >= 0 && launch > guard && confirm > launch)
+  assert.match(source, /async function resolveAllDirtyTabsBeforeQuit\(\)[\s\S]*requestUnsavedDecision\('quit'\)/)
   assert.match(closeWorkflow, /if \(!completed\)[\s\S]*CancelQuitRequest\(\)/)
   assert.match(closeWorkflow, /pendingUpdateInstall = false/)
 })

@@ -1,5 +1,5 @@
 export type UnsavedDecision = 'save' | 'discard' | 'cancel'
-export type DocumentTransition = 'new' | 'open' | 'quit'
+export type DocumentTransition = 'new' | 'open' | 'close' | 'quit'
 
 export interface UnsavedGuardOptions {
   dirty: boolean

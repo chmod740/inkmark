@@ -92,12 +92,17 @@ test('Mermaid cache is theme-aware, definition-aware, bounded, and LRU', () => {
   assert.equal(cache.size, 0)
 })
 
-test('App renders into a detached root and atomically swaps only completed content', async () => {
+test('App uses a worker, commits core Markdown first, then enhances expensive resources', async () => {
   const app = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
 
-  assert.match(app, /previewCommit\.stageAndCommit\(sequence, async \(\) => \{[\s\S]*target\.cloneNode\(false\)[\s\S]*staging\.innerHTML = cleanHTML/)
+  assert.match(app, /import PreviewMarkdownWorker from '\.\/preview-worker\?worker'/)
+  assert.match(app, /renderMarkdownInWorker\(sourceText, expectedRevision, trustedMarker, \(chunk\) =>/)
+  assert.match(app, /sanitizePreviewHTML\(renderedHTML\)/)
+  assert.match(app, /function createCorePreviewStaging[\s\S]*target\.cloneNode\(false\)[\s\S]*staging\.innerHTML = sanitizePreviewHTML\(renderedHTML\)/)
   assert.match(app, /decoratePreview\(staging\)[\s\S]*renderMath\(staging\)[\s\S]*highlightCode\(staging\)/)
-  assert.match(app, /await Promise\.all\(\[[\s\S]*renderDiagrams\(staging[\s\S]*preparePreviewImages\(staging/)
+  assert.match(app, /previewCommit\.stageAndCommit\(sequence, \(\) => \{[\s\S]*createCorePreviewStaging\(target, renderedHTML, trustedMarker\)[\s\S]*commitCorePreview\(target, staging/)
+  assert.match(app, /function enhancePreview[\s\S]*await Promise\.all\(\[[\s\S]*renderDiagrams\(root[\s\S]*preparePreviewImages\(root/)
+  assert.match(app, /const enhancement = enhancePreview\(target, sequence/)
   assert.match(app, /diagrams\.slice\(maximumMermaidDiagramsPerPreview\)[\s\S]*diagram count exceeds the limit/)
   assert.match(app, /target\.replaceChildren\([\s\S]*refreshScrollAnchors\(\)[\s\S]*reconcileActiveScroll\(\)/)
   assert.doesNotMatch(app, /target\.innerHTML\s*=\s*cleanHTML/)

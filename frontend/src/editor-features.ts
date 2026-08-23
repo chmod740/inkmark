@@ -23,6 +23,13 @@ export interface SourceHeadingModel {
   readonly available: boolean
 }
 
+export interface SourceDerivedData {
+  readonly revision: number
+  readonly lineNumbers: LineNumberModel
+  readonly headings: SourceHeadingModel
+  readonly characterCount: number
+}
+
 export const editorPreferencesStorageKey = 'inkmark-editor-preferences-v1'
 export const maximumRenderedLineNumbers = 100_000
 export const maximumStickySourceHeadings = 10_000
@@ -152,6 +159,24 @@ export function parseSourceHeadings(
     if (headings.length > limit) return { headings: [], available: false }
   }
   return { headings, available: true }
+}
+
+/**
+ * This deliberately lives in a worker-friendly module.  Parsing a long source
+ * only once lets the editor gutter, sticky headings and status bar reuse the
+ * same result instead of each scanning the document independently.
+ */
+export function deriveSourceData(source: string, revision: number): SourceDerivedData {
+  let characterCount = 0
+  // for..of counts Unicode code points without allocating an Array as
+  // Array.from(source).length does for multi-megabyte documents.
+  for (const _character of source) characterCount += 1
+  return {
+    revision,
+    lineNumbers: createLineNumberModel(source),
+    headings: parseSourceHeadings(source),
+    characterCount,
+  }
 }
 
 export function stickyHeadingTrail(headings: readonly SourceHeading[], line: number): readonly SourceHeading[] {

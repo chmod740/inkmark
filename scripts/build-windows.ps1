@@ -68,6 +68,7 @@ Assert-LastExitCode "Run text search tests"
 pnpm --dir frontend test:fonts
 Assert-LastExitCode "Run font preference tests"
 pnpm --dir frontend test:workspace
+pnpm --dir frontend test:tabs
 Assert-LastExitCode "Run workspace tree tests"
 pnpm --dir frontend test:webdav
 Assert-LastExitCode "Run WebDAV UI tests"

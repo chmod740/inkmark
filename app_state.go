@@ -19,6 +19,49 @@ type settingsState struct {
 	LanguageState
 	RecentItems            []RecentItem                 `json:"recentItems,omitempty"`
 	SavedWebDAVConnections []savedWebDAVConnectionState `json:"webdavConnections,omitempty"`
+	LastPage               LastPageState                `json:"lastPage,omitempty"`
+}
+
+type LastPageState struct {
+	Version           int    `json:"version,omitempty"`
+	Kind              string `json:"kind,omitempty"`
+	Path              string `json:"path,omitempty"`
+	BuiltIn           string `json:"builtIn,omitempty"`
+	SavedConnectionID string `json:"savedConnectionId,omitempty"`
+	WorkspacePath     string `json:"workspacePath,omitempty"`
+}
+
+func normalizeLastPageState(value LastPageState) LastPageState {
+	if value.Version != 1 {
+		return LastPageState{}
+	}
+	switch value.Kind {
+	case "builtin":
+		if value.BuiltIn != "welcome" && value.BuiltIn != "render-test" {
+			return LastPageState{}
+		}
+		return LastPageState{Version: 1, Kind: "builtin", BuiltIn: value.BuiltIn}
+	case "local":
+		path := strings.TrimSpace(value.Path)
+		if path == "" || len(path) > 4096 || !filepath.IsAbs(path) || !isMarkdownFilename(path) {
+			return LastPageState{}
+		}
+		return LastPageState{Version: 1, Kind: "local", Path: filepath.Clean(path)}
+	case "webdav":
+		connectionID := strings.TrimSpace(value.SavedConnectionID)
+		workspacePath, err := normalizeWorkspaceExistingPath(value.WorkspacePath)
+		if err != nil || connectionID == "" || len(connectionID) > 256 || !isMarkdownFilename(workspacePath) {
+			return LastPageState{}
+		}
+		return LastPageState{
+			Version:           1,
+			Kind:              "webdav",
+			SavedConnectionID: connectionID,
+			WorkspacePath:     workspacePath,
+		}
+	default:
+		return LastPageState{}
+	}
 }
 
 func currentPlatform() string {
@@ -78,6 +121,7 @@ func loadSettingsState(path string) settingsState {
 	}
 	saved.RecentItems = normalizeLoadedRecentItems(saved.RecentItems)
 	saved.SavedWebDAVConnections = normalizeLoadedSavedWebDAVConnections(saved.SavedWebDAVConnections)
+	saved.LastPage = normalizeLastPageState(saved.LastPage)
 	return saved
 }
 
@@ -162,6 +206,7 @@ func (a *App) settingsSnapshotLocked() (settingsState, string) {
 		LanguageState:          a.language,
 		RecentItems:            append([]RecentItem(nil), a.recentItems...),
 		SavedWebDAVConnections: append([]savedWebDAVConnectionState(nil), a.savedWebDAVConnections...),
+		LastPage:               a.lastPage,
 	}, a.settingsPath
 }
 
@@ -302,7 +347,7 @@ func (a *App) queueOrOpenDocument(path string) {
 	if ctx == nil {
 		return
 	}
-	document, err := readDocument(absolute)
+	document, err := a.openLocalDocumentWithWorkspace(absolute, false)
 	if err != nil {
 		runtime.EventsEmit(ctx, openErrorEvent, err.Error())
 		return

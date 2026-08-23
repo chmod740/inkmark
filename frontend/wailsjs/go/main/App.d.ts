@@ -96,6 +96,8 @@ export function ReadWorkspaceDirectory(arg1:string,arg2:string):Promise<main.Wor
 
 export function ReadWorkspaceImage(arg1:string,arg2:string):Promise<main.ImageAssetData>;
 
+export function RememberLastPage(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
 export function RenameWorkspaceEntry(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.WorkspaceEntry>;
 
 export function RenderingTestDocument():Promise<main.Document>;

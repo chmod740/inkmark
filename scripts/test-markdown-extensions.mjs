@@ -200,7 +200,7 @@ test('App integrates extensions without turning mentions or visual fences into a
   assert.match(app, /href\.startsWith\('#'\)[\s\S]*scrollToPreviewAnchor/)
   assert.match(app, /destination\.scrollIntoView\(\{ block: 'start' \}\)/)
   assert.match(app, /OpenExternal\(href\)/)
-  assert.match(app, /renderExtendedDiagrams\(staging, \{[\s\S]*isCurrent: \(\) => previewCommit\.isCurrent\(sequence\)/)
+  assert.match(app, /renderExtendedDiagrams\(root, \{[\s\S]*isCurrent: \(\) => previewCommit\.isCurrent\(sequence\)/)
   assert.match(app, /activeExtendedDiagramDispose\?\.\(\)/)
   assert.match(app, /fitTallDiagramsForPDF\(clone, captureWidth\)/)
   assert.match(app, /\.mermaid-rendered svg, \.extended-diagram-rendered svg/)

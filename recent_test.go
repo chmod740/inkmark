@@ -191,6 +191,32 @@ func TestLegacyLanguageOnlySettingsRemainCompatible(t *testing.T) {
 	}
 }
 
+func TestLastPageSettingsRejectUntrustedOrUnsupportedLocators(t *testing.T) {
+	directory := t.TempDir()
+	valid := filepath.Join(directory, "valid.md")
+	path := filepath.Join(directory, "settings.json")
+	for _, payload := range []string{
+		`{"lastPage":{"version":99,"kind":"local","path":"` + filepath.ToSlash(valid) + `"}}`,
+		`{"lastPage":{"version":1,"kind":"local","path":"relative.md"}}`,
+		`{"lastPage":{"version":1,"kind":"local","path":"` + filepath.ToSlash(filepath.Join(directory, "not-markdown.txt")) + `"}}`,
+		`{"lastPage":{"version":1,"kind":"webdav","path":"https://example.test/secret.md"}}`,
+		`{"lastPage":{"version":1,"kind":"builtin","builtIn":"attacker-page"}}`,
+	} {
+		if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if loaded := loadSettingsState(path); loaded.LastPage != (LastPageState{}) {
+			t.Fatalf("unsafe last page survived normalization: %#v", loaded.LastPage)
+		}
+	}
+	if err := os.WriteFile(path, []byte(`{"lastPage":{"version":1,"kind":"local","path":"`+filepath.ToSlash(valid)+`"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if loaded := loadSettingsState(path); loaded.LastPage.Kind != "local" || loaded.LastPage.Path != valid {
+		t.Fatalf("valid last page was rejected: %#v", loaded.LastPage)
+	}
+}
+
 func TestPersistedRecentIDIsIgnored(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	payload := `{"mode":"auto","locale":"en","recentItems":[{"id":"attacker-controlled","kind":"file","path":"` + filepath.ToSlash(filepath.Join(t.TempDir(), "missing.md")) + `","name":"forged"}]}`
@@ -318,6 +344,7 @@ func TestOpenRecentRequiresRuntimeOpaqueID(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := &App{}
+	defer app.shutdown(nil)
 	app.recordRecentItem("file", path)
 	item := app.recentItemsSnapshot()[0]
 	if _, err := app.OpenRecentFile(path); err == nil {

@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	maxWorkspaceDirectoryResults = 2000
-	maxWorkspaceEntrySnapshots   = 8192
-	maxWorkspaceDocuments        = 64
+	maxWorkspaceDirectoryResults  = 2000
+	maxWorkspaceEntrySnapshots    = 8192
+	maxWorkspaceDocuments         = 64
+	maxLocalWorkspaceCapabilities = 32
 )
 
 type WorkspaceEntry struct {
@@ -109,6 +110,10 @@ func (a *App) OpenRecentDirectory(recentID string) (Workspace, error) {
 }
 
 func (a *App) activateWorkspace(directory string) (Workspace, error) {
+	return a.activateWorkspaceWithRecent(directory, true)
+}
+
+func (a *App) activateWorkspaceWithRecent(directory string, recordRecent bool) (Workspace, error) {
 	absolute, err := filepath.Abs(directory)
 	if err != nil {
 		return Workspace{}, fmt.Errorf("解析文件夹路径失败: %w", err)
@@ -139,12 +144,17 @@ func (a *App) activateWorkspace(directory string) (Workspace, error) {
 	}
 
 	a.mu.Lock()
-	previous := a.activeWorkspace
+	if a.localWorkspaces == nil {
+		a.localWorkspaces = make(map[string]*workspaceCapability)
+	}
+	if len(a.localWorkspaces) >= maxLocalWorkspaceCapabilities {
+		a.mu.Unlock()
+		_ = capability.root.Close()
+		return Workspace{}, errors.New("打开的本地工作区过多，请先关闭不再使用的工作区")
+	}
+	a.localWorkspaces[capability.id] = capability
 	a.activeWorkspace = capability
 	a.mu.Unlock()
-	if previous != nil {
-		_ = previous.root.Close()
-	}
 
 	name := filepath.Base(filepath.Clean(absolute))
 	if name == "." || name == string(filepath.Separator) || name == "" {
@@ -158,7 +168,9 @@ func (a *App) activateWorkspace(directory string) (Workspace, error) {
 		Entries:   directoryData.Entries,
 		Truncated: directoryData.Truncated,
 	}
-	a.recordRecentItem("directory", capability.path)
+	if recordRecent {
+		a.recordRecentItem("directory", capability.path)
+	}
 	return workspace, nil
 }
 
@@ -173,13 +185,53 @@ func (a *App) ReadWorkspaceDirectory(workspaceID string, relativePath string) (W
 }
 
 func (a *App) OpenWorkspaceFile(workspaceID string, relativePath string) (Document, error) {
+	return a.openWorkspaceFile(workspaceID, relativePath, true)
+}
+
+func (a *App) openWorkspaceFile(workspaceID string, relativePath string, recordRecent bool) (Document, error) {
 	a.mu.Lock()
 	document, err := a.openWorkspaceFileLocked(workspaceID, relativePath)
 	a.mu.Unlock()
-	if err == nil {
+	if err == nil && recordRecent {
 		a.recordRecentItem("file", document.Path)
 	}
 	return document, err
+}
+
+// openLocalDocumentWithWorkspace is the single trusted entry point for files
+// selected by the native picker, OS file association, recent menu, or startup
+// argument. The direct parent becomes a scoped workspace and the file is then
+// reopened through that capability so every local editor tab has the same
+// safe save semantics as a file selected from the directory tree.
+func (a *App) openLocalDocumentWithWorkspace(documentPath string, recordRecent bool) (Document, error) {
+	absolute, err := filepath.Abs(documentPath)
+	if err != nil {
+		return Document{}, fmt.Errorf("解析文档路径失败: %w", err)
+	}
+	if strings.EqualFold(filepath.Ext(absolute), ".txt") {
+		document, readErr := readDocument(absolute)
+		if readErr == nil && recordRecent {
+			a.recordRecentItem("file", document.Path)
+		}
+		return document, readErr
+	}
+	if !isMarkdownFilename(absolute) {
+		return Document{}, errors.New("只能打开 Markdown 或文本文件")
+	}
+	workspace, err := a.activateWorkspaceWithRecent(filepath.Dir(absolute), false)
+	if err != nil {
+		return Document{}, err
+	}
+	document, err := a.openWorkspaceFile(workspace.ID, filepath.Base(absolute), false)
+	if err != nil {
+		a.CloseWorkspace(workspace.ID)
+		return Document{}, err
+	}
+	document.Workspace = &workspace
+	if recordRecent {
+		a.recordRecentItem("file", document.Path)
+	}
+	return document, nil
 }
 
 func (a *App) openWorkspaceFileLocked(workspaceID string, relativePath string) (Document, error) {
@@ -205,7 +257,7 @@ func (a *App) OpenRecentFile(recentID string) (Document, error) {
 	if err != nil {
 		return Document{}, err
 	}
-	document, err := readDocument(item.Path)
+	document, err := a.openLocalDocumentWithWorkspace(item.Path, false)
 	if err != nil {
 		a.removeRecentItemByID(item.ID)
 		return Document{}, err
@@ -216,12 +268,15 @@ func (a *App) OpenRecentFile(recentID string) (Document, error) {
 
 func (a *App) CloseWorkspace(workspaceID string) {
 	a.mu.Lock()
-	capability := a.activeWorkspace
-	if capability == nil || capability.id != workspaceID {
+	capability := a.localWorkspaces[workspaceID]
+	if capability == nil {
 		a.mu.Unlock()
 		return
 	}
-	a.activeWorkspace = nil
+	delete(a.localWorkspaces, workspaceID)
+	if a.activeWorkspace == capability {
+		a.activeWorkspace = nil
+	}
 	capability.documents = nil
 	a.mu.Unlock()
 	_ = capability.root.Close()
@@ -229,10 +284,19 @@ func (a *App) CloseWorkspace(workspaceID string) {
 
 func (a *App) activeWorkspaceLocked(workspaceID string) (*workspaceCapability, error) {
 	workspaceID = strings.TrimSpace(workspaceID)
-	if workspaceID == "" || a.activeWorkspace == nil || a.activeWorkspace.id != workspaceID {
+	if workspaceID == "" {
 		return nil, errors.New("工作区已关闭或已被替换")
 	}
-	return a.activeWorkspace, nil
+	capability := a.localWorkspaces[workspaceID]
+	if capability == nil && a.activeWorkspace != nil && a.activeWorkspace.id == workspaceID {
+		// Preserve zero-value App compatibility while all production instances
+		// use the capability map initialized by NewApp.
+		capability = a.activeWorkspace
+	}
+	if capability == nil {
+		return nil, errors.New("工作区已关闭或已被替换")
+	}
+	return capability, nil
 }
 
 func scanWorkspaceDirectory(capability *workspaceCapability, relativePath string) (WorkspaceDirectory, error) {

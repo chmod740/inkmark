@@ -227,7 +227,7 @@ function rowDisabled(row: WorkspaceTreeRow) {
 </script>
 
 <template>
-  <aside
+  <section
     class="workspace-sidebar"
     :class="`provider-${workspace.provider}`"
     :aria-label="labels.title"
@@ -248,23 +248,34 @@ function rowDisabled(row: WorkspaceTreeRow) {
           :title="labels.providerWebDAV"
         >☁</span>
       </div>
-      <button
-        type="button"
-        class="workspace-header-button workspace-refresh-button"
-        :class="{ 'is-refreshing': refreshing }"
-        :aria-label="refreshing ? labels.refreshing : labels.refresh"
-        :title="refreshing ? labels.refreshing : labels.refresh"
-        :disabled="disabled || refreshing"
-        @click="emit('refresh')"
-      ><span aria-hidden="true">↻</span></button>
-      <button
-        type="button"
-        class="workspace-header-button workspace-close-button"
-        :aria-label="labels.close"
-        :title="labels.close"
-        :disabled="disabled || modalOpen"
-        @click="emit('close')"
-      >×</button>
+      <div class="workspace-header-actions">
+        <button
+          type="button"
+          class="workspace-header-button workspace-refresh-button"
+          :class="{ 'is-refreshing': refreshing }"
+          :aria-label="refreshing ? labels.refreshing : labels.refresh"
+          :title="refreshing ? labels.refreshing : labels.refresh"
+          :disabled="disabled || refreshing"
+          @click="emit('refresh')"
+        >
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15.6 6.1V2.9l-1.8 1.8A6.4 6.4 0 1 0 16.2 11"></path>
+            <path d="M15.6 2.9h-3.2"></path>
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="workspace-header-button workspace-close-button"
+          :aria-label="labels.close"
+          :title="labels.close"
+          :disabled="disabled || modalOpen"
+          @click="emit('close')"
+        >
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" aria-hidden="true">
+            <path d="m5.5 5.5 9 9m0-9-9 9"></path>
+          </svg>
+        </button>
+      </div>
     </header>
 
     <div class="workspace-root-path" :title="workspace.path">{{ workspace.path }}</div>
@@ -372,5 +383,5 @@ function rowDisabled(row: WorkspaceTreeRow) {
         ><span aria-hidden="true">×</span>{{ labels.delete }}</button>
       </div>
     </Teleport>
-  </aside>
+  </section>
 </template>

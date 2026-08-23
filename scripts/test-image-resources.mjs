@@ -317,7 +317,7 @@ test('standalone HTML permits embedded images and retained public HTTPS images w
   assert.match(html, /script-src 'none'/)
 })
 
-test('App resolves images off-screen and atomically commits one prepared generation', async () => {
+test('App resolves images after the core preview commit and retains resources with cached tabs', async () => {
   const app = await readFile(appURL, 'utf8')
   const prepare = app.match(/async function preparePreviewImages\([\s\S]*?\n\}/)?.[0] || ''
   const render = app.match(/async function renderNow\([\s\S]*?\n\}/)?.[0] || ''
@@ -352,15 +352,15 @@ test('App resolves images off-screen and atomically commits one prepared generat
   assert.match(prepare, /ResolveWebDAVImage/)
   assert.match(prepare, /FetchPublicImage/)
   assert.match(prepare, /imageResourceCacheKey\(kind, contextKey, originalSource\)/)
-  assert.match(prepare, /resolvePreparedImageAsset\([\s\S]*activePreviewImages,[\s\S]*pendingImageAssets,[\s\S]*cacheKey/)
+  assert.match(prepare, /resolvePreparedImageAsset\([\s\S]*resources,[\s\S]*pendingImageAssets,[\s\S]*cacheKey/)
   assert.match(prepare, /imageDecodeGate\.run\([\s\S]*waitForImageDecode\(image\)/)
   assert.match(prepare, /placeholder\.dataset\.inkmarkPublicImage = originalSource/)
-  assert.match(render, /const staging = target\.cloneNode\(false\)/)
-  assert.match(render, /FORBID_TAGS:[\s\S]{0,350}'img'[\s\S]{0,120}'picture'[\s\S]{0,120}'source'/)
-  assert.match(render, /FORBID_ATTR:[\s\S]*?'src'[\s\S]*?'srcset'[\s\S]*?'style'[\s\S]*?'data-inkmark-public-image'/)
-  assert.match(render, /await Promise\.all\(\[[\s\S]*renderDiagrams[\s\S]*preparePreviewImages/)
-  assert.match(render, /target\.replaceChildren/)
-  assert.match(render, /activePreviewImages\.release\(\)[\s\S]*activePreviewImages = nextPreviewImages/)
+  assert.match(app, /function createCorePreviewStaging\([\s\S]*target\.cloneNode\(false\)/)
+  assert.match(app, /FORBID_TAGS:[\s\S]{0,350}'img'[\s\S]{0,120}'picture'[\s\S]{0,120}'source'/)
+  assert.match(app, /FORBID_ATTR:[\s\S]*?'src'[\s\S]*?'srcset'[\s\S]*?'style'[\s\S]*?'data-inkmark-public-image'/)
+  assert.match(app, /function enhancePreview[\s\S]*await Promise\.all\(\[[\s\S]*preparePreviewImages\(root, sequence, imageContext, resources\)/)
+  assert.match(app, /function commitCorePreview[\s\S]*target\.replaceChildren/)
+  assert.match(app, /function commitCorePreview[\s\S]*activePreviewImages\.release\(\)[\s\S]*activePreviewImages = resources/)
   assert.match(exportDocument, /articleHTML: exportArticleHTML\(target, format\)/)
   assert.match(capture, /materializeExportImages\(clone, 'capture'\)/)
   assert.match(app, /format === 'html'[\s\S]*data-inkmark-public-image[\s\S]*image\.src = source/)

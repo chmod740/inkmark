@@ -55,19 +55,20 @@ var exportFormatsEnglish = map[string]exportFormatConfig{
 }
 
 type Document struct {
-	Path             string `json:"path"`
-	Name             string `json:"name"`
-	Content          string `json:"content"`
-	Welcome          bool   `json:"welcome"`
-	BuiltIn          string `json:"builtIn,omitempty"`
-	ActivationID     string `json:"activationId,omitempty"`
-	StorageKind      string `json:"storageKind,omitempty"`
-	DisplayLocation  string `json:"displayLocation,omitempty"`
-	WorkspaceID      string `json:"workspaceId,omitempty"`
-	WorkspacePath    string `json:"workspacePath,omitempty"`
-	LocalDocumentID  string `json:"localDocumentId,omitempty"`
-	RemoteDocumentID string `json:"remoteDocumentId,omitempty"`
-	ETag             string `json:"etag,omitempty"`
+	Path             string     `json:"path"`
+	Name             string     `json:"name"`
+	Content          string     `json:"content"`
+	Welcome          bool       `json:"welcome"`
+	BuiltIn          string     `json:"builtIn,omitempty"`
+	ActivationID     string     `json:"activationId,omitempty"`
+	StorageKind      string     `json:"storageKind,omitempty"`
+	DisplayLocation  string     `json:"displayLocation,omitempty"`
+	WorkspaceID      string     `json:"workspaceId,omitempty"`
+	WorkspacePath    string     `json:"workspacePath,omitempty"`
+	LocalDocumentID  string     `json:"localDocumentId,omitempty"`
+	RemoteDocumentID string     `json:"remoteDocumentId,omitempty"`
+	ETag             string     `json:"etag,omitempty"`
+	Workspace        *Workspace `json:"workspace,omitempty"`
 }
 
 //go:embed samples/markdown-rendering-test.md
@@ -99,11 +100,13 @@ type App struct {
 	initPath                string
 	initialLoaded           bool
 	language                LanguageState
+	lastPage                LastPageState
 	recentItems             []RecentItem
 	savedWebDAVConnections  []savedWebDAVConnectionState
 	webDAVCredentialStore   webDAVCredentialStore
 	pendingRecentDocuments  map[string]string
-	activeWorkspace         *workspaceCapability
+	activeWorkspace         *workspaceCapability // most recently activated; retained for internal compatibility
+	localWorkspaces         map[string]*workspaceCapability
 	webDAVWorkspaces        map[string]*webDAVCapability
 	menuState               MenuState
 	settingsPath            string
@@ -131,9 +134,13 @@ func NewApp() *App {
 	return &App{
 		initPath:               resolveDocumentArgument(os.Args[1:], workingDirectory),
 		language:               settings.LanguageState,
+		lastPage:               settings.LastPage,
 		recentItems:            settings.RecentItems,
 		savedWebDAVConnections: settings.SavedWebDAVConnections,
 		webDAVCredentialStore:  systemWebDAVCredentialStore{},
+		pendingRecentDocuments: make(map[string]string),
+		localWorkspaces:        make(map[string]*workspaceCapability),
+		webDAVWorkspaces:       make(map[string]*webDAVCapability),
 		menuState:              MenuState{ViewMode: "split", Theme: "github", SyncScroll: true},
 		settingsPath:           settingsPath,
 		updateEndpoint:         latestReleaseAPIURL,
@@ -150,8 +157,12 @@ func (a *App) startup(ctx context.Context) {
 
 func (a *App) shutdown(_ context.Context) {
 	a.mu.Lock()
-	workspace := a.activeWorkspace
+	localWorkspaces := make([]*workspaceCapability, 0, len(a.localWorkspaces))
+	for _, capability := range a.localWorkspaces {
+		localWorkspaces = append(localWorkspaces, capability)
+	}
 	a.activeWorkspace = nil
+	a.localWorkspaces = nil
 	webDAVWorkspaces := make([]*webDAVCapability, 0, len(a.webDAVWorkspaces))
 	for _, capability := range a.webDAVWorkspaces {
 		webDAVWorkspaces = append(webDAVWorkspaces, capability)
@@ -165,8 +176,8 @@ func (a *App) shutdown(_ context.Context) {
 	if cancel != nil {
 		cancel()
 	}
-	if workspace != nil {
-		_ = workspace.root.Close()
+	for _, capability := range localWorkspaces {
+		_ = capability.root.Close()
 	}
 	for _, capability := range webDAVWorkspaces {
 		capability.close()
@@ -178,16 +189,95 @@ func (a *App) LoadInitialDocument(locale string) (Document, error) {
 	a.mu.Lock()
 	path := a.initPath
 	a.initPath = ""
+	lastPage := a.lastPage
 	a.initialLoaded = true
 	a.mu.Unlock()
 	if path != "" {
-		document, err := readDocument(path)
-		if err == nil {
-			a.recordRecentItem("file", document.Path)
+		return a.openLocalDocumentWithWorkspace(path, true)
+	}
+	if lastPage.Kind == "local" {
+		if document, err := a.openLocalDocumentWithWorkspace(lastPage.Path, false); err == nil {
+			return document, nil
 		}
-		return document, err
+		a.mu.Lock()
+		a.lastPage = LastPageState{}
+		a.mu.Unlock()
+		_ = a.persistSettings()
+	}
+	if lastPage.Kind == "builtin" && lastPage.BuiltIn == "render-test" {
+		return renderingTestDocument(), nil
+	}
+	if lastPage.Kind == "webdav" {
+		if workspace, err := a.ConnectSavedWebDAV(lastPage.SavedConnectionID); err == nil {
+			if document, openErr := a.OpenWebDAVFile(workspace.ID, lastPage.WorkspacePath); openErr == nil {
+				document.Workspace = &workspace
+				return document, nil
+			}
+			_ = a.CloseWebDAVWorkspace(workspace.ID)
+		}
+		a.mu.Lock()
+		a.lastPage = LastPageState{}
+		a.mu.Unlock()
+		_ = a.persistSettings()
 	}
 	return welcomeDocument(locale), nil
+}
+
+// RememberLastPage persists only a backend-verified locator. Markdown source,
+// credentials, validators and opaque runtime IDs are never written to disk.
+func (a *App) RememberLastPage(storageKind string, workspaceID string, localDocumentID string, builtIn string) error {
+	next := LastPageState{}
+	switch strings.TrimSpace(storageKind) {
+	case "builtin":
+		if builtIn != "welcome" && builtIn != "render-test" {
+			return errors.New("内置页面类型无效")
+		}
+		next = LastPageState{Version: 1, Kind: "builtin", BuiltIn: builtIn}
+	case "local":
+		a.mu.RLock()
+		capability, ok := a.localWorkspaces[strings.TrimSpace(workspaceID)]
+		document, documentOK := workspaceDocumentCapability{}, false
+		if ok && capability != nil {
+			document, documentOK = capability.documents[strings.TrimSpace(localDocumentID)]
+		}
+		if documentOK {
+			next = LastPageState{
+				Version: 1,
+				Kind:    "local",
+				Path:    filepath.Join(capability.path, filepath.FromSlash(document.path)),
+			}
+		}
+		a.mu.RUnlock()
+		if next.Kind == "" {
+			return errors.New("本地文档会话已关闭或失效")
+		}
+	case "webdav":
+		a.mu.RLock()
+		capability, ok := a.webDAVWorkspaces[strings.TrimSpace(workspaceID)]
+		if ok && capability != nil && capability.savedConnectionID != "" {
+			capability.mu.RLock()
+			document, documentOK := capability.documents[strings.TrimSpace(localDocumentID)]
+			if documentOK {
+				next = LastPageState{
+					Version:           1,
+					Kind:              "webdav",
+					SavedConnectionID: capability.savedConnectionID,
+					WorkspacePath:     document.path,
+				}
+			}
+			capability.mu.RUnlock()
+		}
+		a.mu.RUnlock()
+		// One-time WebDAV sessions intentionally fall back to welcome because
+		// there is no saved connection metadata with which to reconnect.
+	case "":
+	default:
+		return errors.New("页面存储类型无效")
+	}
+	a.mu.Lock()
+	a.lastPage = next
+	a.mu.Unlock()
+	return a.persistSettings()
 }
 
 func (a *App) WelcomeDocument(locale string) Document {
@@ -252,11 +342,7 @@ func (a *App) OpenFile() (Document, error) {
 	if path == "" {
 		return Document{}, nil
 	}
-	document, err := readDocument(path)
-	if err == nil {
-		a.recordRecentItem("file", document.Path)
-	}
-	return document, err
+	return a.openLocalDocumentWithWorkspace(path, true)
 }
 
 func (a *App) SaveFile(path string, content string) (SaveResult, error) {

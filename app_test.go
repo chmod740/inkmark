@@ -193,6 +193,7 @@ func TestInitialFileTakesPriorityOverWelcomeDocument(t *testing.T) {
 		initPath: path,
 		language: LanguageState{Mode: "auto", Locale: "zh-CN"},
 	}
+	defer app.shutdown(nil)
 	document, err := app.LoadInitialDocument("zh-CN")
 	if err != nil {
 		t.Fatal(err)
@@ -202,6 +203,79 @@ func TestInitialFileTakesPriorityOverWelcomeDocument(t *testing.T) {
 	}
 	if recent := app.recentItemsSnapshot(); len(recent) != 1 || recent[0].Path != path || recent[0].ID == "" {
 		t.Fatalf("initial file was not synchronously added to recent items: %#v", recent)
+	}
+}
+
+func TestRememberedLocalPageRestoresThroughFreshWorkspaceCapability(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "上次页面.md")
+	if err := os.WriteFile(path, []byte("# Restored"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	settingsPath := filepath.Join(t.TempDir(), "InkMark", "settings.json")
+	app := &App{
+		language:               LanguageState{Mode: "auto", Locale: "zh-CN"},
+		settingsPath:           settingsPath,
+		localWorkspaces:        make(map[string]*workspaceCapability),
+		webDAVWorkspaces:       make(map[string]*webDAVCapability),
+		pendingRecentDocuments: make(map[string]string),
+	}
+	defer app.shutdown(nil)
+	workspace, err := app.activateWorkspaceWithRecent(directory, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, err := app.OpenWorkspaceFile(workspace.ID, filepath.Base(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RememberLastPage("local", workspace.ID, document.LocalDocumentID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if app.lastPage.Path != path {
+		t.Fatalf("remembered an unexpected path: %#v", app.lastPage)
+	}
+
+	restarted := &App{
+		language:               LanguageState{Mode: "auto", Locale: "zh-CN"},
+		lastPage:               loadSettingsState(settingsPath).LastPage,
+		settingsPath:           settingsPath,
+		localWorkspaces:        make(map[string]*workspaceCapability),
+		webDAVWorkspaces:       make(map[string]*webDAVCapability),
+		pendingRecentDocuments: make(map[string]string),
+	}
+	defer restarted.shutdown(nil)
+	restored, err := restarted.LoadInitialDocument("zh-CN")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.Path != path || restored.Content != "# Restored" || restored.Workspace == nil || restored.LocalDocumentID == "" {
+		t.Fatalf("remembered local page was not restored through a new capability: %#v", restored)
+	}
+}
+
+func TestExplicitStartupFileOverridesRememberedPage(t *testing.T) {
+	directory := t.TempDir()
+	remembered := filepath.Join(directory, "remembered.md")
+	explicit := filepath.Join(directory, "explicit.md")
+	for path, content := range map[string]string{remembered: "remembered", explicit: "explicit"} {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	app := &App{
+		initPath:               explicit,
+		lastPage:               LastPageState{Version: 1, Kind: "local", Path: remembered},
+		localWorkspaces:        make(map[string]*workspaceCapability),
+		pendingRecentDocuments: make(map[string]string),
+	}
+	defer app.shutdown(nil)
+	document, err := app.LoadInitialDocument("en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if document.Path != explicit || document.Content != "explicit" {
+		t.Fatalf("explicit startup file did not win: %#v", document)
 	}
 }
 

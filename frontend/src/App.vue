@@ -15,6 +15,7 @@ import {
   segmentMentions,
 } from './markdown-extensions'
 import { renderExtendedDiagrams } from './extended-diagrams'
+import PreviewMarkdownWorker from './preview-worker?worker'
 import DirectorySidebar from './DirectorySidebar.vue'
 import inkmarkIcon from './assets/inkmark-icon.svg?no-inline'
 import {
@@ -127,6 +128,7 @@ import {
 } from './text-search'
 import {
   createLineNumberModel,
+  deriveSourceData,
   parseSourceHeadings,
   readEditorPreferences,
   sourceLineFromScroll,
@@ -134,7 +136,23 @@ import {
   updateEditorPreference,
   writeEditorPreferences,
   type EditorPreferences,
+  type SourceDerivedData,
 } from './editor-features'
+import { LatestRenderScheduler } from './render-scheduler'
+import { PreviewArtifactCache } from './preview-artifact-cache'
+import { PreviewPerformanceMetrics } from './render-performance'
+import type { PreviewWorkerRequest, PreviewWorkerResponse } from './preview-worker-protocol'
+import {
+  createDocumentTab,
+  findMatchingDocumentTab,
+  findWorkspaceDocumentTab,
+  nextActiveTabID,
+  rebaseDocumentTabs,
+  tabCloseTargetIDs,
+  type DocumentTabState,
+  type TabCloseMode,
+  type TabWorkspaceState,
+} from './document-tabs'
 import {
   flattenWorkspaceTree,
   loadedWorkspaceDirectoryKeys,
@@ -205,6 +223,7 @@ import {
   ReadWorkspaceDirectory,
   ReadWebDAVWorkspaceImage,
   ReadWorkspaceImage,
+  RememberLastPage,
   ResolveLocalImage,
   ResolveWebDAVImage,
   RenameWorkspaceEntry,
@@ -225,6 +244,7 @@ import {
   WelcomeDocument as LoadWelcomeDocument,
 } from '../wailsjs/go/main/App'
 import {
+	Environment,
   EventsOn,
 	  Hide,
   Quit,
@@ -243,6 +263,20 @@ type WebDAVConnectionOperation = 'idle' | 'connecting-saved' | 'saving' | 'delet
 type AboutView = 'overview' | 'third-party'
 type WorkspaceDialogView = 'create-markdown' | 'create-directory' | 'rename' | 'delete' | 'image'
 type WorkspaceMutationOperation = 'rename' | 'delete'
+type WindowControlStyle = 'system' | 'traffic-lights'
+
+const windowControlStyleStorageKey = 'inkmark-window-control-style'
+
+function normalizeWindowControlStyle(value: string | null): WindowControlStyle {
+	return value === 'traffic-lights' ? 'traffic-lights' : 'system'
+}
+
+const inferredRuntimePlatform = /Windows/iu.test(navigator.userAgent)
+	? 'windows'
+	: /Macintosh|Mac OS/iu.test(navigator.userAgent)
+		? 'darwin'
+		: ''
+const runtimePlatform = ref(inferredRuntimePlatform)
 
 interface DocumentData {
   path: string
@@ -258,6 +292,7 @@ interface DocumentData {
   localDocumentId?: string
   remoteDocumentId?: string
   etag?: string
+  workspace?: WorkspaceData
 }
 
 interface WebDAVSaveResultData {
@@ -350,43 +385,76 @@ interface ImageRenderContext {
   remoteDocumentId: string
 }
 
-const source = ref('')
-const savedSource = ref('')
-const localDocumentPath = ref('')
-const documentLocation = ref('')
-const documentStorageKind = ref<'local' | 'webdav' | 'builtin'>('builtin')
-const documentWorkspaceId = ref('')
-const currentWorkspacePath = ref('')
-const localDocumentId = ref('')
-const remoteDocumentId = ref('')
-const remoteWorkspaceId = ref('')
-const remoteDocumentETag = ref('')
-const fileName = ref('README.md')
+interface TabContextMenuState {
+  tabId: string
+  x: number
+  y: number
+}
+
+function newTabID() {
+  return typeof crypto?.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+const initialTab = createDocumentTab(newTabID(), {
+  name: 'README.md', content: '', welcome: true, builtIn: 'welcome', storageKind: 'builtin',
+})
+const tabs = ref<DocumentTabState[]>([initialTab])
+const activeTabId = ref(initialTab.id)
+const tabContextMenu = ref<TabContextMenuState | null>(null)
+const tabContextMenuElement = ref<HTMLElement | null>(null)
+let tabContextMenuReturnFocus: HTMLElement | null = null
+const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) || tabs.value[0])
+const source = computed({
+  get: () => activeTab.value.source,
+  set: (value: string) => {
+    const tab = activeTab.value
+    if (tab.source === value) return
+    tab.source = value
+    tab.sourceRevision += 1
+    tab.derivedSource = null
+    dropCachedPreviewForTab(tab.id)
+  },
+})
+const savedSource = computed({ get: () => activeTab.value.savedSource, set: (value: string) => { activeTab.value.savedSource = value } })
+const localDocumentPath = computed({ get: () => activeTab.value.localPath, set: (value: string) => { activeTab.value.localPath = value } })
+const documentLocation = computed({ get: () => activeTab.value.location, set: (value: string) => { activeTab.value.location = value } })
+const documentStorageKind = computed({ get: () => activeTab.value.storageKind, set: (value: 'local' | 'webdav' | 'builtin') => { activeTab.value.storageKind = value } })
+const documentWorkspaceId = computed({ get: () => activeTab.value.workspaceId, set: (value: string) => { activeTab.value.workspaceId = value } })
+const currentWorkspacePath = computed({ get: () => activeTab.value.workspacePath, set: (value: string) => { activeTab.value.workspacePath = value } })
+const localDocumentId = computed({ get: () => activeTab.value.localDocumentId, set: (value: string) => { activeTab.value.localDocumentId = value } })
+const remoteDocumentId = computed({ get: () => activeTab.value.remoteDocumentId, set: (value: string) => { activeTab.value.remoteDocumentId = value } })
+const remoteWorkspaceId = computed({ get: () => activeTab.value.remoteWorkspaceId, set: (value: string) => { activeTab.value.remoteWorkspaceId = value } })
+const remoteDocumentETag = computed({ get: () => activeTab.value.etag, set: (value: string) => { activeTab.value.etag = value } })
+const fileName = computed({ get: () => activeTab.value.name, set: (value: string) => { activeTab.value.name = value } })
 const theme = ref<Theme>(normalizeTheme(localStorage.getItem('inkmark-theme')))
 const viewMode = ref<ViewMode>(readPreference<ViewMode>('inkmark-view', 'split'))
 const previewFirst = ref(normalizePreviewFirst(localStorage.getItem(previewFirstStorageKey)))
 const fontPreferences = ref<FontPreferences>(readFontPreferences(localStorage))
 const editorPreferences = ref<EditorPreferences>(readEditorPreferences(localStorage))
+const windowControlStyle = ref<WindowControlStyle>(normalizeWindowControlStyle(localStorage.getItem(windowControlStyleStorageKey)))
 const languageMode = ref<LanguageMode>('auto')
 const locale = ref<Locale>('en')
-const renderState = ref('')
+const renderState = computed({ get: () => activeTab.value.renderState, set: (value: string) => { activeTab.value.renderState = value } })
 const busy = ref(false)
 const editor = ref<HTMLTextAreaElement | null>(null)
+const documentTabsElement = ref<HTMLElement | null>(null)
 const findInput = ref<HTMLInputElement | null>(null)
 const findHighlightLayer = ref<HTMLElement | null>(null)
 const lineNumberGutter = ref<HTMLElement | null>(null)
-const stickySourceLine = ref(0)
-const findOpen = ref(false)
-const findQuery = ref('')
-const findCaseSensitive = ref(false)
-const findCurrentStart = ref(-1)
-const findCurrentEnd = ref(-1)
-const findMatchOrdinal = ref(0)
+const stickySourceLine = computed({ get: () => activeTab.value.stickySourceLine, set: (value: number) => { activeTab.value.stickySourceLine = value } })
+const findOpen = computed({ get: () => activeTab.value.findOpen, set: (value: boolean) => { activeTab.value.findOpen = value } })
+const findQuery = computed({ get: () => activeTab.value.findQuery, set: (value: string) => { activeTab.value.findQuery = value } })
+const findCaseSensitive = computed({ get: () => activeTab.value.findCaseSensitive, set: (value: boolean) => { activeTab.value.findCaseSensitive = value } })
+const findCurrentStart = computed({ get: () => activeTab.value.findCurrentStart, set: (value: number) => { activeTab.value.findCurrentStart = value } })
+const findCurrentEnd = computed({ get: () => activeTab.value.findCurrentEnd, set: (value: number) => { activeTab.value.findCurrentEnd = value } })
+const findMatchOrdinal = computed({ get: () => activeTab.value.findMatchOrdinal, set: (value: number) => { activeTab.value.findMatchOrdinal = value } })
 const preview = ref<HTMLElement | null>(null)
 const previewPane = ref<HTMLElement | null>(null)
 const appDialog = ref<HTMLElement | null>(null)
 const syncScroll = ref(true)
-const builtInDocument = ref<BuiltInDocumentKind | null>(null)
+const builtInDocument = computed({ get: () => activeTab.value.builtIn, set: (value: BuiltInDocumentKind | null) => { activeTab.value.builtIn = value } })
 const activeDialog = ref<'settings' | 'shortcuts' | 'about' | 'webdav' | 'image' | 'workspace' | null>(null)
 const aboutView = ref<AboutView>('overview')
 const thirdPartyNotices = ref('')
@@ -398,11 +466,44 @@ const updateInfo = ref<UpdateInfoData | null>(null)
 const updateState = ref<UpdateState>('idle')
 const updateDownload = ref<UpdateDownloadData | null>(null)
 const updateError = ref('')
-const workspace = ref<WorkspaceData | null>(null)
-const workspaceChildren = ref<WorkspaceChildren>({})
-const expandedWorkspaceDirectories = ref<ReadonlySet<string>>(new Set())
-const loadingWorkspaceDirectories = ref<ReadonlySet<string>>(new Set())
-const truncatedWorkspaceDirectories = ref<ReadonlySet<string>>(new Set())
+function activeWorkspaceState() {
+  return activeTab.value.workspaceState
+}
+const workspace = computed<WorkspaceData | null>({
+  get: () => activeWorkspaceState()?.workspace || null,
+  set: (value) => {
+    if (!value) {
+      activeTab.value.workspaceState = null
+      return
+    }
+    const existing = activeWorkspaceState()
+    activeTab.value.workspaceState = existing?.workspace.id === value.id
+      ? { ...existing, workspace: value }
+      : {
+          workspace: value,
+          children: { [workspaceRootKey]: value.entries },
+          expandedDirectories: new Set(),
+          loadingDirectories: new Set(),
+          truncatedDirectories: new Set(),
+        }
+  },
+})
+const workspaceChildren = computed<WorkspaceChildren>({
+  get: () => activeWorkspaceState()?.children || {},
+  set: (value) => { if (activeWorkspaceState()) activeWorkspaceState()!.children = value },
+})
+const expandedWorkspaceDirectories = computed<ReadonlySet<string>>({
+  get: () => activeWorkspaceState()?.expandedDirectories || new Set(),
+  set: (value) => { if (activeWorkspaceState()) activeWorkspaceState()!.expandedDirectories = value },
+})
+const loadingWorkspaceDirectories = computed<ReadonlySet<string>>({
+  get: () => activeWorkspaceState()?.loadingDirectories || new Set(),
+  set: (value) => { if (activeWorkspaceState()) activeWorkspaceState()!.loadingDirectories = value },
+})
+const truncatedWorkspaceDirectories = computed<ReadonlySet<string>>({
+  get: () => activeWorkspaceState()?.truncatedDirectories || new Set(),
+  set: (value) => { if (activeWorkspaceState()) activeWorkspaceState()!.truncatedDirectories = value },
+})
 const workspaceRefreshing = ref(false)
 const webDAVBaseURL = ref('')
 const webDAVUsername = ref('')
@@ -450,7 +551,8 @@ let workspaceMutationCancelGeneration = 0
 let pendingWorkspaceMutationBegin: Promise<WorkspaceEntryData | null> | null = null
 let pendingWorkspaceMutationCancel: Promise<boolean> | null = null
 
-let renderTimer: number | undefined
+let rememberLastPageTimer: number | undefined
+let initialDocumentLoaded = false
 let quitting = false
 let pendingUpdateInstall = false
 let updateDownloadCancelled = false
@@ -471,15 +573,145 @@ let webDAVDeleteReturnFocus: HTMLElement | null = null
 const removeMenuListeners: Array<() => void> = []
 const scrollSync = new ScrollSyncController()
 const previewCommit = new LatestPreviewCommit()
+const previewArtifacts = new PreviewArtifactCache()
+const previewPerformance = new PreviewPerformanceMetrics()
 const imageResolverGate = new ImageResolverGate()
 const imageDecodeGate = new ImageDecodeGate()
 const pendingImageAssets = new Map<string, PendingImageAssetRequest>()
 let activePreviewImages = new PreviewImageResourceSet()
 let activeExtendedDiagramDispose: (() => void) | null = null
+let activePreviewCacheKey = ''
+let activePreviewNeedsEnhancement = false
+let activePreviewChunking = false
 const workspacePreviewImages = new PreviewImageResourceSet()
 type MermaidRenderResult = Awaited<ReturnType<typeof mermaid.render>>
 const mermaidRenderCache = new BoundedCache<string, MermaidRenderResult>(maximumMermaidCacheEntries)
 const updateDownloadSessions = new UpdateDownloadSessionGate()
+type PreviewRenderRequest = {
+  readonly tabID: string
+  readonly sourceRevision: number
+  readonly reason: 'source' | 'activate' | 'open' | 'theme' | 'locale' | 'fallback'
+  readonly queuedAt: number
+}
+let previewWorker: Worker | null = null
+let previewWorkerRequestID = 0
+type PreviewWorkerComplete = Extract<PreviewWorkerResponse, { type: 'complete' }>
+type PreviewWorkerChunk = Extract<PreviewWorkerResponse, { type: 'chunk' }>
+interface PendingPreviewWorkerRequest {
+  resolve: (response: PreviewWorkerComplete) => void
+  reject: (error: Error) => void
+  resolveFirst: (chunk: { html: string, chunked: boolean }) => void
+  rejectFirst: (error: Error) => void
+  firstDelivered: boolean
+  onChunk: (chunk: PreviewWorkerChunk) => void
+}
+const pendingPreviewWorkerRequests = new Map<number, PendingPreviewWorkerRequest>()
+const renderScheduler = new LatestRenderScheduler<PreviewRenderRequest>(async (request) => {
+  if (activeTab.value.id !== request.tabID || activeTab.value.sourceRevision !== request.sourceRevision) return
+  await renderNow(source.value, theme.value, request)
+})
+
+function dropCachedPreviewForTab(tabID: string) {
+  previewArtifacts.drop(tabID)
+}
+
+function previewCacheKey(tab: DocumentTabState, renderTheme: Theme) {
+  const previewWidth = Math.max(0, Math.round((preview.value?.clientWidth || 0) / 16) * 16)
+  return `${tab.sourceRevision}:${renderTheme}:${locale.value}:${previewWidth}`
+}
+
+function cancelPreviewWorkerRequests(message = 'Preview worker request was cancelled') {
+  pendingPreviewWorkerRequests.forEach(({ reject, rejectFirst }) => {
+    const error = new Error(message)
+    reject(error)
+    rejectFirst(error)
+  })
+  pendingPreviewWorkerRequests.clear()
+  previewWorker?.terminate()
+  previewWorker = null
+}
+
+function ensurePreviewWorker() {
+  if (previewWorker) return previewWorker
+  const worker = new PreviewMarkdownWorker()
+  worker.addEventListener('message', (event: MessageEvent<PreviewWorkerResponse>) => {
+    const response = event.data
+    const pending = pendingPreviewWorkerRequests.get(response?.id)
+    if (!pending) return
+    if (response.type === 'chunk') {
+      if (!pending.firstDelivered) {
+        pending.firstDelivered = true
+        pending.resolveFirst({ html: response.html, chunked: true })
+      }
+      pending.onChunk(response)
+      return
+    }
+    pendingPreviewWorkerRequests.delete(response.id)
+    if (response.type === 'complete') {
+      if (!pending.firstDelivered) {
+        pending.firstDelivered = true
+        pending.resolveFirst({ html: response.html, chunked: false })
+      }
+      pending.resolve(response)
+    } else {
+      const error = new Error(response.message || 'Markdown worker failed')
+      pending.rejectFirst(error)
+      pending.reject(error)
+    }
+  })
+  worker.addEventListener('error', () => {
+    const error = new Error('Markdown worker failed')
+    pendingPreviewWorkerRequests.forEach(({ reject, rejectFirst }) => {
+      rejectFirst(error)
+      reject(error)
+    })
+    pendingPreviewWorkerRequests.clear()
+    worker.terminate()
+    if (previewWorker === worker) previewWorker = null
+  })
+  previewWorker = worker
+  return worker
+}
+
+function renderMarkdownInWorker(
+  sourceText: string,
+  sourceRevision: number,
+  trustedMarker: string,
+  onChunk: (chunk: PreviewWorkerChunk) => void = () => undefined,
+) {
+  let resolveFirst: (chunk: { html: string, chunked: boolean }) => void = () => undefined
+  let rejectFirst: (error: Error) => void = () => undefined
+  const firstChunk = new Promise<{ html: string, chunked: boolean }>((resolve, reject) => {
+    resolveFirst = resolve
+    rejectFirst = reject
+  })
+  const complete = new Promise<PreviewWorkerComplete>((resolve, reject) => {
+    const id = ++previewWorkerRequestID
+    pendingPreviewWorkerRequests.set(id, {
+      resolve,
+      reject,
+      resolveFirst,
+      rejectFirst,
+      firstDelivered: false,
+      onChunk,
+    })
+    const request: PreviewWorkerRequest = { id, source: sourceText, sourceRevision, trustedMarker }
+    ensurePreviewWorker().postMessage(request)
+  })
+  return { firstChunk, complete }
+}
+
+function requestActivePreviewRender(
+  reason: PreviewRenderRequest['reason'],
+  delayMilliseconds = 0,
+) {
+  return renderScheduler.request({
+    tabID: activeTab.value.id,
+    sourceRevision: activeTab.value.sourceRevision,
+    reason,
+    queuedAt: performance.now(),
+  }, delayMilliseconds)
+}
 
 const workspaceRows = computed(() => flattenWorkspaceTree(
   workspaceChildren.value,
@@ -624,7 +856,16 @@ markdown.renderer.rules.fence = (tokens, index, options, env, self) => {
 }
 
 const dirty = computed(() => source.value !== savedSource.value)
-const sourceLineNumberModel = computed(() => createLineNumberModel(source.value))
+const emptySourceDerived: SourceDerivedData = {
+  revision: 0,
+  lineNumbers: { count: 1, digits: 1, text: '1', available: true },
+  headings: { headings: [], available: true },
+  characterCount: 0,
+}
+const sourceDerived = computed(() => activeTab.value.derivedSource?.revision === activeTab.value.sourceRevision
+  ? activeTab.value.derivedSource
+  : emptySourceDerived)
+const sourceLineNumberModel = computed(() => sourceDerived.value.lineNumbers)
 const lineCount = computed(() => sourceLineNumberModel.value.count)
 const lineNumbersVisible = computed(() => editorPreferences.value.lineNumbers && sourceLineNumberModel.value.available)
 const sourceEditorStyle = computed(() => ({
@@ -632,13 +873,13 @@ const sourceEditorStyle = computed(() => ({
     ? `calc(${Math.max(3, sourceLineNumberModel.value.digits)}ch + 18px)`
     : '0px',
 }))
-const sourceHeadingModel = computed(() => parseSourceHeadings(source.value))
+const sourceHeadingModel = computed(() => sourceDerived.value.headings)
 const stickyHeadings = computed(() => {
   if (!editorPreferences.value.stickyHeadings || !sourceHeadingModel.value.available) return []
   if (stickySourceLine.value <= 0) return []
   return stickyHeadingTrail(sourceHeadingModel.value.headings, stickySourceLine.value - 1)
 })
-const characterCount = computed(() => Array.from(source.value).length)
+const characterCount = computed(() => sourceDerived.value.characterCount)
 const documentHeaderState = computed(() => resolveDocumentHeaderState(
   dirty.value,
   documentLocation.value,
@@ -669,6 +910,9 @@ const unsavedPromptMessage = computed(() => {
   }
   if (unsavedTransition.value === 'quit') {
     return t('unsaved.messageQuit', { name: fileName.value })
+  }
+  if (unsavedTransition.value === 'close') {
+    return t('unsaved.messageClose', { name: fileName.value })
   }
   return t('unsaved.messageOpen', { name: fileName.value })
 })
@@ -840,115 +1084,287 @@ function readPreference<T extends string>(key: string, fallback: T): T {
   return (value || fallback) as T
 }
 
+function workspaceStateForDocument(document: DocumentData): TabWorkspaceState | null {
+  const embeddedWorkspace = normalizeWorkspace(document.workspace)
+  if (embeddedWorkspace) {
+    return {
+      workspace: embeddedWorkspace,
+      children: { [workspaceRootKey]: embeddedWorkspace.entries },
+      expandedDirectories: new Set(),
+      loadingDirectories: new Set(),
+      truncatedDirectories: new Set(),
+    }
+  }
+  const workspaceId = document.workspaceId || ''
+  if (!workspaceId) return null
+  return tabs.value.find((tab) => tab.workspaceState?.workspace.id === workspaceId)?.workspaceState || null
+}
+
+function captureActiveTabViewport() {
+  const tab = activeTab.value
+  if (!tab) return
+  tab.editorScrollTop = editor.value?.scrollTop || 0
+  tab.previewScrollTop = previewPane.value?.scrollTop || 0
+  tab.selectionStart = editor.value?.selectionStart || 0
+  tab.selectionEnd = editor.value?.selectionEnd || tab.selectionStart
+}
+
+function ensureDocumentTabVisible(tabId: string) {
+  document.querySelector<HTMLElement>(`[data-document-tab-id="${CSS.escape(tabId)}"]`)
+    ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+}
+
+function stashActivePreview(tabID: string) {
+  const target = preview.value
+  if (!target) return
+  if (activePreviewChunking || !activePreviewCacheKey || !target.childNodes.length) {
+    activePreviewImages.release()
+    activeExtendedDiagramDispose?.()
+    activeExtendedDiagramDispose = null
+    activePreviewImages = new PreviewImageResourceSet()
+    activePreviewCacheKey = ''
+    activePreviewNeedsEnhancement = false
+    activePreviewChunking = false
+    return
+  }
+  const fragment = document.createDocumentFragment()
+  fragment.append(...Array.from(target.childNodes))
+  previewArtifacts.put({
+    tabID,
+    key: activePreviewCacheKey,
+    fragment,
+    images: activePreviewImages,
+    disposeExtendedDiagrams: activeExtendedDiagramDispose,
+    needsEnhancement: activePreviewNeedsEnhancement,
+  })
+  activePreviewImages = new PreviewImageResourceSet()
+  activeExtendedDiagramDispose = null
+  activePreviewCacheKey = ''
+  activePreviewNeedsEnhancement = false
+  activePreviewChunking = false
+}
+
+function restoreCachedPreview(tab: DocumentTabState, key: string) {
+  const target = preview.value
+  if (!target) return false
+  const artifact = previewArtifacts.get(tab.id, key)
+  if (!artifact) return false
+  target.replaceChildren(artifact.fragment)
+  activePreviewImages = artifact.images
+  activeExtendedDiagramDispose = artifact.disposeExtendedDiagrams
+  activePreviewCacheKey = artifact.key
+  activePreviewNeedsEnhancement = artifact.needsEnhancement
+  renderState.value = t('status.rendered')
+  refreshScrollAnchors()
+  reconcileActiveScroll()
+  const measurement = previewPerformance.begin(tab.id, tab.source, { cacheHit: true })
+  measurement.mark('worker')
+  measurement.mark('sanitize')
+  measurement.mark('core')
+  measurement.mark('commit')
+  measurement.mark('enhance')
+  measurement.finish()
+  if (activePreviewNeedsEnhancement) {
+    const sequence = previewCommit.begin()
+    const enhancementMeasurement = previewPerformance.begin(tab.id, tab.source, { cacheHit: true })
+    enhancementMeasurement.mark('worker')
+    enhancementMeasurement.mark('sanitize')
+    enhancementMeasurement.mark('core')
+    enhancementMeasurement.mark('commit')
+    void enhancePreview(
+      target,
+      sequence,
+      theme.value,
+      currentImageRenderContext(),
+      activePreviewImages,
+      enhancementMeasurement,
+    )
+  }
+  return true
+}
+
+function discardActivePreview() {
+  const target = preview.value
+  target?.replaceChildren()
+  activePreviewImages.release()
+  activePreviewImages = new PreviewImageResourceSet()
+  activeExtendedDiagramDispose?.()
+  activeExtendedDiagramDispose = null
+  activePreviewCacheKey = ''
+  activePreviewNeedsEnhancement = false
+  activePreviewChunking = false
+}
+
+function handleDocumentTabsWheel(event: WheelEvent) {
+	const tabList = documentTabsElement.value
+	const target = event.target
+	if (!tabList || !(target instanceof Node) || !tabList.contains(target)) return
+	if (tabList.scrollWidth <= tabList.clientWidth + 1) return
+  const rawDelta = Math.abs(event.deltaX) > Math.abs(event.deltaY)
+    ? event.deltaX
+    : event.deltaY
+  if (!rawDelta) return
+  const deltaMultiplier = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+    ? 24
+    : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+      ? tabList.clientWidth * 0.85
+      : 1
+  tabList.scrollLeft += rawDelta * deltaMultiplier
+  event.preventDefault()
+}
+
+interface TabActivationOptions {
+  /** Start the selected tab's preview but do not make navigation wait for it. */
+  awaitPreview?: boolean
+  /** Used for an unsaved-changes prompt where rendering would be wasted. */
+  renderPreview?: boolean
+}
+
+function interruptActivePreviewWork() {
+  renderScheduler.cancel()
+  previewCommit.invalidate()
+  cancelPreviewWorkerRequests('Preview worker request was cancelled by a document transition')
+}
+
+async function activateTab(
+  tabId: string,
+  allowWhileBusy = false,
+  options: TabActivationOptions = {},
+) {
+	if (busy.value && !allowWhileBusy) return false
+  if (!tabs.value.some((tab) => tab.id === tabId)) return false
+  if (activeTabId.value === tabId) return true
+  captureActiveTabViewport()
+  interruptActivePreviewWork()
+  stashActivePreview(activeTab.value.id)
+  activeTabId.value = tabId
+  scrollSync.reset()
+  editorScrollAnchors = []
+  previewScrollAnchors = []
+  await nextTick()
+  ensureDocumentTabVisible(tabId)
+  if (editor.value) {
+    editor.value.scrollTop = activeTab.value.editorScrollTop
+    editor.value.setSelectionRange(activeTab.value.selectionStart, activeTab.value.selectionEnd)
+  }
+  if (previewPane.value) previewPane.value.scrollTop = activeTab.value.previewScrollTop
+  const key = previewCacheKey(activeTab.value, theme.value)
+  if (!restoreCachedPreview(activeTab.value, key) && options.renderPreview !== false) {
+    const rendering = requestActivePreviewRender('activate')
+    if (options.awaitPreview !== false) await rendering
+    else void rendering
+  }
+  return true
+}
+
+async function releaseDocumentCapability(tab: DocumentTabState) {
+  if (tab.storageKind === 'local' && tab.workspaceId && tab.localDocumentId) {
+    await CloseWorkspaceDocument(tab.workspaceId, tab.localDocumentId).catch(() => undefined)
+  }
+  if (tab.storageKind === 'webdav' && tab.remoteWorkspaceId && tab.remoteDocumentId) {
+    await CloseWebDAVDocument(tab.remoteWorkspaceId, tab.remoteDocumentId).catch(() => undefined)
+  }
+}
+
+async function releaseUnusedWorkspace(tab: DocumentTabState, remainingTabs = tabs.value) {
+  const workspaceId = tab.workspaceState?.workspace.id
+  if (!workspaceId || remainingTabs.some((candidate) => candidate.workspaceState?.workspace.id === workspaceId)) return
+  if (tab.workspaceState?.workspace.provider === 'webdav') {
+    await CloseWebDAVWorkspace(workspaceId).catch(() => undefined)
+  } else {
+    await CloseWorkspace(workspaceId).catch(() => undefined)
+  }
+}
+
+async function discardDuplicateDocument(document: DocumentData) {
+  if (document.storageKind === 'webdav' && document.workspaceId && document.remoteDocumentId) {
+    await CloseWebDAVDocument(document.workspaceId, document.remoteDocumentId).catch(() => undefined)
+  } else if (document.workspaceId && document.localDocumentId) {
+    await CloseWorkspaceDocument(document.workspaceId, document.localDocumentId).catch(() => undefined)
+  }
+  if (document.workspace?.id && !tabs.value.some((tab) => tab.workspaceState?.workspace.id === document.workspace?.id)) {
+    if (document.workspace.provider === 'webdav') await CloseWebDAVWorkspace(document.workspace.id).catch(() => undefined)
+    else await CloseWorkspace(document.workspace.id).catch(() => undefined)
+  }
+}
+
+async function openDocumentTab(document: DocumentData, status: TranslationKey = 'document.opened') {
+  if (!document?.name) return null
+  const matching = findMatchingDocumentTab(tabs.value, document)
+	if (matching) {
+		await discardDuplicateDocument(document)
+		await activateTab(matching.id, true)
+		return matching
+  }
+  captureActiveTabViewport()
+  renderScheduler.cancel()
+  previewCommit.invalidate()
+  cancelPreviewWorkerRequests()
+  stashActivePreview(activeTab.value.id)
+  const tab = createDocumentTab(newTabID(), document, workspaceStateForDocument(document), t(status))
+  tabs.value.push(tab)
+  activeTabId.value = tab.id
+  scrollSync.reset()
+  editorScrollAnchors = []
+  previewScrollAnchors = []
+  await nextTick()
+  if (editor.value) editor.value.scrollTop = 0
+  if (previewPane.value) previewPane.value.scrollTop = 0
+  await requestActivePreviewRender('open')
+  return tab
+}
+
 function setDocument(document: DocumentData, status: TranslationKey = 'document.opened') {
-  const previousLocalWorkspaceId = documentStorageKind.value === 'local' ? documentWorkspaceId.value : ''
-  const previousLocalDocumentId = documentStorageKind.value === 'local' ? localDocumentId.value : ''
-  const previousRemoteWorkspaceId = remoteWorkspaceId.value
-  const previousRemoteDocumentId = remoteDocumentId.value
   webDAVConflictOpen.value = false
   scrollSync.reset()
   editorScrollAnchors = []
   previewScrollAnchors = []
-  fileName.value = document.name || t('document.untitledFilename')
-  source.value = document.content || ''
-  savedSource.value = source.value
-  stickySourceLine.value = 0
-  builtInDocument.value = document.builtIn === 'render-test'
-    ? 'render-test'
-    : document.builtIn === 'welcome' || document.welcome
-      ? 'welcome'
-      : null
-  documentStorageKind.value = document.storageKind === 'webdav'
-    ? 'webdav'
-    : builtInDocument.value
-      ? 'builtin'
-      : 'local'
-  localDocumentPath.value = documentStorageKind.value === 'local' ? document.path || '' : ''
-  documentLocation.value = document.displayLocation
-    || (documentStorageKind.value === 'local' ? localDocumentPath.value : '')
-  const inferredLocalWorkspacePath = (
-    documentStorageKind.value === 'local'
-      && Boolean(document.localDocumentId)
-      && workspace.value?.provider === 'local'
-      ? localWorkspaceRelativePath(workspace.value.path, localDocumentPath.value)
-      : ''
+  const replacement = createDocumentTab(
+    activeTab.value.id,
+    { ...document, name: document.name || t('document.untitledFilename') },
+    workspaceStateForDocument(document) || activeTab.value.workspaceState,
+    t(status),
   )
-  currentWorkspacePath.value = document.workspacePath || inferredLocalWorkspacePath
-  localDocumentId.value = documentStorageKind.value === 'local' ? document.localDocumentId || '' : ''
-  remoteDocumentId.value = documentStorageKind.value === 'webdav' ? document.remoteDocumentId || '' : ''
-  remoteWorkspaceId.value = documentStorageKind.value === 'webdav'
-    ? document.workspaceId || (workspace.value?.provider === 'webdav' ? workspace.value.id : '')
-    : ''
-  documentWorkspaceId.value = document.workspaceId
-    || (inferredLocalWorkspacePath && workspace.value?.provider === 'local' ? workspace.value.id : '')
-    || remoteWorkspaceId.value
-  remoteDocumentETag.value = documentStorageKind.value === 'webdav' ? document.etag || '' : ''
-  renderState.value = t(status)
-  if (
-    previousLocalWorkspaceId
-    && previousLocalDocumentId
-    && (
-      previousLocalWorkspaceId !== documentWorkspaceId.value
-      || previousLocalDocumentId !== localDocumentId.value
-    )
-  ) {
-    void CloseWorkspaceDocument(previousLocalWorkspaceId, previousLocalDocumentId).catch(() => {})
-  }
-  if (
-    previousRemoteWorkspaceId
-    && previousRemoteDocumentId
-    && previousRemoteDocumentId !== remoteDocumentId.value
-  ) {
-    void CloseWebDAVDocument(previousRemoteWorkspaceId, previousRemoteDocumentId).catch(() => {})
-  }
-  if (
-    previousRemoteWorkspaceId
-    && previousRemoteWorkspaceId !== remoteWorkspaceId.value
-    && workspace.value?.id !== previousRemoteWorkspaceId
-  ) {
-    void CloseWebDAVWorkspace(previousRemoteWorkspaceId).catch(() => {})
-  }
-  void nextTick(async () => {
+  const index = tabs.value.findIndex((tab) => tab.id === activeTab.value.id)
+  renderScheduler.cancel()
+  previewCommit.invalidate()
+  cancelPreviewWorkerRequests()
+  dropCachedPreviewForTab(activeTab.value.id)
+  discardActivePreview()
+  tabs.value[index] = replacement
+	void nextTick(async () => {
     if (editor.value) editor.value.scrollTop = 0
     if (previewPane.value) previewPane.value.scrollTop = 0
-    await renderNow()
+    await requestActivePreviewRender('open')
   })
 }
 
-function detachCurrentLocalWorkspaceDocument(workspaceId: string) {
-  if (
-    documentStorageKind.value !== 'local'
-    || documentWorkspaceId.value !== workspaceId
-    || !currentWorkspacePath.value
-  ) return false
-  const retainedSource = source.value
-  setDocument({
-    path: '',
-    name: t('document.untitledFilename'),
-    content: retainedSource,
-    welcome: false,
-  }, 'workspace.closedCurrentPreserved')
-  // Force Save As even when the retained editor happened to match the last
-  // saved bytes. The capability root is about to close, so its old absolute
-  // path must never become an implicit fallback save authority.
-  savedSource.value = `${retainedSource}\u0000`
-  return true
+function detachWorkspaceTabs(workspaceId: string) {
+  let detachedDocuments = 0
+  for (const tab of tabs.value) {
+    if (tab.workspaceState?.workspace.id === workspaceId) tab.workspaceState = null
+    if (tab.workspaceId !== workspaceId && tab.remoteWorkspaceId !== workspaceId) continue
+    tab.name = t('document.untitledFilename')
+    tab.savedSource = `${tab.source}\u0000`
+    tab.storageKind = 'local'
+    tab.localPath = ''
+    tab.location = ''
+    tab.workspaceId = ''
+    tab.workspacePath = ''
+    tab.localDocumentId = ''
+    tab.remoteDocumentId = ''
+    tab.remoteWorkspaceId = ''
+    tab.etag = ''
+    tab.builtIn = null
+    tab.renderState = t('workspace.closedCurrentPreserved')
+    detachedDocuments += 1
+  }
+  return detachedDocuments
 }
 
 function setWorkspace(value: unknown) {
   const nextWorkspace = normalizeWorkspace(value)
   if (!nextWorkspace) return false
-  const previousWorkspace = workspace.value
-  const workspaceChanged = Boolean(previousWorkspace && previousWorkspace.id !== nextWorkspace.id)
-  const detachedCurrentDocument = Boolean(
-    workspaceChanged
-    && previousWorkspace?.provider === 'local'
-    && detachCurrentLocalWorkspaceDocument(previousWorkspace.id),
-  )
-  const mutationCleanup = workspaceChanged
-    ? cancelActiveWorkspaceMutation()
-    : Promise.resolve(true)
-  if (workspaceChanged && activeDialog.value === 'workspace') activeDialog.value = null
   workspace.value = nextWorkspace
   if (nextWorkspace.provider === 'local' && documentStorageKind.value === 'local') {
     const relativeDocumentPath = localWorkspaceRelativePath(nextWorkspace.path, localDocumentPath.value)
@@ -962,44 +1378,40 @@ function setWorkspace(value: unknown) {
   loadingWorkspaceDirectories.value = new Set()
   truncatedWorkspaceDirectories.value = new Set()
   workspaceRefreshQueued = false
-  renderState.value = detachedCurrentDocument
-    ? t('workspace.closedCurrentPreserved')
-    : t('workspace.opened', { name: nextWorkspace.name })
-  if (previousWorkspace && workspaceChanged) {
-    if (previousWorkspace.provider === 'webdav') {
-      if (remoteWorkspaceId.value !== previousWorkspace.id) {
-        void mutationCleanup.finally(() => CloseWebDAVWorkspace(previousWorkspace.id).catch(() => {}))
-      }
-    } else {
-      void mutationCleanup.finally(() => CloseWorkspace(previousWorkspace.id).catch(() => {}))
-    }
-  }
+  renderState.value = t('workspace.opened', { name: nextWorkspace.name })
   void nextTick(scheduleLayoutReconciliation)
   return true
 }
 
-function closeWorkspace() {
-  const activeWorkspace = workspace.value
-  const detachedCurrentDocument = Boolean(
-    activeWorkspace?.provider === 'local'
-    && detachCurrentLocalWorkspaceDocument(activeWorkspace.id),
-  )
-  const mutationCleanup = cancelActiveWorkspaceMutation()
-  if (activeDialog.value === 'workspace') activeDialog.value = null
-  workspace.value = null
-  workspaceChildren.value = {}
-  expandedWorkspaceDirectories.value = new Set()
-  loadingWorkspaceDirectories.value = new Set()
-  truncatedWorkspaceDirectories.value = new Set()
-  workspaceRefreshQueued = false
-  if (activeWorkspace?.provider === 'webdav') {
-    if (remoteWorkspaceId.value !== activeWorkspace.id) {
-      void mutationCleanup.finally(() => CloseWebDAVWorkspace(activeWorkspace.id).catch(() => {}))
-    }
-  } else if (activeWorkspace?.id) {
-    void mutationCleanup.finally(() => CloseWorkspace(activeWorkspace.id).catch(() => {}))
+async function openWorkspaceTab(value: unknown) {
+  const nextWorkspace = normalizeWorkspace(value)
+  if (!nextWorkspace) return false
+  const canReuseActive = builtInDocument.value !== null || (!dirty.value && !localDocumentPath.value && !remoteDocumentId.value)
+  if (!canReuseActive) {
+    await openDocumentTab({
+      path: '',
+      name: t('document.untitledFilename'),
+      content: '',
+      welcome: false,
+    }, 'status.ready')
   }
-  if (detachedCurrentDocument) renderState.value = t('workspace.closedCurrentPreserved')
+  return setWorkspace(nextWorkspace)
+}
+
+async function closeWorkspace() {
+  const activeWorkspace = workspace.value
+  if (!activeWorkspace || busy.value) return
+  const detachedDocumentCount = detachWorkspaceTabs(activeWorkspace.id)
+  const mutationCleanup = cancelActiveWorkspaceMutation({ reportFailure: false })
+  if (activeDialog.value === 'workspace') activeDialog.value = null
+  workspaceRefreshQueued = false
+  await mutationCleanup
+  if (activeWorkspace.provider === 'webdav') {
+    await CloseWebDAVWorkspace(activeWorkspace.id).catch(showError)
+  } else {
+    await CloseWorkspace(activeWorkspace.id).catch(showError)
+  }
+  if (detachedDocumentCount > 0) renderState.value = t('workspace.closedCurrentPreserved')
   void nextTick(scheduleLayoutReconciliation)
 }
 
@@ -1157,11 +1569,228 @@ async function performDocumentTransition(
   }
 }
 
-async function newDocument() {
-  await performDocumentTransition('new', () => {
-    setDocument({ path: '', name: t('document.untitledFilename'), content: '', welcome: false }, 'document.created')
-    void nextTick(() => editor.value?.focus())
+interface CloseDocumentTabOptions {
+  /** A bulk close selects survivors immediately but leaves their preview asynchronous. */
+  deferPreview?: boolean
+}
+
+async function closeDocumentTab(tabId: string, options: CloseDocumentTabOptions = {}) {
+  const closingIndex = tabs.value.findIndex((tab) => tab.id === tabId)
+  if (closingIndex < 0 || busy.value || documentTransitionInProgress) return false
+  const closing = tabs.value[closingIndex]
+  const previouslyActiveTabId = activeTabId.value
+  if (activeTabId.value !== tabId && closing.source !== closing.savedSource) {
+    // A saved background tab can be released directly. A dirty background tab
+    // becomes active only to give its prompt the right file context; do not
+    // start a preview that the close operation is about to discard.
+    await activateTab(tabId, true, { renderPreview: false })
+  }
+  const closingIsActive = activeTabId.value === tabId
+  if (closingIsActive) interruptActivePreviewWork()
+  const completed = await performDocumentTransition('close', async () => undefined)
+  if (!completed) {
+    if (previouslyActiveTabId !== tabId && tabs.value.some((tab) => tab.id === previouslyActiveTabId)) {
+      await activateTab(previouslyActiveTabId, true, { awaitPreview: false })
+    } else if (closingIsActive) {
+      void requestActivePreviewRender('fallback')
+    }
+    return false
+  }
+  const nextId = nextActiveTabID(tabs.value, closingIndex)
+  const remaining = tabs.value.filter((tab) => tab.id !== tabId)
+  if (closingIsActive) discardActivePreview()
+  dropCachedPreviewForTab(tabId)
+  await releaseDocumentCapability(closing)
+  await releaseUnusedWorkspace(closing, remaining)
+  if (!remaining.length) {
+    const welcome = await LoadWelcomeDocument(locale.value) as DocumentData
+    const replacement = createDocumentTab(newTabID(), welcome, null, t('status.ready'))
+    tabs.value = [replacement]
+    activeTabId.value = replacement.id
+    await nextTick()
+    await requestActivePreviewRender('open')
+    return true
+  }
+  tabs.value = remaining
+  if (closingIsActive) {
+    await activateTab(nextId || remaining[0].id, true, {
+      awaitPreview: false,
+      renderPreview: !options.deferPreview,
+    })
+  }
+  return true
+}
+
+function closeTabContextMenu({ restoreFocus = false } = {}) {
+  const returnFocus = tabContextMenuReturnFocus
+  tabContextMenu.value = null
+  tabContextMenuReturnFocus = null
+  if (restoreFocus && returnFocus?.isConnected) {
+    void nextTick(() => returnFocus.focus({ preventScroll: true }))
+  }
+}
+
+function focusFirstTabContextAction() {
+  void nextTick(() => {
+    tabContextMenuElement.value
+      ?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')
+      ?.focus({ preventScroll: true })
   })
+}
+
+function openTabContextMenu(event: MouseEvent, tabId: string) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (busy.value || !tabs.value.some((tab) => tab.id === tabId)) return
+  const menuWidth = 190
+  const menuHeight = 174
+  tabContextMenuReturnFocus = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  tabContextMenu.value = {
+    tabId,
+    x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+  }
+  focusFirstTabContextAction()
+}
+
+function openTabContextMenuFromKeyboard(event: KeyboardEvent, tabId: string) {
+  if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return false
+  event.preventDefault()
+  const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  const bounds = target?.getBoundingClientRect()
+  openTabContextMenu({
+    preventDefault() {},
+    stopPropagation() {},
+    currentTarget: target,
+    clientX: bounds?.left || 8,
+    clientY: bounds?.bottom || 8,
+  } as unknown as MouseEvent, tabId)
+  return true
+}
+
+async function runTabContextAction(mode: TabCloseMode) {
+  const context = tabContextMenu.value
+  if (!context || busy.value) return
+  const preferredTabId = context.tabId
+  const targets = tabCloseTargetIDs(tabs.value, preferredTabId, mode)
+  const deferPreview = targets.length > 1
+  closeTabContextMenu()
+  for (const tabId of targets) {
+    if (!tabs.value.some((tab) => tab.id === tabId)) continue
+    if (!await closeDocumentTab(tabId, { deferPreview })) {
+      if (tabs.value.some((tab) => tab.id === preferredTabId)) {
+        await activateTab(preferredTabId, true, { awaitPreview: false })
+      }
+      return
+    }
+  }
+  if (mode !== 'self' && tabs.value.some((tab) => tab.id === preferredTabId)) {
+    await activateTab(preferredTabId, true, { awaitPreview: false })
+    // Intermediate active tabs in a bulk close deliberately skipped preview
+    // work. Start only the final survivor after every close has completed.
+    if (activeTabId.value === preferredTabId && !activePreviewCacheKey) {
+      void requestActivePreviewRender('fallback')
+    }
+  }
+}
+
+function handleTabContextMenuKeydown(event: KeyboardEvent) {
+  const menu = tabContextMenuElement.value
+  if (!menu) return
+  const items = Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'))
+  if (event.key === 'Escape' || event.key === 'Tab') {
+    event.preventDefault()
+    closeTabContextMenu({ restoreFocus: true })
+    return
+  }
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) || !items.length) return
+  event.preventDefault()
+  const index = items.indexOf(document.activeElement as HTMLElement)
+  const nextIndex = event.key === 'Home'
+    ? 0
+    : event.key === 'End'
+      ? items.length - 1
+      : event.key === 'ArrowUp'
+        ? (index <= 0 ? items.length - 1 : index - 1)
+        : (index < 0 || index === items.length - 1 ? 0 : index + 1)
+  items[nextIndex].focus({ preventScroll: true })
+}
+
+function dismissTabContextMenuFromPointer(event: PointerEvent) {
+  if (!tabContextMenu.value || tabContextMenuElement.value?.contains(event.target as Node)) return
+  closeTabContextMenu()
+}
+
+function dismissTabContextMenuFromViewport() {
+  if (tabContextMenu.value) closeTabContextMenu()
+}
+
+function tabLocation(tab: DocumentTabState) {
+  if (tab.location) return tab.location
+  if (tab.builtIn === 'welcome') return t('document.welcomeLocation')
+  if (tab.builtIn === 'render-test') return t('document.renderTestLocation')
+  return t('document.unsavedLocation')
+}
+
+function scheduleRememberLastPage() {
+  if (!initialDocumentLoaded) return
+  window.clearTimeout(rememberLastPageTimer)
+  rememberLastPageTimer = window.setTimeout(() => {
+    const tab = activeTab.value
+    const kind = tab.builtIn
+      ? 'builtin'
+      : tab.storageKind === 'local' && tab.workspaceId && tab.localDocumentId
+        ? 'local'
+        : tab.storageKind === 'webdav'
+          ? 'webdav'
+          : ''
+    const documentCapabilityId = tab.storageKind === 'webdav' ? tab.remoteDocumentId : tab.localDocumentId
+    void RememberLastPage(kind, tab.workspaceId, documentCapabilityId, tab.builtIn || '').catch((error) => {
+      console.error('Unable to remember the active page', error)
+    })
+  }, 120)
+}
+
+function handleTabKeydown(event: KeyboardEvent, index: number, tabId: string) {
+  if (openTabContextMenuFromKeyboard(event, tabId)) return
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  const nextIndex = event.key === 'Home'
+    ? 0
+    : event.key === 'End'
+      ? tabs.value.length - 1
+      : event.key === 'ArrowLeft'
+        ? (index <= 0 ? tabs.value.length - 1 : index - 1)
+        : (index >= tabs.value.length - 1 ? 0 : index + 1)
+  const nextTab = tabs.value[nextIndex]
+  if (!nextTab) return
+  void activateTab(nextTab.id).then(() => {
+    document.querySelector<HTMLElement>(`[data-document-tab-id="${CSS.escape(nextTab.id)}"]`)?.focus()
+  })
+}
+
+async function resolveAllDirtyTabsBeforeQuit() {
+  const dirtyTabIds = tabs.value.filter((tab) => tab.source !== tab.savedSource).map((tab) => tab.id)
+  for (const tabId of dirtyTabIds) {
+    if (!tabs.value.some((tab) => tab.id === tabId)) continue
+    await activateTab(tabId)
+    const accepted = await runGuardedDocumentTransition({
+      dirty: dirty.value,
+      requestDecision: () => requestUnsavedDecision('quit'),
+      save: saveDocument,
+      transition: () => undefined,
+    })
+    if (!accepted) return false
+  }
+  return true
+}
+
+async function newDocument() {
+	await openDocumentTab(
+		{ path: '', name: t('document.untitledFilename'), content: '', welcome: false },
+		'document.created',
+	)
+	void nextTick(() => editor.value?.focus())
 }
 
 async function bindLocalDocumentToActiveWorkspace(document: DocumentData) {
@@ -1185,15 +1814,12 @@ async function bindLocalDocumentToActiveWorkspace(document: DocumentData) {
 }
 
 async function openDocument() {
-  await performDocumentTransition('open', async () => {
-    try {
-      const selected = await OpenFile() as DocumentData
-      const document = await bindLocalDocumentToActiveWorkspace(selected)
-      if (document?.name) setDocument(document)
-    } catch (error) {
-      showError(error)
-    }
-  })
+	try {
+		const selected = await OpenFile() as DocumentData
+		if (selected?.name) await openDocumentTab(selected)
+	} catch (error) {
+		showError(error)
+	}
 }
 
 function clearWebDAVConnectionForm(clearEndpoint = true) {
@@ -1570,7 +2196,7 @@ async function openRecentWebDAV(id: string) {
     if (!endpoint) throw new Error(t('webdav.invalidResponse'))
     const recentResult = await resolveRecentWebDAVOpen(connection, async (connectionID) => {
       const openedWorkspace = await ConnectSavedWebDAV(connectionID)
-      if (!setWorkspace(openedWorkspace)) throw new Error(t('webdav.invalidResponse'))
+      if (!await openWorkspaceTab(openedWorkspace)) throw new Error(t('webdav.invalidResponse'))
     })
     if (recentResult.kind === 'connected') {
       renderState.value = t('webdav.connected', { name: workspace.value?.name || connection.name || 'WebDAV' })
@@ -1598,7 +2224,7 @@ async function connectSavedWebDAV(connection: SavedWebDAVConnection) {
     savedWebDAVConnectionsError.value = ''
     renderState.value = t('webdav.connectingSaved', { name: connection.name })
     const openedWorkspace = await ConnectSavedWebDAV(connection.id)
-    if (!setWorkspace(openedWorkspace)) throw new Error(t('webdav.invalidResponse'))
+    if (!await openWorkspaceTab(openedWorkspace)) throw new Error(t('webdav.invalidResponse'))
     renderState.value = t('webdav.connected', { name: workspace.value?.name || connection.name })
     activeDialog.value = null
   } catch (error) {
@@ -1726,7 +2352,7 @@ async function connectWebDAV() {
   renderState.value = t('webdav.connecting')
   try {
     const openedWorkspace = await ConnectWebDAV({ endpoint, username, password })
-    if (!setWorkspace(openedWorkspace)) throw new Error(t('webdav.invalidResponse'))
+    if (!await openWorkspaceTab(openedWorkspace)) throw new Error(t('webdav.invalidResponse'))
     renderState.value = t('webdav.connected', { name: workspace.value?.name || 'WebDAV' })
     activeDialog.value = null
   } catch (error) {
@@ -1748,7 +2374,7 @@ async function openDirectory() {
   try {
     busy.value = true
     const openedWorkspace = await OpenDirectory()
-    setWorkspace(openedWorkspace)
+    await openWorkspaceTab(openedWorkspace)
   } catch (error) {
     showError(error)
   } finally {
@@ -1763,7 +2389,7 @@ async function openRecentDirectory(id: string) {
   }
   try {
     busy.value = true
-    setWorkspace(await OpenRecentDirectory(id))
+    await openWorkspaceTab(await OpenRecentDirectory(id))
   } catch (error) {
     showError(error)
   } finally {
@@ -1823,6 +2449,16 @@ async function toggleWorkspaceDirectory(entry: WorkspaceEntryData) {
 async function openWorkspaceDocument(entry: WorkspaceEntryData) {
   const activeWorkspace = workspace.value
   if (!activeWorkspace || entry.kind !== 'markdown') return
+  const existingTab = findWorkspaceDocumentTab(
+    tabs.value,
+    activeWorkspace.provider,
+    activeWorkspace.id,
+    entry.path,
+  )
+  if (existingTab) {
+    await activateTab(existingTab.id)
+    return
+  }
   const currentProvider = documentStorageKind.value === 'webdav' ? 'webdav' : 'local'
   if (isActiveWorkspaceFile(
     activeWorkspace.provider,
@@ -1832,19 +2468,17 @@ async function openWorkspaceDocument(entry: WorkspaceEntryData) {
     documentWorkspaceId.value,
     currentWorkspacePath.value,
   )) return
-  await performDocumentTransition('open', async () => {
-    try {
-      busy.value = true
-      const document = activeWorkspace.provider === 'webdav'
-        ? await OpenWebDAVFile(activeWorkspace.id, entry.path) as DocumentData
-        : await OpenWorkspaceFile(activeWorkspace.id, entry.path) as DocumentData
-      if (document?.name) setDocument(document)
-    } catch (error) {
-      showError(error)
-    } finally {
-      busy.value = false
-    }
-  })
+	try {
+		busy.value = true
+		const document = activeWorkspace.provider === 'webdav'
+			? await OpenWebDAVFile(activeWorkspace.id, entry.path) as DocumentData
+			: await OpenWorkspaceFile(activeWorkspace.id, entry.path) as DocumentData
+		if (document?.name) await openDocumentTab(document)
+	} catch (error) {
+		showError(error)
+	} finally {
+		busy.value = false
+	}
 }
 
 function showWorkspaceCreateMarkdown(parentPath: string) {
@@ -2134,39 +2768,43 @@ function workspaceDocumentDisplayLocation(activeWorkspace: WorkspaceData, relati
   }
 }
 
-function updateCurrentDocumentAfterWorkspaceRename(
+function updateDocumentsAfterWorkspaceRename(
   activeWorkspace: WorkspaceData,
   sourcePath: string,
   destinationPath: string,
 ) {
-  if (
-    documentWorkspaceId.value !== activeWorkspace.id
-    || !workspacePathIsWithin(currentWorkspacePath.value, sourcePath)
-  ) return
-  const nextPath = rebaseWorkspacePath(currentWorkspacePath.value, sourcePath, destinationPath)
-  currentWorkspacePath.value = nextPath
-  fileName.value = nextPath.split('/').pop() || fileName.value
-  documentLocation.value = workspaceDocumentDisplayLocation(activeWorkspace, nextPath)
-  if (activeWorkspace.provider === 'local') {
-    localDocumentPath.value = localWorkspaceAbsolutePath(activeWorkspace.path, nextPath)
+  for (const tab of tabs.value) {
+    if (tab.workspaceId !== activeWorkspace.id || !workspacePathIsWithin(tab.workspacePath, sourcePath)) continue
+    const nextPath = rebaseWorkspacePath(tab.workspacePath, sourcePath, destinationPath)
+    tab.workspacePath = nextPath
+    tab.name = nextPath.split('/').pop() || tab.name
+    tab.location = workspaceDocumentDisplayLocation(activeWorkspace, nextPath)
+    if (activeWorkspace.provider === 'local') {
+      tab.localPath = localWorkspaceAbsolutePath(activeWorkspace.path, nextPath)
+    }
   }
 }
 
-function preserveCurrentDocumentAfterWorkspaceDelete(activeWorkspace: WorkspaceData, deletedPath: string) {
-  if (
-    documentWorkspaceId.value !== activeWorkspace.id
-    || !workspacePathIsWithin(currentWorkspacePath.value, deletedPath)
-  ) return
-  const retainedSource = source.value
-  setDocument({
-    path: '',
-    name: t('document.untitledFilename'),
-    content: retainedSource,
-    welcome: false,
-  }, 'workspace.deletedCurrentPreserved')
-  // The deleted backing file can never be treated as the saved version. Keep
-  // even an empty retained buffer dirty so quit/open still invokes the guard.
-  savedSource.value = `${retainedSource}\u0000`
+function preserveDocumentsAfterWorkspaceDelete(activeWorkspace: WorkspaceData, deletedPath: string) {
+  let preserved = 0
+  for (const tab of tabs.value) {
+    if (tab.workspaceId !== activeWorkspace.id || !workspacePathIsWithin(tab.workspacePath, deletedPath)) continue
+    tab.name = t('document.untitledFilename')
+    tab.savedSource = `${tab.source}\u0000`
+    tab.storageKind = 'local'
+    tab.localPath = ''
+    tab.location = ''
+    tab.workspaceId = ''
+    tab.workspacePath = ''
+    tab.localDocumentId = ''
+    tab.remoteDocumentId = ''
+    tab.remoteWorkspaceId = ''
+    tab.etag = ''
+    tab.builtIn = null
+    tab.renderState = t('workspace.deletedCurrentPreserved')
+    preserved += 1
+  }
+  return preserved
 }
 
 async function submitWorkspaceNameDialog() {
@@ -2184,27 +2822,25 @@ async function submitWorkspaceNameDialog() {
     const destinationPath = workspaceJoinPath(workspaceDialogParentPath.value, name)
     workspaceMutationError.value = ''
 
-    if (view === 'create-markdown') {
-      activeDialog.value = null
-      await performDocumentTransition('open', async () => {
-        workspaceMutationBusy.value = true
-        busy.value = true
-        try {
-          const document = await createWorkspaceMarkdown(activeWorkspace, destinationPath)
-          if (!document?.name) throw new Error(t('workspace.invalidResponse'))
-          setDocument(document, 'workspace.markdownCreated')
-          await refreshWorkspace({ silent: true })
-        } catch (error) {
-          await refreshWorkspace({ silent: true })
-          renderState.value = t('workspace.operationFailed', {
-            message: localizedWorkspaceErrorMessage(error),
-          })
-        } finally {
-          busy.value = false
-          workspaceMutationBusy.value = false
-        }
-      })
-      return
+		if (view === 'create-markdown') {
+			activeDialog.value = null
+			workspaceMutationBusy.value = true
+			busy.value = true
+			try {
+				const document = await createWorkspaceMarkdown(activeWorkspace, destinationPath)
+				if (!document?.name) throw new Error(t('workspace.invalidResponse'))
+				await openDocumentTab(document, 'workspace.markdownCreated')
+				await refreshWorkspace({ silent: true })
+			} catch (error) {
+				await refreshWorkspace({ silent: true })
+				renderState.value = t('workspace.operationFailed', {
+					message: localizedWorkspaceErrorMessage(error),
+				})
+			} finally {
+				busy.value = false
+				workspaceMutationBusy.value = false
+			}
+			return
     }
 
     workspaceMutationBusy.value = true
@@ -2218,7 +2854,7 @@ async function submitWorkspaceNameDialog() {
         return
       }
       const renamedEntry = await renameWorkspaceEntry(activeWorkspace, entry, destinationPath)
-      updateCurrentDocumentAfterWorkspaceRename(activeWorkspace, entry.path, renamedEntry.path)
+      updateDocumentsAfterWorkspaceRename(activeWorkspace, entry.path, renamedEntry.path)
       renderState.value = t('workspace.renamed', { name })
     }
     activeDialog.value = null
@@ -2251,18 +2887,18 @@ async function confirmDeleteWorkspaceEntry() {
     || workspaceMutationNeedsRestart.value
     || workspaceDialogView.value !== 'delete'
   ) return
-  const deletionCouldAffectCurrentDocument = documentWorkspaceId.value === activeWorkspace.id
-    && workspacePathIsWithin(currentWorkspacePath.value, entry.path)
+  const affectedDocumentCount = tabs.value.filter((tab) => tab.workspaceId === activeWorkspace.id
+    && workspacePathIsWithin(tab.workspacePath, entry.path)).length
   workspaceMutationBusy.value = true
   busy.value = true
   workspaceMutationError.value = ''
-  if (deletionCouldAffectCurrentDocument) {
+  if (affectedDocumentCount > 0) {
     workspaceDeleteBufferPreserved.value = true
-    preserveCurrentDocumentAfterWorkspaceDelete(activeWorkspace, entry.path)
+    preserveDocumentsAfterWorkspaceDelete(activeWorkspace, entry.path)
   }
   try {
     await deleteWorkspaceEntry(activeWorkspace, entry)
-    renderState.value = deletionCouldAffectCurrentDocument
+    renderState.value = affectedDocumentCount > 0
       ? t('workspace.deletedCurrentPreserved')
       : t('workspace.deleted', { name: entry.name })
     activeDialog.value = null
@@ -2301,18 +2937,15 @@ async function openRecentItem(value: unknown) {
   if (candidate.kind !== 'file') return
   const recentID = candidate.id
 
-  await performDocumentTransition('open', async () => {
-    try {
-      busy.value = true
-      const selected = await OpenRecentFile(recentID) as DocumentData
-      const document = await bindLocalDocumentToActiveWorkspace(selected)
-      if (document?.name) setDocument(document)
-    } catch (error) {
-      showError(error)
-    } finally {
-      busy.value = false
-    }
-  })
+	try {
+		busy.value = true
+		const selected = await OpenRecentFile(recentID) as DocumentData
+		if (selected?.name) await openDocumentTab(selected)
+	} catch (error) {
+		showError(error)
+	} finally {
+		busy.value = false
+	}
 }
 
 async function clearRecentItems() {
@@ -2546,8 +3179,8 @@ async function exportDocument(format: ExportFormat) {
   try {
     busy.value = true
     renderState.value = t('export.preparing', { format: exportLabels.value[format] })
-    window.clearTimeout(renderTimer)
-    const rendered = await renderNow(snapshot.source, snapshot.theme)
+    renderScheduler.cancel()
+    const rendered = await renderNow(snapshot.source, snapshot.theme, undefined, { awaitEnhancement: true })
     if (!rendered) throw new Error(t('error.previewInterrupted'))
     await nextTick()
     assertExportSnapshot(snapshot)
@@ -2872,14 +3505,15 @@ async function handleCloseRequest() {
   try {
     await cancelActiveWorkspaceMutation({ reportFailure: false })
     if (activeDialog.value === 'workspace') activeDialog.value = null
-    const completed = await performDocumentTransition('quit', async () => {
-      if (pendingUpdateInstall) {
-        updateState.value = 'installing'
-        await LaunchUpdateInstaller()
-      }
-      quitting = true
-      await ConfirmQuit()
-    })
+		const completed = await resolveAllDirtyTabsBeforeQuit()
+		if (completed) {
+			if (pendingUpdateInstall) {
+				updateState.value = 'installing'
+				await LaunchUpdateInstaller()
+			}
+			quitting = true
+			await ConfirmQuit()
+		}
     if (!completed) {
       await CancelQuitRequest()
       if (pendingUpdateInstall) {
@@ -2899,25 +3533,21 @@ async function handleCloseRequest() {
 }
 
 async function showWelcome() {
-  await performDocumentTransition('open', async () => {
-    try {
-      const document = await LoadWelcomeDocument(locale.value) as DocumentData
-      setDocument(document, 'status.ready')
-    } catch (error) {
-      showError(error)
-    }
-  })
+	try {
+		const document = await LoadWelcomeDocument(locale.value) as DocumentData
+		await openDocumentTab(document, 'status.ready')
+	} catch (error) {
+		showError(error)
+	}
 }
 
 async function showRenderingTest() {
-  await performDocumentTransition('open', async () => {
-    try {
-      const document = await LoadRenderingTestDocument() as DocumentData
-      setDocument(document, 'status.ready')
-    } catch (error) {
-      showError(error)
-    }
-  })
+	try {
+		const document = await LoadRenderingTestDocument() as DocumentData
+		await openDocumentTab(document, 'status.ready')
+	} catch (error) {
+		showError(error)
+	}
 }
 
 async function loadApplicationInfo() {
@@ -3162,7 +3792,10 @@ async function applyLanguageMode(mode: LanguageMode, replaceWelcome = true) {
     const welcome = await LoadWelcomeDocument(nextLocale) as DocumentData
     setDocument(welcome, 'status.ready')
   } else {
-    await renderNow()
+    previewArtifacts.clear()
+    previewCommit.invalidate()
+    cancelPreviewWorkerRequests()
+    await requestActivePreviewRender('locale')
   }
   await SetWindowTitle(fileName.value, dirty.value)
 }
@@ -3208,6 +3841,12 @@ function handleEditorPreferenceChange(key: 'lineNumbers' | 'stickyHeadings', eve
     refreshScrollAnchors()
     scheduleLayoutReconciliation()
   })
+}
+
+function handleWindowControlStyleChange(event: Event) {
+	const nextStyle = normalizeWindowControlStyle((event.target as HTMLSelectElement).value)
+	windowControlStyle.value = nextStyle
+	localStorage.setItem(windowControlStyleStorageKey, nextStyle)
 }
 
 function resetFindPosition() {
@@ -3330,23 +3969,20 @@ async function handleSystemDocument(document: DocumentData) {
 }
 
 async function drainSystemDocuments() {
-  if (drainingSystemDocuments || documentTransitionInProgress || !pendingSystemDocuments.length) return
+  if (drainingSystemDocuments || busy.value || documentTransitionInProgress || !pendingSystemDocuments.length) return
   drainingSystemDocuments = true
-  try {
-    while (pendingSystemDocuments.length) {
-      const document = pendingSystemDocuments.shift()
-      if (!document) continue
-      await performDocumentTransition('open', async () => {
-        const boundDocument = await bindLocalDocumentToActiveWorkspace(document)
-        setDocument(boundDocument)
-        if (!document.activationId) return
-        try {
-          await ActivateRecentDocument(document.activationId)
-        } catch (error) {
-          showError(error)
-        }
-      })
-    }
+	try {
+		while (pendingSystemDocuments.length) {
+			const document = pendingSystemDocuments.shift()
+			if (!document) continue
+			await openDocumentTab(document)
+			if (!document.activationId) continue
+			try {
+				await ActivateRecentDocument(document.activationId)
+			} catch (error) {
+				showError(error)
+			}
+		}
   } finally {
     drainingSystemDocuments = false
   }
@@ -3396,12 +4032,12 @@ function handleMenuAction(action: string) {
 }
 
 function scheduleRender() {
-  window.clearTimeout(renderTimer)
   // Invalidate any Mermaid work still running for the previous document.
   // Otherwise an old asynchronous render may keep changing preview height.
   previewCommit.invalidate()
+  cancelPreviewWorkerRequests()
   renderState.value = t('status.waiting')
-  renderTimer = window.setTimeout(renderNow, 120)
+  void requestActivePreviewRender('source', 120)
 }
 
 async function preparePreviewImages(
@@ -3477,7 +4113,7 @@ async function preparePreviewImages(
       let resolved: ImageAssetData
       try {
         resolved = await resolvePreparedImageAsset(
-          activePreviewImages,
+          resources,
           pendingImageAssets,
           cacheKey,
           sequence,
@@ -3577,92 +4213,241 @@ function exportArticleHTML(target: HTMLElement, format: 'html' | 'doc') {
   return clone.innerHTML
 }
 
-async function renderNow(sourceText = source.value, renderTheme = theme.value): Promise<boolean> {
+function sanitizePreviewHTML(renderedHTML: string) {
+  return DOMPurify.sanitize(renderedHTML, {
+    USE_PROFILES: { html: true },
+    ADD_TAGS: ['details', 'summary', 'mark'],
+    ADD_ATTR: [
+      'target', 'rel', 'checked', 'disabled', 'data-alert', 'data-display-mode', 'data-source-line', 'data-kind',
+      'data-extended-diagram', 'data-extended-diagram-state',
+      'data-inkmark-trusted',
+      'data-wiki-target',
+      'data-inkmark-image-source', 'data-inkmark-image-alt', 'data-inkmark-image-title',
+    ],
+    // No resource-bearing HTML reaches the detached staging DOM. Markdown
+    // image tokens receive a validated Blob URL only after the resolver has
+    // accepted their bytes.
+    FORBID_TAGS: [
+      'script', 'style', 'iframe', 'object', 'embed', 'svg', 'img', 'picture', 'source', 'video', 'audio', 'track',
+      'form', 'button', 'select', 'textarea', 'fieldset', 'option',
+    ],
+    FORBID_ATTR: [
+      'src', 'srcset', 'poster', 'background', 'style',
+      'data-inkmark-public-image', 'data-inkmark-image-id',
+    ],
+  })
+}
+
+function previewNeedsEnhancement(root: HTMLElement) {
+  return Boolean(root.querySelector('pre.mermaid, [data-extended-diagram], .inkmark-image-placeholder[data-inkmark-image-source]'))
+}
+
+async function enhancePreview(
+  root: HTMLElement,
+  sequence: number,
+  renderTheme: Theme,
+  imageContext: ImageRenderContext,
+  resources: PreviewImageResourceSet,
+  measurement: ReturnType<PreviewPerformanceMetrics['begin']>,
+) {
+  try {
+    await Promise.all([
+      renderDiagrams(root, sequence, renderTheme),
+      renderExtendedDiagrams(root, {
+        isCurrent: () => previewCommit.isCurrent(sequence),
+        echartsRenderer: 'svg',
+        chartWidth: root.clientWidth,
+        chartHeight: 420,
+        palette: themePalette(renderTheme),
+      }).then((result) => {
+        if (!previewCommit.isCurrent(sequence)) result.dispose()
+        else {
+          activeExtendedDiagramDispose?.()
+          activeExtendedDiagramDispose = result.dispose
+        }
+      }),
+      preparePreviewImages(root, sequence, imageContext, resources),
+    ])
+  } catch (error) {
+    // A newer document normally cancels this phase. The core preview remains
+    // usable if an individual optional resource cannot be enhanced.
+    if (previewCommit.isCurrent(sequence) && !(error instanceof DOMException && error.name === 'AbortError')) {
+      console.warn('Preview enhancement failed', error)
+    }
+  } finally {
+    if (previewCommit.isCurrent(sequence)) {
+      activePreviewNeedsEnhancement = false
+      renderState.value = t('status.rendered')
+      refreshScrollAnchors()
+      reconcileActiveScroll()
+    }
+    measurement.mark('enhance')
+    measurement.finish()
+  }
+}
+
+function createCorePreviewStaging(target: HTMLElement, renderedHTML: string, trustedMarker: string) {
+  const staging = target.cloneNode(false) as HTMLElement
+  staging.innerHTML = sanitizePreviewHTML(renderedHTML)
+  enforceGeneratedPreviewProvenance(staging, trustedMarker)
+  decoratePreview(staging)
+  renderMath(staging)
+  highlightCode(staging)
+  return staging
+}
+
+function commitCorePreview(
+  target: HTMLElement,
+  staging: HTMLElement,
+  tab: DocumentTabState,
+  renderTheme: Theme,
+  resources: PreviewImageResourceSet,
+  chunking: boolean,
+) {
+  activeExtendedDiagramDispose?.()
+  activeExtendedDiagramDispose = null
+  target.classList.remove('render-error')
+  target.replaceChildren(...Array.from(staging.childNodes))
+  activePreviewImages.release()
+  activePreviewImages = resources
+  activePreviewCacheKey = previewCacheKey(tab, renderTheme)
+  activePreviewChunking = chunking
+  activePreviewNeedsEnhancement = chunking || previewNeedsEnhancement(target)
+  refreshScrollAnchors()
+  reconcileActiveScroll()
+}
+
+function appendCorePreviewChunk(target: HTMLElement, renderedHTML: string, trustedMarker: string) {
+  const staging = createCorePreviewStaging(target, renderedHTML, trustedMarker)
+  target.append(...Array.from(staging.childNodes))
+  scheduleLayoutReconciliation()
+}
+
+function yieldPreviewWork() {
+  return new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+}
+
+async function renderNow(
+  sourceText = source.value,
+  renderTheme = theme.value,
+  request?: PreviewRenderRequest,
+  options: { awaitEnhancement?: boolean } = {},
+): Promise<boolean> {
   const target = preview.value
   if (!target) return false
+  const tab = activeTab.value
+  const expectedTabID = request?.tabID || tab.id
+  const expectedRevision = request?.sourceRevision || tab.sourceRevision
   const sequence = previewCommit.begin()
   const nextPreviewImages = new PreviewImageResourceSet()
-  const nextExtendedDiagram = { dispose: null as (() => void) | null }
-  let acceptExtendedDiagramResult = true
   const imageContext = currentImageRenderContext()
+  const measurement = previewPerformance.begin(tab.id, sourceText, { startedAt: request?.queuedAt })
   renderState.value = t('status.rendering')
   try {
     const trustedMarkerBytes = new Uint32Array(4)
     crypto.getRandomValues(trustedMarkerBytes)
     const trustedMarker = `preview-${sequence}-${Array.from(trustedMarkerBytes, (value) => value.toString(16).padStart(8, '0')).join('')}`
-    const renderedHTML = markdown.render(sourceText, { inkmarkTrustedMarker: trustedMarker })
-    const cleanHTML = DOMPurify.sanitize(renderedHTML, {
-      USE_PROFILES: { html: true },
-      ADD_TAGS: ['details', 'summary', 'mark'],
-      ADD_ATTR: [
-        'target', 'rel', 'checked', 'disabled', 'data-alert', 'data-display-mode', 'data-source-line', 'data-kind',
-        'data-extended-diagram', 'data-extended-diagram-state',
-        'data-inkmark-trusted',
-        'data-wiki-target',
-        'data-inkmark-image-source', 'data-inkmark-image-alt', 'data-inkmark-image-title',
-      ],
-      // No resource-bearing HTML reaches the detached staging DOM. Markdown
-      // image tokens use inert spans above and receive a validated Blob URL
-      // only after the native resolver accepts their bytes.
-      FORBID_TAGS: [
-        'script', 'style', 'iframe', 'object', 'embed', 'svg', 'img', 'picture', 'source', 'video', 'audio', 'track',
-        'form', 'button', 'select', 'textarea', 'fieldset', 'option',
-      ],
-      FORBID_ATTR: [
-        'src', 'srcset', 'poster', 'background', 'style',
-        'data-inkmark-public-image', 'data-inkmark-image-id',
-      ],
-    })
-    const committed = await previewCommit.stageAndCommit(sequence, async () => {
-      const staging = target.cloneNode(false) as HTMLElement
-      staging.innerHTML = cleanHTML
-      enforceGeneratedPreviewProvenance(staging, trustedMarker)
-      decoratePreview(staging)
-      renderMath(staging)
-      highlightCode(staging)
-      await Promise.all([
-        renderDiagrams(staging, sequence, renderTheme),
-        renderExtendedDiagrams(staging, {
-          isCurrent: () => previewCommit.isCurrent(sequence),
-          echartsRenderer: 'svg',
-          chartWidth: target.clientWidth,
-          chartHeight: 420,
-          palette: themePalette(renderTheme),
-        }).then((result) => {
-          if (!acceptExtendedDiagramResult || !previewCommit.isCurrent(sequence)) result.dispose()
-          else nextExtendedDiagram.dispose = result.dispose
-        }),
-        preparePreviewImages(staging, sequence, imageContext, nextPreviewImages),
-      ])
-      return staging
+    measurement.mark('worker')
+    let resolveFirstCoreCommit: () => void = () => undefined
+    const firstCoreCommitted = new Promise<void>((resolve) => { resolveFirstCoreCommit = resolve })
+    let appendedChunks = Promise.resolve()
+    let workerTask: ReturnType<typeof renderMarkdownInWorker> | null = null
+    let firstWorkerChunk = { html: '', chunked: false }
+    let renderedHTML = ''
+    try {
+      workerTask = renderMarkdownInWorker(sourceText, expectedRevision, trustedMarker, (chunk) => {
+        if (chunk.index === 0) return
+        appendedChunks = appendedChunks.then(async () => {
+          await firstCoreCommitted
+          if (!previewCommit.isCurrent(sequence)) return
+          appendCorePreviewChunk(target, chunk.html, trustedMarker)
+          // One bounded core unit per animation frame prevents a giant DOM
+          // append from starving pointer, scroll or tab-selection input.
+          await yieldPreviewWork()
+        })
+      })
+      firstWorkerChunk = await workerTask.firstChunk
+      renderedHTML = firstWorkerChunk.html
+      if (!firstWorkerChunk.chunked) {
+        const workerResult = await workerTask.complete
+        renderedHTML = workerResult.html
+        measurement.setChunked(false)
+        if (activeTab.value.id === expectedTabID && activeTab.value.sourceRevision === expectedRevision) {
+          activeTab.value.derivedSource = workerResult.derived
+        }
+      }
+    } catch (error) {
+      void workerTask?.complete.catch(() => undefined)
+      if (!previewCommit.isCurrent(sequence)) {
+        resolveFirstCoreCommit()
+        return false
+      }
+      // The preview remains available in environments where a Web Worker is
+      // unavailable (for example a restrictive embedded WebView).
+      renderedHTML = markdown.render(sourceText, { inkmarkTrustedMarker: trustedMarker })
+      if (activeTab.value.id === expectedTabID && activeTab.value.sourceRevision === expectedRevision) {
+        activeTab.value.derivedSource = deriveSourceData(sourceText, expectedRevision)
+      }
+      console.warn('Using main-thread Markdown fallback', error)
+    }
+    measurement.mark('sanitize')
+    measurement.mark('core')
+    const committed = await previewCommit.stageAndCommit(sequence, () => {
+      return createCorePreviewStaging(target, renderedHTML, trustedMarker)
     }, (staging) => {
-      // All expensive and asynchronous work happens off-screen. Replacing the
-      // children once keeps the old preview stable until the new one is ready.
-      acceptExtendedDiagramResult = false
-      activeExtendedDiagramDispose?.()
-      activeExtendedDiagramDispose = nextExtendedDiagram.dispose
-      nextExtendedDiagram.dispose = null
-      target.classList.remove('render-error')
-      target.replaceChildren(...Array.from(staging.childNodes))
-      activePreviewImages.release()
-      activePreviewImages = nextPreviewImages
-      refreshScrollAnchors()
-      reconcileActiveScroll()
+      commitCorePreview(target, staging, tab, renderTheme, nextPreviewImages, firstWorkerChunk.chunked)
     })
+    resolveFirstCoreCommit()
     if (!committed) {
-      acceptExtendedDiagramResult = false
-      nextExtendedDiagram.dispose?.()
-      nextExtendedDiagram.dispose = null
       nextPreviewImages.release()
       return false
     }
-    renderState.value = t('status.rendered')
+    measurement.mark('commit')
+    if (firstWorkerChunk.chunked) {
+      measurement.setChunked(true)
+      const finishChunkedPreview = workerTask!.complete.then(async (workerResult) => {
+        await appendedChunks
+        if (!previewCommit.isCurrent(sequence)) return false
+        if (activeTab.value.id === expectedTabID && activeTab.value.sourceRevision === expectedRevision) {
+          activeTab.value.derivedSource = workerResult.derived
+        }
+        activePreviewChunking = false
+        activePreviewNeedsEnhancement = previewNeedsEnhancement(target)
+        if (!activePreviewNeedsEnhancement) {
+          renderState.value = t('status.rendered')
+          measurement.mark('enhance')
+          measurement.finish()
+          return true
+        }
+        await enhancePreview(target, sequence, renderTheme, imageContext, nextPreviewImages, measurement)
+        return true
+      }).catch((error) => {
+        if (previewCommit.isCurrent(sequence)) {
+          renderState.value = t('status.renderFailed')
+          console.warn('Chunked preview failed', error)
+        }
+        measurement.mark('enhance')
+        measurement.finish()
+        return false
+      })
+      if (options.awaitEnhancement) return finishChunkedPreview
+      void finishChunkedPreview
+      return true
+    }
+    if (!activePreviewNeedsEnhancement) {
+      renderState.value = t('status.rendered')
+      measurement.mark('enhance')
+      measurement.finish()
+      return true
+    }
+    const enhancement = enhancePreview(target, sequence, renderTheme, imageContext, nextPreviewImages, measurement)
+    if (options.awaitEnhancement) await enhancement
+    else void enhancement
     return true
   } catch (error) {
-    acceptExtendedDiagramResult = false
-    nextExtendedDiagram.dispose?.()
-    nextExtendedDiagram.dispose = null
     nextPreviewImages.release()
+    measurement.mark('enhance')
+    measurement.finish()
     if (!previewCommit.isCurrent(sequence)) return false
     target.textContent = t('error.markdownRenderFailed', { message: errorMessage(error) })
     target.classList.add('render-error')
@@ -4013,7 +4798,10 @@ function chooseTheme(value: Theme | string) {
   localStorage.setItem('inkmark-theme', nextTheme)
   document.documentElement.dataset.colorScheme = isDarkTheme(nextTheme) ? 'dark' : 'light'
   updateNativeMenu()
-  void renderNow()
+  previewArtifacts.clear()
+  previewCommit.invalidate()
+  cancelPreviewWorkerRequests()
+  void requestActivePreviewRender('theme')
 }
 
 function chooseThemeFromEvent(event: Event) {
@@ -4217,7 +5005,7 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 function onBeforeUnload(event: BeforeUnloadEvent) {
-  if (quitting || !dirty.value) return
+	if (quitting || !tabs.value.some((tab) => tab.source !== tab.savedSource)) return
   event.preventDefault()
   event.returnValue = ''
 }
@@ -4288,7 +5076,10 @@ watch(syncScroll, () => {
   updateNativeMenu()
 })
 watch(busy, (isBusy) => {
-  if (!isBusy) void drainPendingWorkspaceOpen()
+  if (!isBusy) {
+    void drainPendingWorkspaceOpen()
+    void drainSystemDocuments()
+  }
 })
 watch(activeDialog, (nextDialog, previousDialog) => {
   if (nextDialog && !previousDialog) {
@@ -4346,14 +5137,39 @@ watch([imageInsertMode, publicImageURL, imageAltText], () => {
   if (activeDialog.value === 'image' && !imageInsertBusy.value) imageInsertError.value = ''
 })
 watch([fileName, dirty], () => { void SetWindowTitle(fileName.value, dirty.value) })
+watch(
+  () => [activeTabId.value, documentStorageKind.value, documentWorkspaceId.value, localDocumentId.value, builtInDocument.value],
+  scheduleRememberLastPage,
+)
 
 onMounted(async () => {
+	// Kept intentionally read-only for acceptance runs.  It exposes only
+	// timing aggregates, never document text, paths or WebDAV credentials.
+	Object.defineProperty(window, '__inkmarkPreviewMetrics', {
+		configurable: true,
+		value: {
+			snapshot: () => previewPerformance.snapshot(),
+			clear: () => previewPerformance.clear(),
+		},
+	})
+	try {
+		runtimePlatform.value = (await Environment()).platform || inferredRuntimePlatform
+	} catch {
+		runtimePlatform.value = inferredRuntimePlatform
+	}
   document.documentElement.dataset.colorScheme = isDarkTheme(theme.value) ? 'dark' : 'light'
   applyFontPreferences(document.documentElement, fontPreferences.value, locale.value)
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
   window.addEventListener('languagechange', handleSystemLanguageChange)
+  window.addEventListener('blur', dismissTabContextMenuFromViewport)
+  window.addEventListener('resize', dismissTabContextMenuFromViewport)
+  document.addEventListener('pointerdown', dismissTabContextMenuFromPointer, true)
+  document.addEventListener('scroll', dismissTabContextMenuFromViewport, true)
   document.addEventListener('focusin', rememberFocusedElement, true)
+	// Register at the document capture phase.  WKWebView may otherwise let a
+	// nested tab button consume a wheel gesture before the scroll strip sees it.
+	document.addEventListener('wheel', handleDocumentTabsWheel, { capture: true, passive: false })
   removeMenuListeners.push(
     EventsOn('inkmark:menu-action', handleMenuAction),
     EventsOn('inkmark:open-document', handleSystemDocument),
@@ -4374,6 +5190,8 @@ onMounted(async () => {
     await applyLanguageMode(initialMode, false)
     const initial = await LoadInitialDocument(locale.value) as DocumentData
     setDocument(initial, 'status.ready')
+    initialDocumentLoaded = true
+    scheduleRememberLastPage()
   } catch (error) {
     showError(error)
   }
@@ -4383,14 +5201,17 @@ onBeforeUnmount(() => {
   void cancelActiveWorkspaceMutation({ reportFailure: false })
   clearWebDAVConnectionManager()
   clearImageInsertForm()
-  window.clearTimeout(renderTimer)
+  renderScheduler.cancel()
+  window.clearTimeout(rememberLastPageTimer)
   previewCommit.invalidate()
+  cancelPreviewWorkerRequests()
   if (updateState.value === 'downloading') void CancelUpdateDownload()
   mermaidRenderCache.clear()
   activeExtendedDiagramDispose?.()
   activeExtendedDiagramDispose = null
   pendingImageAssets.clear()
   activePreviewImages.release()
+  previewArtifacts.clear()
   workspacePreviewImages.release()
   if (layoutReconcileFrame !== null) window.cancelAnimationFrame(layoutReconcileFrame)
   layoutReconcileFrame = null
@@ -4405,92 +5226,22 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('beforeunload', onBeforeUnload)
   window.removeEventListener('languagechange', handleSystemLanguageChange)
+  window.removeEventListener('blur', dismissTabContextMenuFromViewport)
+  window.removeEventListener('resize', dismissTabContextMenuFromViewport)
+  document.removeEventListener('pointerdown', dismissTabContextMenuFromPointer, true)
+  document.removeEventListener('scroll', dismissTabContextMenuFromViewport, true)
   document.removeEventListener('focusin', rememberFocusedElement, true)
+	document.removeEventListener('wheel', handleDocumentTabsWheel, { capture: true })
+	delete (window as Window & { __inkmarkPreviewMetrics?: unknown }).__inkmarkPreviewMetrics
 })
 </script>
 
 <template>
-  <div class="app-shell" :class="[`theme-${theme}`, `view-${viewMode}`, { 'preview-first': previewFirst }]">
-    <header class="document-header">
-      <div class="brand" :aria-label="t('app.fullName')">
-        <img class="brand-mark" :src="inkmarkIcon" alt="" />
-        <div>
-          <strong>{{ t('app.name') }}</strong>
-          <span>MARKDOWN</span>
-        </div>
-      </div>
-
-      <div class="document-identity">
-        <div class="document-title-row">
-          <span v-if="dirty" class="dirty-dot" :title="t('document.dirtyTitle')"></span>
-          <h1>{{ fileName }}</h1>
-          <span
-            class="document-state"
-            :class="{ 'remote-document-state': documentStorageKind === 'webdav' }"
-          >{{ documentStateLabel }}</span>
-        </div>
-        <p :title="locationLabel">{{ locationLabel }}</p>
-      </div>
-
-      <div class="header-actions">
-        <span
-          class="connection-badge"
-          :class="{
-            'webdav-connected': workspace?.provider === 'webdav' || documentStorageKind === 'webdav',
-            'is-connecting': webDAVConnecting,
-          }"
-        >{{ connectionStatusLabel }}</span>
-        <button type="button" class="settings-button" :title="t('settings.title')" @click="activeDialog = 'settings'" aria-haspopup="dialog">⚙</button>
-      </div>
-    </header>
-
-    <nav class="command-bar" :aria-label="t('toolbar.ariaLabel')">
-      <div class="format-toolbar" :aria-label="t('toolbar.markdownFormat')">
-        <button
-          v-for="item in formatActions"
-          :key="item.action"
-          type="button"
-          :title="item.title"
-          :class="{ italic: item.action === 'italic', strike: item.action === 'strike' }"
-          :disabled="busy"
-          @click="runFormat(item.action)"
-        >{{ item.label }}</button>
-      </div>
-
-      <div class="toolbar-spacer"></div>
-
-      <label class="sync-option">
-        <input v-model="syncScroll" type="checkbox" :disabled="busy" />
-        <span>{{ t('toolbar.syncScroll') }}</span>
-      </label>
-
-      <div class="segmented" :aria-label="t('toolbar.viewMode')">
-        <button type="button" :class="{ active: viewMode === 'edit' }" :disabled="busy" @click="chooseView('edit')">{{ t('toolbar.edit') }}</button>
-        <button type="button" :class="{ active: viewMode === 'split' }" :disabled="busy" @click="chooseView('split')">{{ t('toolbar.split') }}</button>
-        <button type="button" :class="{ active: viewMode === 'preview' }" :disabled="busy" @click="chooseView('preview')">{{ t('toolbar.preview') }}</button>
-      </div>
-
-      <button
-        type="button"
-        class="swap-panes-button"
-        :class="{ active: previewFirst }"
-        :aria-pressed="previewFirst"
-        :title="t('toolbar.swapPanes')"
-        :disabled="busy"
-        @click="swapPaneOrder"
-      ><span aria-hidden="true">⇄</span> <span class="swap-panes-label">{{ t('toolbar.swapPanes') }}</span></button>
-
-      <div class="theme-picker" :aria-label="t('toolbar.previewStyle')">
-        <span>{{ t('toolbar.layout') }}</span>
-        <select :value="theme" :aria-label="t('toolbar.previewStyle')" :disabled="busy" @change="chooseThemeFromEvent">
-          <option v-for="item in themes" :key="item.value" :value="item.value">{{ item.label }}</option>
-        </select>
-      </div>
-
-      <button type="button" class="copy-button" :disabled="busy" @click="copyHTML">{{ t('toolbar.copyHTML') }}</button>
-    </nav>
-
-    <div class="workspace-layout" :class="{ 'has-workspace': workspace }">
+  <div class="app-shell" :class="[`theme-${theme}`, `view-${viewMode}`, `platform-${runtimePlatform || 'web'}`, { 'preview-first': previewFirst }]">
+	<aside class="app-sidebar-shell" :aria-label="t('workspace.sidebarTitle')">
+		<div class="sidebar-brand" :aria-label="t('app.fullName')">
+			<img class="brand-mark" :src="inkmarkIcon" alt="" />
+		</div>
       <DirectorySidebar
         v-if="workspace"
         :workspace="workspace"
@@ -4513,6 +5264,136 @@ onBeforeUnmount(() => {
         @rename="showWorkspaceRename"
         @delete="showWorkspaceDelete"
       />
+		<div v-else class="sidebar-empty-state">
+			<span class="workspace-root-icon" aria-hidden="true"></span>
+			<p>{{ t('workspace.openFolderHint') }}</p>
+		</div>
+		<footer class="sidebar-footer">
+			<button type="button" class="settings-button" :title="t('settings.title')" @click="activeDialog = 'settings'" aria-haspopup="dialog">
+				<svg class="settings-button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<circle cx="12" cy="12" r="3"></circle>
+					<path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.63 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.63a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.37 9a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15Z"></path>
+				</svg>
+				<span>{{ t('settings.title') }}</span>
+			</button>
+		</footer>
+	</aside>
+
+	<section class="app-workbench">
+		<header class="document-topbar">
+			<div ref="documentTabsElement" class="document-tabs" role="tablist" :aria-label="t('tabs.ariaLabel')">
+				<div
+					v-for="(tab, index) in tabs"
+					:key="tab.id"
+					class="document-tab"
+					:class="{ active: tab.id === activeTabId, dirty: tab.source !== tab.savedSource }"
+					@contextmenu="openTabContextMenu($event, tab.id)"
+				>
+					<button
+						type="button"
+						class="document-tab-main"
+						role="tab"
+						:aria-selected="tab.id === activeTabId"
+						:tabindex="tab.id === activeTabId ? 0 : -1"
+						:data-document-tab-id="tab.id"
+						:disabled="busy"
+						@click="activateTab(tab.id)"
+						@keydown="handleTabKeydown($event, index, tab.id)"
+					>
+						<span class="document-tab-dirty" aria-hidden="true"></span>
+						<span class="document-tab-name">{{ tab.name }}</span>
+					</button>
+					<button
+						type="button"
+						class="document-tab-close"
+						:aria-label="t('tabs.close', { name: tab.name })"
+						:title="t('tabs.close', { name: tab.name })"
+						:disabled="busy"
+						@click.stop="closeDocumentTab(tab.id)"
+					>×</button>
+				</div>
+			</div>
+
+			<nav class="command-bar" role="toolbar" :aria-label="t('toolbar.ariaLabel')">
+				<div class="format-toolbar" :aria-label="t('toolbar.markdownFormat')">
+					<button
+						v-for="item in formatActions"
+						:key="item.action"
+						type="button"
+						:title="item.title"
+						:aria-label="item.title"
+						:class="{ italic: item.action === 'italic', strike: item.action === 'strike' }"
+						:disabled="busy"
+						@click="runFormat(item.action)"
+					>{{ item.label }}</button>
+				</div>
+				<label class="sync-option">
+					<input v-model="syncScroll" type="checkbox" :disabled="busy" />
+					<span>{{ t('toolbar.syncScroll') }}</span>
+				</label>
+				<div class="segmented" :aria-label="t('toolbar.viewMode')">
+					<button type="button" :class="{ active: viewMode === 'edit' }" :disabled="busy" @click="chooseView('edit')">{{ t('toolbar.edit') }}</button>
+					<button type="button" :class="{ active: viewMode === 'split' }" :disabled="busy" @click="chooseView('split')">{{ t('toolbar.split') }}</button>
+					<button type="button" :class="{ active: viewMode === 'preview' }" :disabled="busy" @click="chooseView('preview')">{{ t('toolbar.preview') }}</button>
+				</div>
+				<button type="button" class="swap-panes-button" :class="{ active: previewFirst }" :aria-pressed="previewFirst" :title="t('toolbar.swapPanes')" :disabled="busy" @click="swapPaneOrder"><span aria-hidden="true">⇄</span></button>
+				<div class="theme-picker" :aria-label="t('toolbar.previewStyle')">
+					<select :value="theme" :aria-label="t('toolbar.previewStyle')" :disabled="busy" @change="chooseThemeFromEvent">
+						<option v-for="item in themes" :key="item.value" :value="item.value">{{ item.label }}</option>
+					</select>
+				</div>
+			</nav>
+			<div
+				v-if="runtimePlatform === 'windows'"
+				:class="['window-controls', `window-controls-${windowControlStyle}`]"
+				:aria-label="t('window.controls')"
+			>
+				<button type="button" class="window-control minimise" :aria-label="t('window.minimise')" :title="t('window.minimise')" @click="WindowMinimise">
+					<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 7.5h8" /></svg>
+				</button>
+				<button type="button" class="window-control maximise" :aria-label="t('window.maximise')" :title="t('window.maximise')" @click="WindowToggleMaximise">
+					<svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7" /></svg>
+				</button>
+				<button type="button" class="window-control close" :aria-label="t('window.close')" :title="t('window.close')" @click="requestApplicationQuit">
+					<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7m0-7-7 7" /></svg>
+				</button>
+			</div>
+		</header>
+
+		<Teleport to="body">
+			<div
+				v-if="tabContextMenu"
+				ref="tabContextMenuElement"
+				class="tab-context-menu"
+				role="menu"
+				:aria-label="t('tabs.contextMenu')"
+				:style="{ left: `${tabContextMenu.x}px`, top: `${tabContextMenu.y}px` }"
+				@keydown="handleTabContextMenuKeydown"
+				@contextmenu.prevent
+			>
+				<button type="button" role="menuitem" @click="runTabContextAction('self')">{{ t('tabs.closeCurrent') }}</button>
+				<button
+					type="button"
+					role="menuitem"
+					:disabled="tabCloseTargetIDs(tabs, tabContextMenu.tabId, 'left').length === 0"
+					@click="runTabContextAction('left')"
+				>{{ t('tabs.closeLeft') }}</button>
+				<button
+					type="button"
+					role="menuitem"
+					:disabled="tabCloseTargetIDs(tabs, tabContextMenu.tabId, 'right').length === 0"
+					@click="runTabContextAction('right')"
+				>{{ t('tabs.closeRight') }}</button>
+				<button
+					type="button"
+					role="menuitem"
+					:disabled="tabCloseTargetIDs(tabs, tabContextMenu.tabId, 'others').length === 0"
+					@click="runTabContextAction('others')"
+				>{{ t('tabs.closeOthers') }}</button>
+			</div>
+		</Teleport>
+
+		<div class="workspace-layout">
 
       <main class="editor-layout">
         <section class="source-panel" :class="{ 'has-find-bar': findOpen }" :aria-label="t('panel.sourceAriaLabel')">
@@ -4622,11 +5503,23 @@ onBeforeUnmount(() => {
 
     <footer class="status-bar">
       <span class="ready-light"></span>
-      <span>{{ renderState }}</span>
+		<span class="status-document-state">{{ documentStateLabel }}</span>
+		<span class="status-separator" aria-hidden="true"></span>
+		<span
+			class="connection-badge"
+			:class="{
+				'webdav-connected': workspace?.provider === 'webdav' || documentStorageKind === 'webdav',
+				'is-connecting': webDAVConnecting,
+			}"
+		>{{ connectionStatusLabel }}</span>
+		<span class="status-separator" aria-hidden="true"></span>
+		<span role="status" aria-live="polite">{{ renderState }}</span>
       <span class="status-spacer"></span>
+		<span class="status-location" :title="locationLabel">{{ locationLabel }}</span>
       <span>{{ t('status.characters', { count: characterCount.toLocaleString(locale) }) }}</span>
       <span>{{ t('status.lines', { count: lineCount.toLocaleString(locale) }) }}</span>
     </footer>
+	</section>
 
     <div v-if="unsavedTransition" class="modal-backdrop" @click.self="answerUnsavedPrompt('cancel')">
       <section
@@ -4737,6 +5630,23 @@ onBeforeUnmount(() => {
               </p>
             </div>
           </div>
+          <section v-if="runtimePlatform === 'windows'" class="window-control-settings" aria-labelledby="window-control-settings-title">
+            <header>
+              <h3 id="window-control-settings-title">{{ t('settings.windowControls') }}</h3>
+              <p>{{ t('settings.windowControlsDescription') }}</p>
+            </header>
+            <div class="settings-row">
+              <label for="window-control-style-select">{{ t('settings.windowControls') }}</label>
+              <select
+                id="window-control-style-select"
+                :value="windowControlStyle"
+                @change="handleWindowControlStyleChange"
+              >
+                <option value="system">{{ t('settings.windowControlsSystem') }}</option>
+                <option value="traffic-lights">{{ t('settings.windowControlsTrafficLights') }}</option>
+              </select>
+            </div>
+          </section>
           <section class="editor-settings" aria-labelledby="editor-settings-title">
             <header>
               <h3 id="editor-settings-title">{{ t('settings.editor') }}</h3>
