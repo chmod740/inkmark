@@ -303,6 +303,23 @@ func TestClearRecentItemsPersists(t *testing.T) {
 	}
 }
 
+func TestListRecentMenuItemsDoesNotExposePaths(t *testing.T) {
+	app := NewApp()
+	item, ok := makeRecentItem("file", filepath.Join("/private", "notes", "secret.md"))
+	if !ok {
+		t.Fatal("failed to create recent item")
+	}
+	app.recentItems = []RecentItem{item}
+
+	items := app.ListRecentMenuItems()
+	if len(items) != 1 || items[0].ID != item.ID || items[0].Kind != "file" {
+		t.Fatalf("unexpected recent menu items: %#v", items)
+	}
+	if items[0].Label != "secret.md — notes" {
+		t.Fatalf("unexpected safe menu label: %q", items[0].Label)
+	}
+}
+
 func TestClearRecentItemsReportsPersistenceFailureAndRestoresMenuState(t *testing.T) {
 	notDirectory := filepath.Join(t.TempDir(), "file")
 	if err := os.WriteFile(notDirectory, nil, 0o600); err != nil {

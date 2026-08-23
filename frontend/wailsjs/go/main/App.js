@@ -122,6 +122,10 @@ export function LaunchUpdateInstaller() {
   return window['go']['main']['App']['LaunchUpdateInstaller']();
 }
 
+export function ListRecentMenuItems() {
+  return window['go']['main']['App']['ListRecentMenuItems']();
+}
+
 export function ListSavedWebDAVConnections() {
   return window['go']['main']['App']['ListSavedWebDAVConnections']();
 }

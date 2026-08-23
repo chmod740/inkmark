@@ -219,6 +219,7 @@ import {
   OpenWorkspaceFile,
   ImportLocalImageData,
   ImportWebDAVImageData,
+  ListRecentMenuItems,
   ListWebDAVDirectory,
   ReadWorkspaceDirectory,
   ReadWebDAVWorkspaceImage,
@@ -313,6 +314,12 @@ interface RecentOpenEventData {
   id: string
   kind: 'file' | 'directory' | 'folder' | 'webdav'
   name: string
+}
+
+interface RecentMenuItemData {
+  id: string
+  kind: 'file' | 'directory' | 'webdav'
+  label: string
 }
 
 interface RecentWebDAVConnectionData {
@@ -428,6 +435,8 @@ const previewFirst = ref(normalizePreviewFirst(localStorage.getItem(previewFirst
 const fontPreferences = ref<FontPreferences>(readFontPreferences(localStorage))
 const editorPreferences = ref<EditorPreferences>(readEditorPreferences(localStorage))
 const windowsTopMenu = ref<WindowsTopMenu | null>(null)
+const windowsRecentMenuOpen = ref(false)
+const windowsRecentItems = ref<RecentMenuItemData[]>([])
 const languageMode = ref<LanguageMode>('auto')
 const locale = ref<Locale>('en')
 const renderState = computed({ get: () => activeTab.value.renderState, set: (value: string) => { activeTab.value.renderState = value } })
@@ -2945,6 +2954,8 @@ async function openRecentItem(value: unknown) {
 async function clearRecentItems() {
   try {
     await ClearRecentItems()
+    windowsRecentItems.value = []
+    windowsRecentMenuOpen.value = false
     renderState.value = t('workspace.recentCleared')
   } catch (error) {
     showError(error)
@@ -4020,11 +4031,33 @@ function handleMenuAction(action: string) {
 }
 
 function toggleWindowsTopMenu(menu: WindowsTopMenu) {
-  windowsTopMenu.value = windowsTopMenu.value === menu ? null : menu
+  const isOpening = windowsTopMenu.value !== menu
+  windowsTopMenu.value = isOpening ? menu : null
+  windowsRecentMenuOpen.value = false
+  if (isOpening && menu === 'file') void refreshWindowsRecentItems()
 }
 
 function closeWindowsTopMenu() {
   windowsTopMenu.value = null
+  windowsRecentMenuOpen.value = false
+}
+
+async function refreshWindowsRecentItems() {
+  try {
+    windowsRecentItems.value = await ListRecentMenuItems() as RecentMenuItemData[]
+  } catch (error) {
+    showError(error)
+  }
+}
+
+function toggleWindowsRecentMenu() {
+  windowsRecentMenuOpen.value = !windowsRecentMenuOpen.value
+  if (windowsRecentMenuOpen.value) void refreshWindowsRecentItems()
+}
+
+function openWindowsRecentItem(item: RecentMenuItemData) {
+  closeWindowsTopMenu()
+  void openRecentItem(item)
 }
 
 function runWindowsTopMenuAction(action: string) {
@@ -5322,13 +5355,22 @@ onBeforeUnmount(() => {
 						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('open')">{{ t('menu.open') }}<kbd>Ctrl+O</kbd></button>
 						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('open-folder')">{{ t('menu.openFolder') }}<kbd>Ctrl+Shift+O</kbd></button>
 						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('connect-webdav')">{{ t('menu.connectWebDAV') }}</button>
+						<div class="windows-recent-menu-group">
+							<button type="button" role="menuitem" :aria-expanded="windowsRecentMenuOpen" aria-haspopup="menu" :disabled="busy" @click.stop="toggleWindowsRecentMenu">{{ t('menu.openRecent') }}<span class="windows-submenu-arrow" aria-hidden="true">›</span></button>
+							<div v-if="windowsRecentMenuOpen" class="windows-recent-menu-popover" role="menu" :aria-label="t('menu.openRecent')">
+								<button v-for="item in windowsRecentItems" :key="item.id" type="button" role="menuitem" @click="openWindowsRecentItem(item)">{{ item.label }}</button>
+								<button v-if="windowsRecentItems.length === 0" type="button" role="menuitem" disabled>{{ t('menu.noRecent') }}</button>
+								<span class="windows-top-menu-separator" aria-hidden="true"></span>
+								<button type="button" role="menuitem" :disabled="windowsRecentItems.length === 0" @click="clearRecentItems">{{ t('menu.clearRecent') }}</button>
+							</div>
+						</div>
 						<span class="windows-top-menu-separator" aria-hidden="true"></span>
 						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('save')">{{ t('menu.save') }}<kbd>Ctrl+S</kbd></button>
 						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('save-as')">{{ t('menu.saveAs') }}<kbd>Ctrl+Shift+S</kbd></button>
 						<span class="windows-top-menu-separator" aria-hidden="true"></span>
-						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('export-pdf')">{{ t('menu.exportPDF') }}</button>
-						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('export-html')">{{ t('menu.exportHTML') }}</button>
-						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('export-png')">{{ t('menu.exportPNG') }}</button>
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('export-pdf')">{{ t('menu.export') }} {{ t('menu.exportPDF') }}</button>
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('export-html')">{{ t('menu.export') }} {{ t('menu.exportHTML') }}</button>
+						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('export-png')">{{ t('menu.export') }} {{ t('menu.exportPNG') }}</button>
 						<button type="button" role="menuitem" :disabled="busy" @click="runWindowsTopMenuAction('settings')">{{ t('menu.settings') }}</button>
 						<span class="windows-top-menu-separator" aria-hidden="true"></span>
 						<button type="button" role="menuitem" class="windows-top-menu-exit" @click="runWindowsTopMenuAction('quit')">{{ t('menu.quit') }}<kbd>Alt+F4</kbd></button>

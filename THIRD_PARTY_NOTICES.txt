@@ -10,7 +10,7 @@ third-party licenses reproduced below.
 This file is generated from the release dependency manifests. Exact inputs:
 - go.mod SHA-256 de0abf071f9551c8e7d30f7e6bc69c9e5b167a729d2b6c4d7a99b2db83008401
 - go.sum SHA-256 a1962f50dee0646a0c3f7190c88e1e45ae0ddc62bdad9d1b880aaa35831542cc
-- frontend/package.json SHA-256 8a0d815becde5daafe4e2cf3068d40ec165b22bb50c073a7fd8bf9e27825695c
+- frontend/package.json SHA-256 debe7e0c4fab56593ebf1d18229ab7b59e2204be601ebf855af3078e6bd4c703
 - frontend/pnpm-lock.yaml SHA-256 729a9e684a865267fa4e57a7fccf31d4b14cf591da4d01af463f193ac7a7006d
 - frontend/pnpm-workspace.yaml SHA-256 2cc0e60c3156124b7baf344f4748862c8e11d037e8ba5d1ad31f20ef33104d52
 

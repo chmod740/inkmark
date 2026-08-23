@@ -194,6 +194,22 @@ export namespace main {
 	        this.locale = source["locale"];
 	    }
 	}
+	export class RecentMenuItem {
+	    id: string;
+	    kind: string;
+	    label: string;
+
+	    static createFrom(source: any = {}) {
+	        return new RecentMenuItem(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.kind = source["kind"];
+	        this.label = source["label"];
+	    }
+	}
 	export class RecentWebDAVConnection {
 	    endpoint: string;
 	    name: string;

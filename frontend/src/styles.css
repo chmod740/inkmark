@@ -131,6 +131,28 @@ select option { color: #212826; background-color: #fff; }
 .windows-top-menu-popover .windows-top-menu-exit:focus-visible { color: #fff; background: #c42b1c; }
 .windows-top-menu-popover kbd { margin: 0; color: var(--muted); font-size: 10px; }
 .windows-top-menu-separator { height: 1px; margin: 4px 5px; background: color-mix(in srgb, var(--border) 84%, transparent); }
+.windows-recent-menu-group { position: relative; }
+.windows-recent-menu-group > button { width: 100%; }
+.windows-submenu-arrow { margin-left: auto; color: var(--muted); font-size: 16px; line-height: 1; }
+.windows-recent-menu-popover {
+	position: absolute;
+	top: -5px;
+	left: calc(100% + 3px);
+	z-index: 1601;
+	display: grid;
+	min-width: 232px;
+	max-width: min(380px, calc(100vw - 12px));
+	max-height: min(440px, calc(100vh - 46px));
+	overflow: auto;
+	padding: 5px;
+	color: var(--ink);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--paper);
+	box-shadow: 0 12px 28px rgba(21, 31, 28, .22), 0 2px 7px rgba(21, 31, 28, .14);
+	--wails-draggable: no-drag;
+}
+.windows-recent-menu-popover button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .windows-window-controls {
 	display: flex;
 	height: 34px;
@@ -1328,10 +1350,13 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 var(--inkmark-code-font); o
 [data-color-scheme="dark"] .app-shell .sidebar-footer .settings-button { color: #d4dfdc; }
 [data-color-scheme="dark"] .app-shell .sidebar-footer .settings-button:hover { color: #eef5f3; background: rgba(255,255,255,.065); }
 [data-color-scheme="dark"] .document-topbar { border-color: #344447; background: #1c2729; box-shadow: none; }
-[data-color-scheme="dark"] .windows-top-menu-popover { color: #e5ece9; border-color: #465254; background: #182022; box-shadow: 0 14px 30px rgba(0, 0, 0, .45); }
+[data-color-scheme="dark"] .windows-top-menu-popover,
+[data-color-scheme="dark"] .windows-recent-menu-popover { color: #e5ece9; border-color: #465254; background: #182022; box-shadow: 0 14px 30px rgba(0, 0, 0, .45); }
 [data-color-scheme="dark"] .windows-top-menu-popover button:hover,
 [data-color-scheme="dark"] .windows-top-menu-popover button:focus-visible,
-[data-color-scheme="dark"] .windows-top-menu-popover button.selected { background: #293f42; }
+[data-color-scheme="dark"] .windows-top-menu-popover button.selected,
+[data-color-scheme="dark"] .windows-recent-menu-popover button:hover,
+[data-color-scheme="dark"] .windows-recent-menu-popover button:focus-visible { background: #293f42; }
 [data-color-scheme="dark"] .document-tab { color: #9fadaa; }
 [data-color-scheme="dark"] .document-tab:hover { background: rgba(255,255,255,.05); }
 [data-color-scheme="dark"] .document-tab.active { color: #eef5f3; border-color: #344447; background: #111718; box-shadow: none; }

@@ -31,6 +31,15 @@ type RecentMenuEvent struct {
 	Name string `json:"name"`
 }
 
+// RecentMenuItem is the deliberately narrow view used by the custom Windows
+// menu. In particular, it never exposes a persisted local path: opening a
+// recent item remains bound to the opaque runtime-only ID.
+type RecentMenuItem struct {
+	ID    string `json:"id"`
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
+}
+
 // RecentWebDAVConnection is deliberately limited to validated, non-secret
 // metadata. When HasSavedCredentials is true, the frontend can call
 // ConnectSavedWebDAV with SavedConnectionID without receiving the credentials.
@@ -95,6 +104,21 @@ func (a *App) recentItemsSnapshot() []RecentItem {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return append([]RecentItem(nil), a.recentItems...)
+}
+
+// ListRecentMenuItems returns display-safe recent entries for the custom
+// Windows menu. Native menus use the same snapshot and label formatter.
+func (a *App) ListRecentMenuItems() []RecentMenuItem {
+	items := a.recentItemsSnapshot()
+	result := make([]RecentMenuItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, RecentMenuItem{
+			ID:    item.ID,
+			Kind:  item.Kind,
+			Label: recentMenuLabel(item),
+		})
+	}
+	return result
 }
 
 func (a *App) recentItemByID(id string, kind string) (RecentItem, error) {

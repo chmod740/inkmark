@@ -62,6 +62,8 @@ export function ImportWebDAVImageData(arg1:string,arg2:string,arg3:string,arg4:s
 
 export function LaunchUpdateInstaller():Promise<void>;
 
+export function ListRecentMenuItems():Promise<Array<main.RecentMenuItem>>;
+
 export function ListSavedWebDAVConnections():Promise<Array<main.SavedWebDAVConnection>>;
 
 export function ListWebDAVDirectory(arg1:string,arg2:string):Promise<main.WorkspaceDirectory>;
