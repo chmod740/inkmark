@@ -1,7 +1,7 @@
 {
   "name": "inkmark-frontend",
   "private": true,
-	"version": "1.2.11",
+	"version": "1.2.12",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
@@ -14,6 +14,7 @@
     "test:themes": "node --experimental-strip-types --test ../scripts/test-themes.mjs",
     "test:find": "node --experimental-strip-types --test ../scripts/test-text-search.mjs",
     "test:fonts": "node --experimental-strip-types --test ../scripts/test-font-preferences.mjs",
+    "test:editor-history": "node --experimental-strip-types --test ../scripts/test-editor-history.mjs",
     "test:scroll": "node --experimental-strip-types --test ../scripts/test-scroll-sync.mjs",
     "test:preview": "node --experimental-strip-types --test ../scripts/test-preview-render.mjs",
     "test:render-performance": "node --experimental-strip-types --test ../scripts/test-render-performance.mjs",

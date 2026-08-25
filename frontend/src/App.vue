@@ -54,6 +54,16 @@ import {
   resolveTextEditControl,
 } from './edit-actions'
 import {
+  appendEditorHistory,
+  createEditorHistory,
+  moveEditorHistory,
+  replaceEditorHistoryRange,
+  type EditorHistory,
+  type EditorHistoryEdit,
+  type EditorHistoryDirection,
+  type EditorSelection,
+} from './editor-history'
+import {
   ImageResolverGate,
   ImageDecodeGate,
   PreviewImageBudget,
@@ -392,6 +402,11 @@ interface TabContextMenuState {
   y: number
 }
 
+interface PendingEditorInput {
+  value: string
+  selection: EditorSelection
+}
+
 function newTabID() {
   return typeof crypto?.randomUUID === 'function'
     ? crypto.randomUUID()
@@ -403,6 +418,9 @@ const initialTab = createDocumentTab(newTabID(), {
 })
 const tabs = ref<DocumentTabState[]>([initialTab])
 const activeTabId = ref(initialTab.id)
+const editorHistories = new Map<string, EditorHistory>()
+const pendingEditorInputs = new Map<string, PendingEditorInput>()
+editorHistories.set(initialTab.id, createEditorHistory())
 const tabContextMenu = ref<TabContextMenuState | null>(null)
 const tabContextMenuElement = ref<HTMLElement | null>(null)
 let tabContextMenuReturnFocus: HTMLElement | null = null
@@ -1306,6 +1324,7 @@ async function openDocumentTab(document: DocumentData, status: TranslationKey = 
   stashActivePreview(activeTab.value.id)
   const tab = createDocumentTab(newTabID(), document, workspaceStateForDocument(document), t(status))
   tabs.value.push(tab)
+  resetEditorHistory(tab.id)
   activeTabId.value = tab.id
   scrollSync.reset()
   editorScrollAnchors = []
@@ -1335,6 +1354,7 @@ function setDocument(document: DocumentData, status: TranslationKey = 'document.
   dropCachedPreviewForTab(activeTab.value.id)
   discardActivePreview()
   tabs.value[index] = replacement
+  resetEditorHistory(replacement.id)
 	void nextTick(async () => {
     if (editor.value) editor.value.scrollTop = 0
     if (previewPane.value) previewPane.value.scrollTop = 0
@@ -1601,6 +1621,8 @@ async function closeDocumentTab(tabId: string, options: CloseDocumentTabOptions 
   }
   const nextId = nextActiveTabID(tabs.value, closingIndex)
   const remaining = tabs.value.filter((tab) => tab.id !== tabId)
+  editorHistories.delete(tabId)
+  pendingEditorInputs.delete(tabId)
   if (closingIsActive) discardActivePreview()
   dropCachedPreviewForTab(tabId)
   await releaseDocumentCapability(closing)
@@ -1609,6 +1631,7 @@ async function closeDocumentTab(tabId: string, options: CloseDocumentTabOptions 
     const welcome = await LoadWelcomeDocument(locale.value) as DocumentData
     const replacement = createDocumentTab(newTabID(), welcome, null, t('status.ready'))
     tabs.value = [replacement]
+    resetEditorHistory(replacement.id)
     activeTabId.value = replacement.id
     await nextTick()
     await requestActivePreviewRender('open')
@@ -2114,8 +2137,7 @@ function insertMarkdownImage(markdownURL: string, fallbackName = '') {
   const end = target.selectionEnd
   const alt = imageAltText.value.trim() || defaultImageAlt(fallbackName) || t('image.defaultAlt')
   const markdownImage = buildMarkdownImage(alt, markdownURL)
-  target.setRangeText(markdownImage, start, end, 'end')
-  source.value = target.value
+  replaceEditorRange(target, start, end, markdownImage)
   nextTick(() => {
     target.focus()
     target.setSelectionRange(start + markdownImage.length, start + markdownImage.length)
@@ -3719,6 +3741,126 @@ async function toggleFullscreen() {
   else WindowFullscreen()
 }
 
+function editorHistoryFor(tabID = activeTab.value.id) {
+  const existing = editorHistories.get(tabID)
+  if (existing) return existing
+  const created = createEditorHistory()
+  editorHistories.set(tabID, created)
+  return created
+}
+
+function resetEditorHistory(tabID: string) {
+  editorHistories.set(tabID, createEditorHistory())
+  pendingEditorInputs.delete(tabID)
+}
+
+function recordEditorHistoryEdit(edit: EditorHistoryEdit, tabID = activeTab.value.id) {
+  editorHistories.set(tabID, appendEditorHistory(editorHistoryFor(tabID), edit))
+}
+
+function replaceEditorRange(
+  target: HTMLTextAreaElement,
+  start: number,
+  end: number,
+  inserted: string,
+  selectionAfter: EditorSelection = { start: start + inserted.length, end: start + inserted.length },
+) {
+  const selectionBefore = { start: target.selectionStart ?? start, end: target.selectionEnd ?? end }
+  recordEditorHistoryEdit({
+    start,
+    deleted: target.value.slice(start, end),
+    inserted,
+    selectionBefore,
+    selectionAfter,
+  })
+  target.setRangeText(inserted, start, end, 'preserve')
+  source.value = target.value
+  target.setSelectionRange(selectionAfter.start, selectionAfter.end)
+}
+
+function handleEditorBeforeInput(event: InputEvent) {
+  const target = event.currentTarget
+  if (!(target instanceof HTMLTextAreaElement) || event.inputType.startsWith('history')) return
+  pendingEditorInputs.set(activeTab.value.id, {
+    value: target.value,
+    selection: { start: target.selectionStart ?? 0, end: target.selectionEnd ?? 0 },
+  })
+}
+
+function handleEditorInput(event: Event) {
+  beginScroll('editor')
+  const target = event.currentTarget
+  if (!(target instanceof HTMLTextAreaElement)) return
+  const tabID = activeTab.value.id
+  const pending = pendingEditorInputs.get(tabID)
+  pendingEditorInputs.delete(tabID)
+  if (!pending) return
+  const nextValue = target.value
+  const { start, end } = pending.selection
+  const suffix = pending.value.slice(end)
+  if (
+    start < 0
+    || end < start
+    || !nextValue.startsWith(pending.value.slice(0, start))
+    || !nextValue.endsWith(suffix)
+    || nextValue.length < start + suffix.length
+  ) {
+    resetEditorHistory(tabID)
+    return
+  }
+  const inserted = nextValue.slice(start, nextValue.length - suffix.length)
+  recordEditorHistoryEdit({
+    start,
+    deleted: pending.value.slice(start, end),
+    inserted,
+    selectionBefore: pending.selection,
+    selectionAfter: { start: target.selectionStart ?? start + inserted.length, end: target.selectionEnd ?? start + inserted.length },
+  }, tabID)
+}
+
+function applyEditorHistory(direction: EditorHistoryDirection) {
+  const target = editor.value
+  if (!target || document.activeElement !== target) return false
+  const tabID = activeTab.value.id
+  const move = moveEditorHistory(editorHistoryFor(tabID), direction)
+  if (!move) return false
+  const replacement = replaceEditorHistoryRange(target.value, move.edit, direction)
+  if (!replacement) {
+    resetEditorHistory(tabID)
+    return false
+  }
+  editorHistories.set(tabID, move.history)
+  target.value = replacement.value
+  source.value = replacement.value
+  target.setSelectionRange(replacement.selection.start, replacement.selection.end)
+  dispatchTextEditInput(target, direction === 'undo' ? 'historyUndo' : 'historyRedo')
+  return true
+}
+
+function handleEditorKeydown(event: KeyboardEvent) {
+  beginScroll('editor')
+  if (event.key === 'Tab' && !event.altKey && !event.ctrlKey && !event.metaKey) {
+    const target = event.currentTarget
+    if (target instanceof HTMLTextAreaElement) {
+      event.preventDefault()
+      const start = target.selectionStart ?? 0
+      const end = target.selectionEnd ?? start
+      replaceEditorRange(target, start, end, '\t')
+    }
+    return
+  }
+  if (event.altKey || !(event.ctrlKey || event.metaKey)) return
+  const key = event.key.toLowerCase()
+  const direction: EditorHistoryDirection | null = key === 'z'
+    ? (event.shiftKey ? 'redo' : 'undo')
+    : key === 'y' && event.ctrlKey && !event.metaKey
+      ? 'redo'
+      : null
+  if (!direction) return
+  event.preventDefault()
+  applyEditorHistory(direction)
+}
+
 async function runEditAction(action: string) {
   const activeElement = document.activeElement
   const focusLeftDocument = !activeElement
@@ -3754,20 +3896,29 @@ async function runEditAction(action: string) {
       if (end <= start) return
       await navigator.clipboard.writeText(target.value.slice(start, end))
       if (action === 'cut' && targetStillOwnsEditIntent()) {
-        target.setRangeText('', start, end, 'end')
-        dispatchTextEditInput(target, 'deleteByCut')
+        if (sourceEditorTarget) replaceEditorRange(target, start, end, '')
+        else {
+          target.setRangeText('', start, end, 'end')
+          dispatchTextEditInput(target, 'deleteByCut')
+        }
       }
     } else if (action === 'paste') {
       const text = await navigator.clipboard.readText()
       if (!targetStillOwnsEditIntent()) return
       const start = target.selectionStart ?? 0
       const end = target.selectionEnd ?? start
-      target.setRangeText(text, start, end, 'end')
-      const inputData = target instanceof HTMLInputElement && target.type === 'password' ? null : text
-      dispatchTextEditInput(target, 'insertFromPaste', inputData)
+      if (sourceEditorTarget) replaceEditorRange(target, start, end, text)
+      else {
+        target.setRangeText(text, start, end, 'end')
+        const inputData = target instanceof HTMLInputElement && target.type === 'password' ? null : text
+        dispatchTextEditInput(target, 'insertFromPaste', inputData)
+      }
     } else if (action === 'undo' || action === 'redo') {
-      document.execCommand(action)
-      dispatchTextEditInput(target, action === 'undo' ? 'historyUndo' : 'historyRedo')
+      if (sourceEditorTarget) applyEditorHistory(action as EditorHistoryDirection)
+      else {
+        document.execCommand(action)
+        dispatchTextEditInput(target, action === 'undo' ? 'historyUndo' : 'historyRedo')
+      }
     }
   } catch {
     renderState.value = t('edit.clipboardFailed')
@@ -4901,8 +5052,10 @@ function runFormat(action: string) {
     const lineEnd = nextBreak === -1 ? target.value.length : nextBreak
     const block = target.value.slice(lineStart, lineEnd)
     replacement = block.split('\n').map((line) => prefix + line).join('\n')
-    target.setRangeText(replacement, lineStart, lineEnd, 'select')
-    source.value = target.value
+    replaceEditorRange(target, lineStart, lineEnd, replacement, {
+      start: lineStart,
+      end: lineStart + replacement.length,
+    })
     target.focus()
     return
   }
@@ -4922,8 +5075,7 @@ function runFormat(action: string) {
     replacement = t('format.tableTemplate')
     selectionStart = selectionEnd = start + replacement.length
   }
-  target.setRangeText(replacement, start, end, 'end')
-  source.value = target.value
+  replaceEditorRange(target, start, end, replacement, { start: selectionStart, end: selectionEnd })
   nextTick(() => {
     target.focus()
     target.setSelectionRange(selectionStart, selectionEnd)
@@ -5046,7 +5198,18 @@ function onKeydown(event: KeyboardEvent) {
   if (busy.value) return
   if (!(event.metaKey || event.ctrlKey)) return
   const key = event.key.toLowerCase()
-  if (key === 'b') {
+  if (key === 'n') {
+    event.preventDefault()
+    void newDocument()
+  } else if (key === 'o') {
+    event.preventDefault()
+    if (event.shiftKey) void openDirectory()
+    else void openDocument()
+  } else if (key === 's') {
+    event.preventDefault()
+    if (event.shiftKey) void saveDocumentAs()
+    else void saveDocument()
+  } else if (key === 'b') {
     event.preventDefault()
     runFormat('bold')
   } else if (key === 'i') {
@@ -5597,8 +5760,9 @@ onBeforeUnmount(() => {
             :disabled="busy"
             spellcheck="false"
             wrap="off"
-            @input="beginScroll('editor')"
-            @keydown="beginScroll('editor')"
+            @beforeinput="handleEditorBeforeInput"
+            @input="handleEditorInput"
+            @keydown="handleEditorKeydown"
             @pointerdown="beginScroll('editor')"
             @scroll="handleEditorScroll"
             @touchstart.passive="beginScroll('editor')"

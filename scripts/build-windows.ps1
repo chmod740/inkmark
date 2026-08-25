@@ -66,6 +66,7 @@ Assert-LastExitCode "Run theme palette tests"
 pnpm --dir frontend test:find
 Assert-LastExitCode "Run text search tests"
 pnpm --dir frontend test:fonts
+pnpm --dir frontend test:editor-history
 Assert-LastExitCode "Run font preference tests"
 pnpm --dir frontend test:workspace
 pnpm --dir frontend test:tabs

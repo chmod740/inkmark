@@ -41,6 +41,7 @@ pnpm --dir frontend test:ui
 pnpm --dir frontend test:themes
 pnpm --dir frontend test:find
 pnpm --dir frontend test:fonts
+pnpm --dir frontend test:editor-history
 pnpm --dir frontend test:workspace
 pnpm --dir frontend test:tabs
 pnpm --dir frontend test:webdav
