@@ -11,6 +11,7 @@ import {
   parseEditorPreferences,
   parseSourceHeadings,
   readEditorPreferences,
+  sourceLineOffsets,
   sourceLineFromScroll,
   stickyHeadingTrail,
   updateEditorPreference,
@@ -104,23 +105,26 @@ test('preview-first preference is strict, persistent, and reversible', () => {
 })
 
 test('editor display preferences are strict, local, and independently switchable', () => {
-  assert.equal(editorPreferencesStorageKey, 'inkmark-editor-preferences-v1')
+  assert.equal(editorPreferencesStorageKey, 'inkmark-editor-preferences-v2')
   assert.deepEqual(parseEditorPreferences(null), defaultEditorPreferences)
-  assert.deepEqual(parseEditorPreferences('{"version":1,"lineNumbers":false,"stickyHeadings":true}'), {
-    version: 1,
+  assert.deepEqual(parseEditorPreferences('{"version":2,"lineNumbers":false,"stickyHeadings":true,"wordWrap":true}'), {
+    version: 2,
     lineNumbers: false,
     stickyHeadings: true,
+    wordWrap: true,
   })
   assert.deepEqual(normalizeEditorPreferences({
-    version: 1,
+    version: 2,
     lineNumbers: true,
     stickyHeadings: true,
+    wordWrap: false,
     arbitraryCSS: 'url(https://example.test)',
   }), defaultEditorPreferences)
   assert.deepEqual(updateEditorPreference(defaultEditorPreferences, 'lineNumbers', false), {
-    version: 1,
+    version: 2,
     lineNumbers: false,
     stickyHeadings: true,
+    wordWrap: false,
   })
 
   const values = new Map()
@@ -131,6 +135,34 @@ test('editor display preferences are strict, local, and independently switchable
   const next = updateEditorPreference(defaultEditorPreferences, 'stickyHeadings', false)
   writeEditorPreferences(storage, next)
   assert.deepEqual(readEditorPreferences(storage), next)
+
+  values.clear()
+  values.set('inkmark-editor-preferences-v1', JSON.stringify({
+    version: 1,
+    lineNumbers: false,
+    stickyHeadings: false,
+  }))
+  assert.deepEqual(readEditorPreferences(storage), {
+    version: 2,
+    lineNumbers: false,
+    stickyHeadings: false,
+    wordWrap: false,
+  })
+  assert.deepEqual(updateEditorPreference(defaultEditorPreferences, 'wordWrap', true), {
+    version: 2,
+    lineNumbers: true,
+    stickyHeadings: true,
+    wordWrap: true,
+  })
+})
+
+test('selected source line offsets preserve logical line starts', () => {
+  assert.deepEqual(sourceLineOffsets('alpha\nbeta\n\ngamma', [3, 0, 1, 3, -1, 99]), [
+    { line: 0, offset: 0 },
+    { line: 1, offset: 6 },
+    { line: 3, offset: 12 },
+  ])
+  assert.deepEqual(sourceLineOffsets('', [0, 1]), [{ line: 0, offset: 0 }])
 })
 
 test('line numbers and sticky Markdown heading trails stay bounded and deterministic', () => {
@@ -195,7 +227,10 @@ test('app wires pane swapping, built-in navigation, and collision-safe header CS
   assert.match(app, /class="source-sticky-headings"[\s\S]*scrollToSourceHeading/)
   assert.match(app, /handleEditorPreferenceChange\('lineNumbers'/)
   assert.match(app, /handleEditorPreferenceChange\('stickyHeadings'/)
-  assert.match(app, /wrap="off"/)
+  assert.match(app, /handleEditorPreferenceChange\('wordWrap'/)
+  assert.match(app, /:wrap="wordWrapEnabled \? 'soft' : 'off'"/)
+  assert.match(app, /class="source-wrap-measure"/)
+  assert.match(app, /function measureWrappedEditorScrollAnchors[\s\S]*sourceLineOffsets\(source\.value, lines\)/)
   assert.match(app, /function runFormat\(action: string\) \{[\s\S]*?beginScroll\('editor'\)[\s\S]*?replaceEditorRange\(/)
   assert.match(app, /async function runEditAction\(action: string\) \{[\s\S]*?beginScroll\('editor'\)[\s\S]*?applyEditorHistory/)
   assert.match(app, /target\.replaceChildren[\s\S]*refreshScrollAnchors\(\)[\s\S]*reconcileActiveScroll\(\)/)
@@ -205,6 +240,7 @@ test('app wires pane swapping, built-in navigation, and collision-safe header CS
   assert.match(styles, /\.document-identity h1 \{[^}]*flex: 0 1 auto;[^}]*min-width: 0;/s)
   assert.match(styles, /\.document-state \{[^}]*flex: 0 0 auto;[^}]*white-space: nowrap;/s)
   assert.match(styles, /\.source-line-numbers \{[^}]*position: absolute;[^}]*text-align: right;/s)
+  assert.match(styles, /\.source-editor-stack\.has-word-wrap \.source-editor,[\s\S]*white-space: pre-wrap;/)
   assert.match(styles, /\.source-sticky-headings \{[^}]*position: absolute;[^}]*z-index: 4;/s)
 })
 

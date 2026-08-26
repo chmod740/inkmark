@@ -7,6 +7,7 @@ import {
   maximumScrollAnchors,
   sampleAnchorIndices,
   ScrollSyncController,
+  sourceLineFromAnchors,
 } from '../frontend/src/scroll-sync.ts'
 
 function viewport(scrollTop, scrollHeight, clientHeight = 200) {
@@ -149,10 +150,22 @@ test('large no-wrap editors derive exact line anchors without a document-size cu
   assert.equal(editorLineAnchors(Array.from({ length: 10_000 }, (_, line) => line), 20, 0).length, maximumScrollAnchors)
 })
 
-test('application uses analytical no-wrap line geometry instead of a wrapping DOM mirror', async () => {
+test('wrapped editors use measured geometry while no-wrap editors retain analytical anchors', async () => {
   const { readFile } = await import('node:fs/promises')
   const app = await readFile(new URL('../frontend/src/App.vue', import.meta.url), 'utf8')
   assert.match(app, /function measureEditorScrollAnchors[\s\S]*editorLineAnchors\([\s\S]*computed\.lineHeight[\s\S]*computed\.paddingTop/)
-  assert.doesNotMatch(app, /whiteSpace:\s*'pre-wrap'/)
-  assert.doesNotMatch(app, /maximumMeasuredEditorCharacters/)
+  assert.match(app, /if \(wordWrapEnabled\.value\) return measureWrappedEditorScrollAnchors\(lines\)/)
+  assert.match(app, /function measureWrappedEditorScrollAnchors[\s\S]*document\.createRange\(\)/)
+  assert.match(app, /sourceHeadingModel\.value\.headings/)
+})
+
+test('measured wrapped anchors drive sticky heading line selection', () => {
+  const anchors = [
+    { line: 0, top: 24 },
+    { line: 8, top: 216 },
+    { line: 20, top: 696 },
+  ]
+  assert.equal(sourceLineFromAnchors(anchors, 24, 20), 0)
+  assert.equal(sourceLineFromAnchors(anchors, 336, 20), 11)
+  assert.equal(sourceLineFromAnchors(anchors, 1000, 20), 20)
 })

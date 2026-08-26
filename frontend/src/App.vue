@@ -30,6 +30,7 @@ import {
   editorLineAnchors,
   ScrollSyncController,
   sampleAnchorIndices,
+  sourceLineFromAnchors,
   type ScrollAnchor,
   type ScrollMapping,
   type ScrollPane,
@@ -141,6 +142,7 @@ import {
   deriveSourceData,
   parseSourceHeadings,
   readEditorPreferences,
+  sourceLineOffsets,
   sourceLineFromScroll,
   stickyHeadingTrail,
   updateEditorPreference,
@@ -464,6 +466,7 @@ const documentTabsElement = ref<HTMLElement | null>(null)
 const findInput = ref<HTMLInputElement | null>(null)
 const findHighlightLayer = ref<HTMLElement | null>(null)
 const lineNumberGutter = ref<HTMLElement | null>(null)
+const sourceWrapMeasure = ref<HTMLPreElement | null>(null)
 const stickySourceLine = computed({ get: () => activeTab.value.stickySourceLine, set: (value: number) => { activeTab.value.stickySourceLine = value } })
 const findOpen = computed({ get: () => activeTab.value.findOpen, set: (value: boolean) => { activeTab.value.findOpen = value } })
 const findQuery = computed({ get: () => activeTab.value.findQuery, set: (value: string) => { activeTab.value.findQuery = value } })
@@ -888,7 +891,10 @@ const sourceDerived = computed(() => activeTab.value.derivedSource?.revision ===
   : emptySourceDerived)
 const sourceLineNumberModel = computed(() => sourceDerived.value.lineNumbers)
 const lineCount = computed(() => sourceLineNumberModel.value.count)
-const lineNumbersVisible = computed(() => editorPreferences.value.lineNumbers && sourceLineNumberModel.value.available)
+const wordWrapEnabled = computed(() => editorPreferences.value.wordWrap)
+const lineNumbersVisible = computed(() => (
+  editorPreferences.value.lineNumbers && !wordWrapEnabled.value && sourceLineNumberModel.value.available
+))
 const sourceEditorStyle = computed(() => ({
   '--source-line-number-width': lineNumbersVisible.value
     ? `calc(${Math.max(3, sourceLineNumberModel.value.digits)}ch + 18px)`
@@ -3983,7 +3989,7 @@ function restoreDefaultFonts() {
   persistFontPreferences(resetFontPreferences())
 }
 
-function handleEditorPreferenceChange(key: 'lineNumbers' | 'stickyHeadings', event: Event) {
+function handleEditorPreferenceChange(key: 'lineNumbers' | 'stickyHeadings' | 'wordWrap', event: Event) {
   const nextPreferences = updateEditorPreference(
     editorPreferences.value,
     key,
@@ -4044,6 +4050,10 @@ function syncSourceDecorationScroll() {
 function updateStickySourceLine() {
   const target = editor.value
   if (!target) return
+  if (wordWrapEnabled.value && editorScrollAnchors.length) {
+    stickySourceLine.value = sourceLineFromAnchors(editorScrollAnchors, target.scrollTop, Math.max(0, lineCount.value - 1))
+    return
+  }
   const styles = window.getComputedStyle(target)
   const lineHeight = Number.parseFloat(styles.lineHeight)
   const paddingTop = Number.parseFloat(styles.paddingTop)
@@ -4059,11 +4069,14 @@ function handleEditorScroll() {
 function scrollToSourceHeading(line: number) {
   const target = editor.value
   if (!target) return
+  const measuredAnchor = wordWrapEnabled.value
+    ? editorScrollAnchors.find((anchor) => anchor.line === line)
+    : undefined
   const styles = window.getComputedStyle(target)
   const lineHeight = Number.parseFloat(styles.lineHeight)
   const paddingTop = Number.parseFloat(styles.paddingTop)
   beginScroll('editor')
-  target.scrollTop = Math.max(0, paddingTop + Math.max(0, line) * lineHeight)
+  target.scrollTop = measuredAnchor?.top ?? Math.max(0, paddingTop + Math.max(0, line) * lineHeight)
   handleEditorScroll()
   target.focus({ preventScroll: true })
 }
@@ -5085,12 +5098,33 @@ function runFormat(action: string) {
 function measureEditorScrollAnchors(lines: readonly number[]): ScrollAnchor[] {
   const target = editor.value
   if (!target || !lines.length) return []
+  if (wordWrapEnabled.value) return measureWrappedEditorScrollAnchors(lines)
   const computed = window.getComputedStyle(target)
   return editorLineAnchors(
     lines,
     Number.parseFloat(computed.lineHeight),
     Number.parseFloat(computed.paddingTop),
   )
+}
+
+function measureWrappedEditorScrollAnchors(lines: readonly number[]): ScrollAnchor[] {
+  const mirror = sourceWrapMeasure.value
+  const text = mirror?.firstChild
+  if (!mirror || !(text instanceof Text)) return []
+  const mirrorTop = mirror.getBoundingClientRect().top
+  const maximumOffset = Math.max(0, text.length - 1)
+  return sourceLineOffsets(source.value, lines).flatMap(({ line, offset }) => {
+    // A newline's rectangle belongs to the preceding visual row. Probe the
+    // next character where possible so empty or wrapped lines stay anchored
+    // to their own visible row. The mirror's zero-width sentinel handles EOF.
+    const start = Math.min(maximumOffset, source.value[offset] === '\n' ? offset + 1 : offset)
+    const range = document.createRange()
+    range.setStart(text, start)
+    range.setEnd(text, Math.min(text.length, start + 1))
+    const rect = range.getBoundingClientRect()
+    const top = rect.top - mirrorTop
+    return Number.isFinite(top) ? [{ line, top: Math.max(0, top) }] : []
+  })
 }
 
 function measurePreviewScrollAnchors(): ScrollAnchor[] {
@@ -5110,7 +5144,11 @@ function measurePreviewScrollAnchors(): ScrollAnchor[] {
 
 function refreshScrollAnchors() {
   previewScrollAnchors = measurePreviewScrollAnchors()
-  editorScrollAnchors = measureEditorScrollAnchors(previewScrollAnchors.map((anchor) => anchor.line))
+  const lines = [...new Set([
+    ...previewScrollAnchors.map((anchor) => anchor.line),
+    ...sourceHeadingModel.value.headings.map((heading) => heading.line),
+  ])].sort((left, right) => left - right)
+  editorScrollAnchors = measureEditorScrollAnchors(sampleAnchorIndices(lines.length).map((index) => lines[index]))
 }
 
 function scheduleLayoutReconciliation() {
@@ -5713,9 +5751,16 @@ onBeforeUnmount(() => {
         </div>
         <div
           class="source-editor-stack"
-          :class="{ 'has-line-numbers': lineNumbersVisible }"
+          :class="{ 'has-line-numbers': lineNumbersVisible, 'has-word-wrap': wordWrapEnabled }"
           :style="sourceEditorStyle"
         >
+          <pre
+            v-if="wordWrapEnabled"
+            ref="sourceWrapMeasure"
+            class="source-wrap-measure"
+            aria-hidden="true"
+            v-text="`${source}\u200b`"
+          ></pre>
           <pre
             v-if="lineNumbersVisible"
             ref="lineNumberGutter"
@@ -5734,7 +5779,7 @@ onBeforeUnmount(() => {
               'find-highlight-match': segment.highlighted,
               'find-highlight-current': segment.current,
             }"
-          >{{ segment.text }}</span></pre>
+          >{{ segment.text }}</span><span aria-hidden="true">&#8203;</span></pre>
           <div
             v-if="stickyHeadings.length"
             class="source-sticky-headings"
@@ -5759,7 +5804,7 @@ onBeforeUnmount(() => {
             :aria-label="t('panel.editorAriaLabel')"
             :disabled="busy"
             spellcheck="false"
-            wrap="off"
+            :wrap="wordWrapEnabled ? 'soft' : 'off'"
             @beforeinput="handleEditorBeforeInput"
             @input="handleEditorInput"
             @keydown="handleEditorKeydown"
@@ -5946,6 +5991,17 @@ onBeforeUnmount(() => {
               <span>
                 <strong>{{ t('settings.stickyHeadings') }}</strong>
                 <small>{{ t('settings.stickyHeadingsDescription') }}</small>
+              </span>
+            </label>
+            <label class="editor-setting-toggle">
+              <input
+                type="checkbox"
+                :checked="editorPreferences.wordWrap"
+                @change="handleEditorPreferenceChange('wordWrap', $event)"
+              >
+              <span>
+                <strong>{{ t('settings.wordWrap') }}</strong>
+                <small>{{ t('settings.wordWrapDescription') }}</small>
               </span>
             </label>
           </section>

@@ -1,7 +1,8 @@
 export interface EditorPreferences {
-  readonly version: 1
+  readonly version: 2
   readonly lineNumbers: boolean
   readonly stickyHeadings: boolean
+  readonly wordWrap: boolean
 }
 
 export interface LineNumberModel {
@@ -30,13 +31,15 @@ export interface SourceDerivedData {
   readonly characterCount: number
 }
 
-export const editorPreferencesStorageKey = 'inkmark-editor-preferences-v1'
+export const editorPreferencesStorageKey = 'inkmark-editor-preferences-v2'
+const legacyEditorPreferencesStorageKey = 'inkmark-editor-preferences-v1'
 export const maximumRenderedLineNumbers = 100_000
 export const maximumStickySourceHeadings = 10_000
 export const defaultEditorPreferences: EditorPreferences = Object.freeze({
-  version: 1,
+  version: 2,
   lineNumbers: true,
   stickyHeadings: true,
+  wordWrap: false,
 })
 
 function clonedDefaults(): EditorPreferences {
@@ -47,14 +50,20 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return clonedDefaults()
   const record = value as Record<string, unknown>
   const keys = Object.keys(record).sort()
-  if (keys.join(',') !== 'lineNumbers,stickyHeadings,version') return clonedDefaults()
-  if (record.version !== 1 || typeof record.lineNumbers !== 'boolean' || typeof record.stickyHeadings !== 'boolean') {
+  if (keys.join(',') !== 'lineNumbers,stickyHeadings,version,wordWrap') return clonedDefaults()
+  if (
+    record.version !== 2
+    || typeof record.lineNumbers !== 'boolean'
+    || typeof record.stickyHeadings !== 'boolean'
+    || typeof record.wordWrap !== 'boolean'
+  ) {
     return clonedDefaults()
   }
   return {
-    version: 1,
+    version: 2,
     lineNumbers: record.lineNumbers,
     stickyHeadings: record.stickyHeadings,
+    wordWrap: record.wordWrap,
   }
 }
 
@@ -68,7 +77,30 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
 }
 
 export function readEditorPreferences(storage: Pick<Storage, 'getItem'>): EditorPreferences {
-  return parseEditorPreferences(storage.getItem(editorPreferencesStorageKey))
+  const current = storage.getItem(editorPreferencesStorageKey)
+  if (current !== null) return parseEditorPreferences(current)
+
+  const legacy = storage.getItem(legacyEditorPreferencesStorageKey)
+  if (typeof legacy !== 'string' || legacy.length > 2_048) return clonedDefaults()
+  try {
+    const value = JSON.parse(legacy)
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return clonedDefaults()
+    const record = value as Record<string, unknown>
+    if (
+      Object.keys(record).sort().join(',') !== 'lineNumbers,stickyHeadings,version'
+      || record.version !== 1
+      || typeof record.lineNumbers !== 'boolean'
+      || typeof record.stickyHeadings !== 'boolean'
+    ) return clonedDefaults()
+    return {
+      version: 2,
+      lineNumbers: record.lineNumbers,
+      stickyHeadings: record.stickyHeadings,
+      wordWrap: false,
+    }
+  } catch {
+    return clonedDefaults()
+  }
 }
 
 export function writeEditorPreferences(storage: Pick<Storage, 'setItem'>, preferences: EditorPreferences) {
@@ -77,7 +109,7 @@ export function writeEditorPreferences(storage: Pick<Storage, 'setItem'>, prefer
 
 export function updateEditorPreference(
   preferences: EditorPreferences,
-  key: 'lineNumbers' | 'stickyHeadings',
+  key: 'lineNumbers' | 'stickyHeadings' | 'wordWrap',
   enabled: boolean,
 ): EditorPreferences {
   const normalized = normalizeEditorPreferences(preferences)
@@ -204,4 +236,33 @@ export function stickyHeadingTrail(headings: readonly SourceHeading[], line: num
 export function sourceLineFromScroll(scrollTop: number, lineHeight: number, paddingTop: number) {
   if (!Number.isFinite(scrollTop) || !Number.isFinite(lineHeight) || lineHeight <= 0) return 0
   return Math.max(0, Math.floor((Math.max(0, scrollTop) - Math.max(0, paddingTop)) / lineHeight))
+}
+
+export interface SourceLineOffset {
+  readonly line: number
+  readonly offset: number
+}
+
+/** Return UTF-16 offsets for selected logical lines in one pass. */
+export function sourceLineOffsets(source: string, lines: readonly number[]): readonly SourceLineOffset[] {
+  const requested = [...new Set(lines)]
+    .filter((line) => Number.isFinite(line) && line >= 0)
+    .map((line) => Math.trunc(line))
+    .sort((left, right) => left - right)
+  const offsets: SourceLineOffset[] = []
+  let requestedIndex = 0
+  let line = 0
+  let offset = 0
+
+  while (requestedIndex < requested.length) {
+    while (requestedIndex < requested.length && requested[requestedIndex] === line) {
+      offsets.push({ line, offset })
+      requestedIndex += 1
+    }
+    const nextBreak = source.indexOf('\n', offset)
+    if (nextBreak < 0) break
+    offset = nextBreak + 1
+    line += 1
+  }
+  return offsets
 }

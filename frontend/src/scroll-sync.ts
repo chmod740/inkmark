@@ -70,6 +70,16 @@ function interpolate(
   return sorted[sorted.length - 1][output]
 }
 
+/** Convert a measured editor offset back into a source line for sticky UI. */
+export function sourceLineFromAnchors(anchors: readonly ScrollAnchor[], top: number, maxLine: number) {
+  if (!Number.isFinite(top) || maxLine <= 0) return 0
+  const points = anchors
+    .filter((anchor) => Number.isFinite(anchor.line) && Number.isFinite(anchor.top))
+    .map((anchor) => ({ line: clamp(anchor.line, 0, maxLine), top: Math.max(0, anchor.top) }))
+  if (!points.length) return 0
+  return clamp(Math.floor(interpolate(Math.max(0, top), points, 'top', 'line')), 0, maxLine)
+}
+
 function anchoredPoints(anchors: readonly ScrollAnchor[], range: number, maxLine: number) {
   const points = anchors
     .filter((anchor) => Number.isFinite(anchor.line) && Number.isFinite(anchor.top))
