@@ -157,6 +157,24 @@ test('WebDAV UI connects, browses, opens, saves, and closes through opaque capab
   assert.match(app, /id="webdav-password"/)
 })
 
+test('WebDAV sidebar exposes native upload and selected-file download actions', async () => {
+  const app = await readFile(appURL, 'utf8')
+  const sidebar = await readFile(new URL('../frontend/src/DirectorySidebar.vue', import.meta.url), 'utf8')
+  const bridge = await readFile(new URL('../frontend/wailsjs/go/main/App.js', import.meta.url), 'utf8')
+
+  assert.match(app, /UploadWebDAVWorkspaceFile\(activeWorkspace\.id, parentPath\)/)
+  assert.match(app, /DownloadWebDAVWorkspaceFile\(activeWorkspace\.id, entry\.path\)/)
+  assert.match(app, /@upload="uploadWebDAVWorkspaceFile"/)
+  assert.match(app, /@download="downloadWebDAVWorkspaceFile"/)
+  assert.match(sidebar, /workspace\.provider === 'webdav'[\s\S]*workspace-upload-button/)
+  assert.match(sidebar, /workspace\.provider === 'webdav'[\s\S]*workspace-download-button/)
+  assert.match(sidebar, /selectedEntry\.kind === 'directory'/)
+  assert.match(sidebar, /emit\('upload', selectedUploadParentPath\(\)\)/)
+  assert.match(sidebar, /emit\('download', entry\)/)
+  assert.match(bridge, /window\['go'\]\['main'\]\['App'\]\['UploadWebDAVWorkspaceFile'\]/)
+  assert.match(bridge, /window\['go'\]\['main'\]\['App'\]\['DownloadWebDAVWorkspaceFile'\]/)
+})
+
 test('remote saves preserve dirty content on conflict and require an explicit resolution', async () => {
   const app = await readFile(appURL, 'utf8')
 

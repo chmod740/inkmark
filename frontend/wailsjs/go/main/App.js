@@ -94,6 +94,10 @@ export function DownloadUpdate(arg1) {
   return window['go']['main']['App']['DownloadUpdate'](arg1);
 }
 
+export function DownloadWebDAVWorkspaceFile(arg1, arg2) {
+  return window['go']['main']['App']['DownloadWebDAVWorkspaceFile'](arg1, arg2);
+}
+
 export function FetchPublicImage(arg1) {
   return window['go']['main']['App']['FetchPublicImage'](arg1);
 }
@@ -252,6 +256,10 @@ export function SetWindowTitle(arg1, arg2) {
 
 export function UpdateMenuState(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['UpdateMenuState'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function UploadWebDAVWorkspaceFile(arg1, arg2) {
+  return window['go']['main']['App']['UploadWebDAVWorkspaceFile'](arg1, arg2);
 }
 
 export function ValidateImageData(arg1, arg2, arg3) {

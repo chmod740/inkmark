@@ -650,6 +650,7 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 var(--inkmark-code-font); o
 }
 .workspace-tree-row:not(:disabled):hover { background: rgba(63, 71, 68, .065); }
 .workspace-tree-row:focus-visible { outline: 2px solid #29787b; outline-offset: -2px; }
+.workspace-tree-row.is-selected:not(.is-active) { background: rgba(100, 39, 45, .045); box-shadow: inset 2px 0 rgba(100, 39, 45, .45); }
 .workspace-tree-row.is-active { color: #272d2b; border-color: transparent; background: rgba(100, 39, 45, .075); box-shadow: inset 3px 0 #64272d; font-weight: 700; }
 .workspace-tree-row:disabled { opacity: .62; }
 .workspace-disclosure {
@@ -803,7 +804,8 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 var(--inkmark-code-font); o
 .source-line-numbers { position: absolute; z-index: 2; width: var(--source-line-number-width); height: 100%; inset: 0 auto 0 0; margin: 0; padding: 24px 8px 80px; overflow: scroll; color: #77817d; border-right: 1px solid #c5cbc7; background: #efeee8; font: 14px/1.72 var(--inkmark-code-font); text-align: right; white-space: pre; pointer-events: none; scrollbar-width: none; user-select: none; }
 .source-line-numbers::-webkit-scrollbar { width: 0; height: 0; }
 .source-sticky-headings { position: absolute; z-index: 4; display: grid; inset: 0 14px auto 0; border-bottom: 1px solid #89938f; box-shadow: 0 3px 8px rgba(31,45,42,.18); }
-.source-sticky-heading { display: grid; grid-template-columns: var(--source-line-number-width) minmax(0, 1fr); min-width: 0; min-height: 24px; padding: 0; color: #244d50; border: 0; border-bottom: 1px solid #d0d5d1; background: #f4f3ed; cursor: default; font: 700 14px/1.72 var(--inkmark-code-font); text-align: left; }
+.source-sticky-heading { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; min-height: 24px; padding: 0; color: #244d50; border: 0; border-bottom: 1px solid #d0d5d1; background: #f4f3ed; cursor: default; font: 700 14px/1.72 var(--inkmark-code-font); text-align: left; }
+.source-sticky-headings.has-line-numbers .source-sticky-heading { grid-template-columns: var(--source-line-number-width) minmax(0, 1fr); }
 .source-sticky-heading:last-child { border-bottom: 0; }
 .source-sticky-heading:hover { background: #fffef9; }
 .source-sticky-heading:focus-visible { outline: 2px solid #1c777b; outline-offset: -2px; }

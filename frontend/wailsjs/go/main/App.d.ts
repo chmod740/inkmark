@@ -48,6 +48,8 @@ export function DeleteWorkspaceEntry(arg1:string,arg2:string,arg3:boolean,arg4:s
 
 export function DownloadUpdate(arg1:string):Promise<main.UpdateDownload>;
 
+export function DownloadWebDAVWorkspaceFile(arg1:string,arg2:string):Promise<main.SaveResult>;
+
 export function FetchPublicImage(arg1:string):Promise<main.ImageAssetData>;
 
 export function GetAppInfo():Promise<main.AppInfo>;
@@ -127,6 +129,8 @@ export function SetLanguage(arg1:string,arg2:string):Promise<main.LanguageState>
 export function SetWindowTitle(arg1:string,arg2:boolean):Promise<void>;
 
 export function UpdateMenuState(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:boolean):Promise<void>;
+
+export function UploadWebDAVWorkspaceFile(arg1:string,arg2:string):Promise<main.WorkspaceEntry>;
 
 export function ValidateImageData(arg1:string,arg2:string,arg3:string):Promise<main.ImageAssetData>;
 

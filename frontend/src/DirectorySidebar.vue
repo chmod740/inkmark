@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type {
   WorkspaceData,
   WorkspaceEntryData,
@@ -13,6 +13,8 @@ interface SidebarLabels {
   close: string
   refresh: string
   refreshing: string
+  upload: string
+  download: string
   empty: string
   loading: string
   truncatedRoot: string
@@ -46,6 +48,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   refresh: []
+  upload: [parentPath: string]
+  download: [entry: WorkspaceEntryData]
   toggle: [entry: WorkspaceEntryData]
   open: [entry: WorkspaceEntryData]
   preview: [entry: WorkspaceEntryData]
@@ -58,6 +62,23 @@ const emit = defineEmits<{
 const contextMenu = ref<{ entry: WorkspaceEntryData | null; x: number; y: number } | null>(null)
 const contextMenuElement = ref<HTMLElement | null>(null)
 const contextMenuTrigger = ref<HTMLElement | null>(null)
+const selectedPath = ref('')
+
+const selectedEntry = computed(() => {
+  const explicit = props.rows.find((row) => row.entry.path === selectedPath.value)?.entry
+  if (explicit) return explicit
+  return props.rows.find((row) => (
+    row.entry.kind === 'markdown'
+    && isActiveWorkspaceFile(
+      props.workspace.provider,
+      props.workspace.id,
+      row.entry.path,
+      props.currentProvider,
+      props.currentWorkspaceId,
+      props.currentWorkspacePath,
+    )
+  ))?.entry || null
+})
 
 function closeContextMenu({ restoreFocus = false } = {}) {
   const trigger = contextMenuTrigger.value
@@ -182,9 +203,36 @@ watch(() => props.disabled || props.modalOpen, (unavailable) => {
 })
 
 function activate(row: WorkspaceTreeRow) {
+  selectedPath.value = row.entry.path
   if (row.entry.kind === 'directory') emit('toggle', row.entry)
   else if (row.entry.kind === 'image') emit('preview', row.entry)
   else emit('open', row.entry)
+}
+
+function selectedUploadParentPath() {
+  const entry = selectedEntry.value
+  if (!entry) return ''
+  if (entry.kind === 'directory') return entry.path
+  const normalized = entry.path.replaceAll('\\', '/')
+  const separator = normalized.lastIndexOf('/')
+  return separator < 0 ? '' : normalized.slice(0, separator)
+}
+
+function uploadFile() {
+  if (props.workspace.provider !== 'webdav' || props.disabled || props.modalOpen) return
+  emit('upload', selectedUploadParentPath())
+}
+
+function downloadFile() {
+  const entry = selectedEntry.value
+  if (
+    props.workspace.provider !== 'webdav'
+    || props.disabled
+    || props.modalOpen
+    || !entry
+    || entry.kind === 'directory'
+  ) return
+  emit('download', entry)
 }
 
 function handleTreeKeydown(event: KeyboardEvent, row: WorkspaceTreeRow) {
@@ -250,6 +298,34 @@ function rowDisabled(row: WorkspaceTreeRow) {
       </div>
       <div class="workspace-header-actions">
         <button
+          v-if="workspace.provider === 'webdav'"
+          type="button"
+          class="workspace-header-button workspace-upload-button"
+          :aria-label="labels.upload"
+          :title="labels.upload"
+          :disabled="disabled || modalOpen"
+          @click="uploadFile"
+        >
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 13.8V3.6m0 0L6.4 7.2M10 3.6l3.6 3.6"></path>
+            <path d="M4 12.4v3.2h12v-3.2"></path>
+          </svg>
+        </button>
+        <button
+          v-if="workspace.provider === 'webdav'"
+          type="button"
+          class="workspace-header-button workspace-download-button"
+          :aria-label="labels.download"
+          :title="labels.download"
+          :disabled="disabled || modalOpen || !selectedEntry || selectedEntry.kind === 'directory'"
+          @click="downloadFile"
+        >
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 3.6v10.2m0 0 3.6-3.6M10 13.8l-3.6-3.6"></path>
+            <path d="M4 16.4h12"></path>
+          </svg>
+        </button>
+        <button
           type="button"
           class="workspace-header-button workspace-refresh-button"
           :class="{ 'is-refreshing': refreshing }"
@@ -299,6 +375,7 @@ function rowDisabled(row: WorkspaceTreeRow) {
         :class="{
           'is-directory': row.entry.kind === 'directory',
           'is-active': isActive(row),
+          'is-selected': selectedEntry?.path === row.entry.path,
         }"
         :style="{ paddingInlineStart: `${workspaceTreeIndent(row.depth)}px` }"
         :aria-expanded="row.entry.kind === 'directory' ? row.expanded : undefined"

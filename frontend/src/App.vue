@@ -211,6 +211,7 @@ import {
   CreateWebDAVMarkdownFile,
   CreateWorkspaceDirectory,
   CreateWorkspaceMarkdownFile,
+  DownloadWebDAVWorkspaceFile,
   DownloadUpdate,
   DeleteSavedWebDAVConnection,
   DeleteWorkspaceEntry,
@@ -254,6 +255,7 @@ import {
   SetLanguage,
   SetWindowTitle,
   UpdateMenuState,
+  UploadWebDAVWorkspaceFile,
   WelcomeDocument as LoadWelcomeDocument,
 } from '../wailsjs/go/main/App'
 import {
@@ -753,6 +755,8 @@ const workspaceLabels = computed(() => ({
   close: t('workspace.close'),
   refresh: t('workspace.refresh'),
   refreshing: t('workspace.refreshing'),
+  upload: t('workspace.upload'),
+  download: t('workspace.download'),
   empty: t('workspace.empty'),
   loading: t('workspace.loading'),
   truncatedRoot: t('workspace.truncatedRoot'),
@@ -2474,6 +2478,63 @@ async function toggleWorkspaceDirectory(entry: WorkspaceEntryData) {
     nextLoading.delete(directoryKey)
     loadingWorkspaceDirectories.value = nextLoading
     drainWorkspaceRefreshQueue()
+  }
+}
+
+async function uploadWebDAVWorkspaceFile(parentPath: string) {
+  const activeWorkspace = workspace.value
+  if (
+    !activeWorkspace
+    || activeWorkspace.provider !== 'webdav'
+    || busy.value
+    || workspaceRefreshing.value
+    || workspaceMutationCancelling.value
+  ) return
+  busy.value = true
+  renderState.value = t('workspace.uploading')
+  try {
+    const uploaded = await UploadWebDAVWorkspaceFile(activeWorkspace.id, parentPath) as WorkspaceEntryData
+    if (!uploaded?.name) {
+      renderState.value = t('workspace.uploadCanceled')
+      return
+    }
+    await refreshWorkspace({ silent: true })
+    renderState.value = t('workspace.uploaded', { name: uploaded.name })
+  } catch (error) {
+    renderState.value = t('workspace.operationFailed', {
+      message: localizedWorkspaceErrorMessage(error),
+    })
+  } finally {
+    busy.value = false
+  }
+}
+
+async function downloadWebDAVWorkspaceFile(entry: WorkspaceEntryData) {
+  const activeWorkspace = workspace.value
+  if (
+    !activeWorkspace
+    || activeWorkspace.provider !== 'webdav'
+    || entry.kind === 'directory'
+    || busy.value
+    || workspaceRefreshing.value
+    || workspaceMutationCancelling.value
+  ) return
+  busy.value = true
+  renderState.value = t('workspace.downloading')
+  try {
+    const downloaded = await DownloadWebDAVWorkspaceFile(activeWorkspace.id, entry.path) as {
+      path?: string
+      name?: string
+    }
+    renderState.value = downloaded?.path
+      ? t('workspace.downloaded', { name: downloaded.name || entry.name })
+      : t('workspace.downloadCanceled')
+  } catch (error) {
+    renderState.value = t('workspace.operationFailed', {
+      message: localizedWorkspaceErrorMessage(error),
+    })
+  } finally {
+    busy.value = false
   }
 }
 
@@ -5516,6 +5577,8 @@ onBeforeUnmount(() => {
         :truncated-directories="truncatedWorkspaceDirectories"
         @close="closeWorkspace"
         @refresh="refreshWorkspace()"
+        @upload="uploadWebDAVWorkspaceFile"
+        @download="downloadWebDAVWorkspaceFile"
         @toggle="toggleWorkspaceDirectory"
         @open="openWorkspaceDocument"
         @preview="showWorkspaceImage"
@@ -5783,6 +5846,7 @@ onBeforeUnmount(() => {
           <div
             v-if="stickyHeadings.length"
             class="source-sticky-headings"
+            :class="{ 'has-line-numbers': lineNumbersVisible }"
             :aria-label="t('settings.stickyHeadings')"
           >
             <button
