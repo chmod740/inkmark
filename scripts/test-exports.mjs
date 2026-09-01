@@ -28,6 +28,27 @@ test('standalone HTML preserves external links and resources', () => {
   assert.match(html, /body class="export-document theme-github"/)
 })
 
+test('standalone HTML preserves Mermaid SVG and inline formula labels', () => {
+  const articleHTML = [
+    '<pre class="mermaid mermaid-rendered">',
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120">',
+    '<foreignObject x="10" y="10" width="300" height="40">',
+    '<div xmlns="http://www.w3.org/1999/xhtml">',
+    '<span class="inkmark-mermaid-formula"><i>x</i><sub>i</sub>=ℒ</span>',
+    '</div></foreignObject></svg></pre>',
+  ].join('')
+  const html = buildStandaloneHTML({
+    title: 'Mermaid formula',
+    theme: 'autumn-paper',
+    articleHTML,
+    embeddedStyles: '.inkmark-mermaid-formula { display: inline-flex; }',
+  })
+
+  assert.ok(html.includes('<svg xmlns="http://www.w3.org/2000/svg"'))
+  assert.ok(html.includes('<foreignObject x="10"'))
+  assert.ok(html.includes('<span class="inkmark-mermaid-formula"><i>x</i><sub>i</sub>=ℒ</span>'))
+})
+
 test('protocol-relative resources are normalised to HTTPS for local HTML files', () => {
   const articleHTML = '<a href="//docs.example.com/guide">文档</a><img src="//cdn.example.com/demo.png" srcset="//cdn.example.com/1x.png 1x, //cdn.example.com/2x.png 2x"><video poster="//cdn.example.com/poster.jpg"></video><code>src="//cdn.example.com/example.png"</code>'
   const html = buildStandaloneHTML({

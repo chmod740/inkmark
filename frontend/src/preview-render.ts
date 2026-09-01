@@ -1,6 +1,68 @@
 export const maximumMermaidCacheEntries = 64
 export const maximumMermaidDiagramsPerPreview = 16
 
+export interface MermaidMathDefinition {
+  definition: string
+  hasMath: boolean
+}
+
+function findSingleDollarEnd(line: string, start: number) {
+  for (let index = start + 1; index < line.length; index += 1) {
+    if (line[index] === '\\') {
+      index += 1
+      continue
+    }
+    if (line[index] !== '$') continue
+    if (line[index - 1] === '$' || line[index + 1] === '$') continue
+    return index
+  }
+  return -1
+}
+
+/**
+ * Mermaid's KaTeX integration recognises `$$...$$`, while InkMark Markdown
+ * uses `$...$` for inline formulas. Normalise the inline spelling only inside
+ * diagram source and leave escaped dollars, directives, and comments intact.
+ */
+export function normalizeMermaidMath(definition: string): MermaidMathDefinition {
+  let hasMath = false
+  const normalized = definition.split('\n').map((line) => {
+    if (line.trimStart().startsWith('%%')) return line
+
+    let output = ''
+    for (let index = 0; index < line.length;) {
+      if (line[index] === '\\' && line[index + 1] === '$') {
+        output += line.slice(index, index + 2)
+        index += 2
+        continue
+      }
+      if (line.startsWith('$$', index)) {
+        const end = line.indexOf('$$', index + 2)
+        if (end >= index + 3) {
+          hasMath = true
+          output += line.slice(index, end + 2)
+          index = end + 2
+          continue
+        }
+      }
+      if (line[index] === '$') {
+        const end = findSingleDollarEnd(line, index)
+        if (end >= index + 2) {
+          hasMath = true
+          output += `$$${line.slice(index + 1, end)}$$`
+          index = end + 1
+          continue
+        }
+      }
+      output += line[index]
+      index += 1
+    }
+    return output
+  }).join('\n')
+
+  return { definition: normalized, hasMath }
+}
+
 export class BoundedCache<Key, Value> {
   private readonly entries = new Map<Key, Value>()
   private readonly limit: number
@@ -39,8 +101,8 @@ export class BoundedCache<Key, Value> {
   }
 }
 
-export function mermaidCacheKey(theme: string, definition: string) {
-  return JSON.stringify([theme, definition])
+export function mermaidCacheKey(theme: string, definition: string, htmlLabels = false) {
+  return JSON.stringify([theme, definition, htmlLabels])
 }
 
 export class LatestPreviewCommit {

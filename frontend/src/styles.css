@@ -1306,6 +1306,21 @@ kbd { margin-left: 5px; color: inherit; font: 10px/1 var(--inkmark-code-font); o
 .markdown-body .footnote-backref { margin-left: .28em; }
 .markdown-body pre.mermaid { min-height: 150px; padding: 18px; color: #27312f; border: 1px solid #d0d7de; background: #fbfcfb; text-align: center; white-space: pre-wrap; }
 .markdown-body pre.mermaid svg { display: block; max-width: 100% !important; height: auto; margin: auto; }
+.markdown-body pre.mermaid.mermaid-math-labels { overflow-x: auto; }
+.markdown-body pre.mermaid.mermaid-math-labels svg { max-width: none !important; }
+.markdown-body pre.mermaid .inkmark-mermaid-formula {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .04em;
+  white-space: nowrap;
+  font-family: inherit;
+  line-height: 1;
+}
+.markdown-body pre.mermaid .inkmark-mermaid-formula i { font-family: Georgia, 'Times New Roman', serif; }
+.markdown-body pre.mermaid .inkmark-mermaid-formula sub,
+.markdown-body pre.mermaid .inkmark-mermaid-formula sup { font-size: .72em; line-height: 0; }
+.markdown-body pre.mermaid .inkmark-mermaid-fraction { display: inline-flex; align-items: baseline; gap: .08em; }
+.markdown-body pre.mermaid .inkmark-mermaid-accent { display: inline-flex; }
 .markdown-body pre.mermaid-error { color: #a40e26; border-color: #e5a2ab; background: #fff4f5; text-align: left; }
 .markdown-body pre.extended-diagram {
   position: relative;

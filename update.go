@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	appVersion             = "1.2.14"
+	appVersion             = "1.2.15"
 	appAuthor              = "Codex"
 	sourceRepositoryURL    = "https://github.com/chmod740/inkmark"
 	latestReleaseAPIURL    = "https://api.github.com/repos/chmod740/inkmark/releases/latest"

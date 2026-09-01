@@ -18,6 +18,7 @@ import { renderExtendedDiagrams } from './extended-diagrams'
 import PreviewMarkdownWorker from './preview-worker?worker'
 import DirectorySidebar from './DirectorySidebar.vue'
 import inkmarkIcon from './assets/inkmark-icon.svg?no-inline'
+import { embedMermaidMathLabelHTML, normalizeMermaidSafeHTML } from './mermaid-math'
 import {
   buildStandaloneHTML,
   bytesToBase64,
@@ -41,6 +42,7 @@ import {
   maximumMermaidCacheEntries,
   maximumMermaidDiagramsPerPreview,
   mermaidCacheKey,
+  normalizeMermaidMath,
 } from './preview-render'
 import {
   normalizePreviewFirst,
@@ -3381,11 +3383,15 @@ async function capturePreviewCanvas(
   materializeExportImages(clone, 'capture')
   stage.append(clone)
   document.body.append(stage)
+  let exportRasterURLs: string[] = []
 
   try {
     await waitForSelectedFonts(document.fonts, captureFonts)
     await waitForLocalImages(clone)
+    fitWideDiagramsForCapture(clone, captureWidth)
     if (fitPDFPages) fitTallDiagramsForPDF(clone, captureWidth)
+    const { default: html2canvas } = await import('html2canvas')
+    exportRasterURLs = await rasterizeMermaidDiagrams(clone)
     const width = Math.max(1, clone.scrollWidth)
     const height = Math.max(1, clone.scrollHeight)
     // Keep the raw RGBA canvas below roughly 72 MB. The Base64 bridge and PDF
@@ -3409,7 +3415,6 @@ async function capturePreviewCanvas(
       .map((element) => element.getBoundingClientRect().top - cloneTop)
       .filter((point) => point > 0 && point < height)
 
-    const { default: html2canvas } = await import('html2canvas')
     const canvas = await html2canvas(clone, {
       allowTaint: false,
       backgroundColor: exportBackground,
@@ -3431,8 +3436,157 @@ async function capturePreviewCanvas(
       breakpoints: cssBreakpoints.map((point) => Math.round(point * pixelRatio)),
     }
   } finally {
+    exportRasterURLs.forEach((url) => URL.revokeObjectURL(url))
     stage.remove()
   }
+}
+
+async function rasterizeMermaidDiagrams(root: HTMLElement) {
+  const labels = Array.from(
+    root.querySelectorAll<SVGForeignObjectElement>('.mermaid-rendered svg foreignObject'),
+  )
+  const diagrams = new Set(labels.map((label) => label.ownerSVGElement).filter((svg) => svg !== null))
+  labels.forEach(replaceMermaidHTMLLabelWithSVGText)
+  // html2canvas drops Mermaid SVGs containing foreignObject labels in WebKit.
+  // Let WebKit render the complete diagram as a blob-backed image first, then
+  // capture that ordinary image. A blob URL also keeps the export compatible
+  // with the app's CSP, which intentionally rejects top-level data: images.
+  const objectURLs: string[] = []
+  for (const svg of diagrams) {
+    const bounds = svg.getBoundingClientRect()
+    const width = Math.max(1, Math.ceil(bounds.width))
+    const height = Math.max(1, Math.ceil(bounds.height))
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    const viewBox = svg.viewBox.baseVal
+    if (viewBox.width > 0 && viewBox.height > 0) {
+      const padding = Math.max(12, viewBox.width * 0.08)
+      svg.setAttribute('viewBox', [
+        viewBox.x - padding,
+        viewBox.y - padding,
+        viewBox.width + padding * 2,
+        viewBox.height + padding * 2,
+      ].join(' '))
+    }
+    const source = new XMLSerializer().serializeToString(svg)
+
+    const replacement = document.createElement('img')
+    replacement.alt = svg.getAttribute('aria-label') || 'Mermaid diagram'
+    replacement.width = width
+    replacement.height = height
+    replacement.style.display = 'block'
+    replacement.style.width = `${width}px`
+    replacement.style.height = `${height}px`
+    replacement.style.maxWidth = '100%'
+    replacement.style.margin = '0 auto'
+    const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' })
+    replacement.src = URL.createObjectURL(blob)
+    objectURLs.push(replacement.src)
+    await loadExportRasterImage(replacement.src)
+    svg.replaceWith(replacement)
+  }
+  return objectURLs
+}
+
+type MermaidSVGTextRun = {
+  text: string
+  baseline?: 'sub' | 'super'
+  italic?: boolean
+  bold?: boolean
+}
+
+function replaceMermaidHTMLLabelWithSVGText(label: SVGForeignObjectElement) {
+  const content = label.firstElementChild
+  if (!(content instanceof HTMLElement)) return
+
+  const lines: MermaidSVGTextRun[][] = [[]]
+  const appendNode = (
+    node: Node,
+    format: Omit<MermaidSVGTextRun, 'text'> = {},
+  ) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const value = node.textContent || ''
+      if (value) lines.at(-1)?.push({ text: value, ...format })
+      return
+    }
+    if (!(node instanceof HTMLElement)) return
+    if (node.tagName === 'BR') {
+      lines.push([])
+      return
+    }
+    const nextFormat = { ...format }
+    if (node.tagName === 'SUB') nextFormat.baseline = 'sub'
+    if (node.tagName === 'SUP') nextFormat.baseline = 'super'
+    if (node.tagName === 'I' || node.tagName === 'EM') nextFormat.italic = true
+    if (node.tagName === 'B' || node.tagName === 'STRONG') nextFormat.bold = true
+    node.childNodes.forEach((child) => appendNode(child, nextFormat))
+  }
+  appendNode(content)
+
+  const nonEmptyLines = lines.filter((line) => line.some((run) => run.text.length > 0))
+  if (!nonEmptyLines.length) return
+  const bounds = label.getBBox()
+  if (!(bounds.width > 0 && bounds.height > 0)) return
+  const style = getComputedStyle(content)
+  const fontSize = Number.parseFloat(style.fontSize) || 16
+  const lineHeight = fontSize * 1.25
+  const centerX = bounds.x + bounds.width / 2
+  const centerY = bounds.y + bounds.height / 2
+  const firstY = centerY - (nonEmptyLines.length - 1) * lineHeight / 2
+  const text = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+  text.setAttribute('x', `${centerX}`)
+  text.setAttribute('y', `${firstY}`)
+  text.setAttribute('fill', style.color || 'currentColor')
+  text.setAttribute('font-family', style.fontFamily || 'sans-serif')
+  text.setAttribute('font-size', `${fontSize}px`)
+  text.setAttribute('font-weight', style.fontWeight || '400')
+  text.setAttribute('text-anchor', 'middle')
+  text.setAttribute('dominant-baseline', 'middle')
+  text.setAttribute('xml:space', 'preserve')
+
+  nonEmptyLines.forEach((line, index) => {
+    const lineSpan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan')
+    lineSpan.setAttribute('x', `${centerX}`)
+    lineSpan.setAttribute('y', `${firstY + index * lineHeight}`)
+    line.forEach((run) => {
+      const runSpan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan')
+      if (run.baseline) {
+        runSpan.setAttribute('baseline-shift', run.baseline)
+        runSpan.setAttribute('font-size', '75%')
+      }
+      if (run.italic) runSpan.setAttribute('font-style', 'italic')
+      if (run.bold) runSpan.setAttribute('font-weight', '700')
+      runSpan.textContent = run.text
+      lineSpan.append(runSpan)
+    })
+    text.append(lineSpan)
+  })
+  label.replaceWith(text)
+}
+
+function loadExportRasterImage(source: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.addEventListener('load', () => resolve(image), { once: true })
+    image.addEventListener('error', () => reject(new Error('Mermaid export diagram could not be loaded')), { once: true })
+    image.src = source
+  })
+}
+
+function fitWideDiagramsForCapture(root: HTMLElement, captureWidth: number) {
+  root.querySelectorAll<SVGSVGElement>('.mermaid-rendered svg, .extended-diagram-rendered svg').forEach((svg) => {
+    const bounds = svg.getBoundingClientRect()
+    const availableWidth = Math.max(
+      1,
+      Math.min(captureWidth, svg.parentElement?.clientWidth || captureWidth),
+    )
+    if (bounds.width <= availableWidth || bounds.width <= 0 || bounds.height <= 0) return
+    const scale = availableWidth / bounds.width
+    svg.style.width = `${Math.floor(bounds.width * scale)}px`
+    svg.style.height = `${Math.floor(bounds.height * scale)}px`
+    svg.style.maxWidth = '100%'
+    svg.style.display = 'block'
+    svg.style.margin = '0 auto'
+  })
 }
 
 function fitTallDiagramsForPDF(root: HTMLElement, captureWidth: number) {
@@ -5019,46 +5173,76 @@ async function renderDiagrams(root: HTMLElement, sequence: number, renderTheme: 
   })
   diagrams.length = Math.min(diagrams.length, maximumMermaidDiagramsPerPreview)
   const usedCacheKeys = new Set<string>()
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: 'strict',
-    theme: isDarkTheme(renderTheme) ? 'dark' : 'base',
-    themeVariables: {
-      background: themePalette(renderTheme).background,
-      primaryColor: themePalette(renderTheme).surface,
-      primaryTextColor: themePalette(renderTheme).ink,
-      primaryBorderColor: themePalette(renderTheme).accent,
-      lineColor: themePalette(renderTheme).muted,
-      secondaryColor: themePalette(renderTheme).secondary,
-      tertiaryColor: themePalette(renderTheme).background,
-    },
-    htmlLabels: false,
-    fontFamily: '-apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei, sans-serif',
-    flowchart: { useMaxWidth: true, htmlLabels: false },
-  })
+  let configuredMathLabels: boolean | undefined
+  const configureMermaid = (mathLabels: boolean) => {
+    if (configuredMathLabels === mathLabels) return
+    configuredMathLabels = mathLabels
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: isDarkTheme(renderTheme) ? 'dark' : 'base',
+      themeVariables: {
+        background: themePalette(renderTheme).background,
+        primaryColor: themePalette(renderTheme).surface,
+        primaryTextColor: themePalette(renderTheme).ink,
+        primaryBorderColor: themePalette(renderTheme).accent,
+        lineColor: themePalette(renderTheme).muted,
+        secondaryColor: themePalette(renderTheme).secondary,
+        tertiaryColor: themePalette(renderTheme).background,
+      },
+      // Enable foreignObject labels only when a diagram needs formulas or
+      // explicitly uses the safe HTML subset; ordinary diagrams retain their
+      // existing pure-SVG layout and wrapping.
+      htmlLabels: mathLabels,
+      fontFamily: '-apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei, sans-serif',
+      flowchart: { useMaxWidth: !mathLabels, htmlLabels: mathLabels },
+    })
+  }
   for (let index = 0; index < diagrams.length; index += 1) {
     if (!previewCommit.isCurrent(sequence)) return
     const diagram = diagrams[index]
-    const definition = diagram.textContent || ''
-    const cacheKey = mermaidCacheKey(renderTheme, definition)
+    const sourceDefinition = diagram.textContent || ''
+    const safeHTML = normalizeMermaidSafeHTML(sourceDefinition)
+    const normalized = normalizeMermaidMath(safeHTML.definition)
+    const htmlLabels = normalized.hasMath || safeHTML.hasHTML
+    const prepared = normalized.hasMath
+      ? embedMermaidMathLabelHTML(normalized.definition)
+      : { definition: normalized.definition, changed: false }
+    configureMermaid(htmlLabels)
+    const cacheKey = mermaidCacheKey(renderTheme, normalized.definition, htmlLabels)
     try {
       // Do not insert the same cached SVG twice into one document because its
       // internal IDs may collide. Repeated renders can still reuse it safely.
       let rendered = usedCacheKeys.has(cacheKey) ? undefined : mermaidRenderCache.get(cacheKey)
       if (!rendered) {
         const id = `inkmark-diagram-${sequence}-${index}`
-        rendered = await mermaid.render(id, definition)
+        rendered = await mermaid.render(id, prepared.definition)
         if (!previewCommit.isCurrent(sequence)) return
         if (!usedCacheKeys.has(cacheKey)) mermaidRenderCache.set(cacheKey, rendered)
       }
       if (!previewCommit.isCurrent(sequence)) return
       diagram.innerHTML = rendered.svg
       diagram.classList.add('mermaid-rendered')
+      if (normalized.hasMath) {
+        // WebKit does not reliably scale HTML inside an SVG foreignObject
+        // together with a responsive viewBox. Keep formula diagrams at their
+        // measured SVG width and let the preview container scroll instead;
+        // otherwise inline labels can escape their nodes and overlap edges.
+        diagram.classList.add('mermaid-math-labels')
+        const svg = diagram.querySelector<SVGSVGElement>('svg')
+        const viewBoxWidth = svg?.viewBox.baseVal.width || 0
+        if (svg && viewBoxWidth > 0) {
+          const measuredWidth = Math.ceil(viewBoxWidth)
+          svg.setAttribute('width', String(measuredWidth))
+          svg.style.width = `${measuredWidth}px`
+          svg.style.maxWidth = 'none'
+        }
+      }
       rendered.bindFunctions?.(diagram)
       usedCacheKeys.add(cacheKey)
     } catch {
       if (!previewCommit.isCurrent(sequence)) return
-      diagram.textContent = definition
+      diagram.textContent = sourceDefinition
       diagram.classList.add('mermaid-error')
     }
   }
